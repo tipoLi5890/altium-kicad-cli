@@ -1,0 +1,29 @@
+{
+  "description": "Two disjoint clusters each carry a 'GND' power port. Power ports are global, so the same-name merge collapses both clusters into ONE net named GND (4 pins).",
+  "coordinate_units": "altium_location_units",
+  "single_pin_net_count": 0,
+  "nets": [
+    {
+      "name": "GND",
+      "is_named": true,
+      "members": [
+        [
+          "U1",
+          "1"
+        ],
+        [
+          "U2",
+          "1"
+        ],
+        [
+          "U3",
+          "1"
+        ],
+        [
+          "U4",
+          "1"
+        ]
+      ]
+    }
+  ]
+}

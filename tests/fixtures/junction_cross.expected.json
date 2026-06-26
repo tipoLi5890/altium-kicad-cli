@@ -1,0 +1,29 @@
+{
+  "description": "A horizontal and a vertical wire cross at (2000,2000) with a RECORD-29 junction dot. The dot merges both wires -> ONE net of 4 pins. Without the dot a bare crossing is NOT a connection.",
+  "coordinate_units": "altium_location_units",
+  "single_pin_net_count": 0,
+  "nets": [
+    {
+      "name": null,
+      "is_named": false,
+      "members": [
+        [
+          "U1",
+          "1"
+        ],
+        [
+          "U2",
+          "1"
+        ],
+        [
+          "U3",
+          "1"
+        ],
+        [
+          "U4",
+          "1"
+        ]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "name": "altium-kicad",
+  "displayName": "Altium + KiCad EDA toolkit (read .SchDoc/.kicad_sch, ERC, draw KiCad)",
+  "description": "Read Altium binary .SchDoc/.SchLib/.PcbDoc and KiCad .kicad_sch with no Altium or KiCad install, run ERC/power/pinmap/BOM/diff checks, and draw KiCad schematics. Zero-dependency Python CLI for AI coding agents. Not an Altium-to-KiCad converter.",
+  "version": "0.1.0",
+  "keywords": [
+    "altium",
+    "kicad",
+    "schdoc",
+    "kicad-sch",
+    "eda",
+    "schematic",
+    "pcb",
+    "netlist",
+    "erc",
+    "claude-code",
+    "ai-agents"
+  ],
+  "repository": "https://github.com/tipoLi5890/altium-kicad-cli",
+  "homepage": "https://github.com/tipoLi5890/altium-kicad-cli",
+  "license": "MIT",
+  "author": {
+    "name": "Li, ching yu",
+    "url": "https://github.com/tipoLi5890"
+  }
+}

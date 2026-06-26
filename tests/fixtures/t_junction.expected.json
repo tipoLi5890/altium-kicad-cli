@@ -1,0 +1,25 @@
+{
+  "description": "The vertical wire's top vertex (2000,2000) lands on the horizontal wire's mid-span -> a T-junction connection with NO explicit dot. All 3 pins form ONE net.",
+  "coordinate_units": "altium_location_units",
+  "single_pin_net_count": 0,
+  "nets": [
+    {
+      "name": null,
+      "is_named": false,
+      "members": [
+        [
+          "U1",
+          "1"
+        ],
+        [
+          "U2",
+          "1"
+        ],
+        [
+          "U3",
+          "1"
+        ]
+      ]
+    }
+  ]
+}

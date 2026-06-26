@@ -1,0 +1,56 @@
+name: Feature request
+description: Suggest a new capability or improvement for akcli.
+title: "[feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! Please describe the problem you are trying to solve before the
+        solution — it helps us find the best fit within akcli's zero-dependency, read/analyze/draw scope.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What problem are you trying to solve? What is the use case?
+      placeholder: When I run akcli on ..., I cannot ... because ...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like akcli to do?
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area
+      description: Which part of akcli does this touch?
+      options:
+        - Altium read
+        - KiCad read
+        - KiCad write
+        - checks/ERC
+        - CLI
+        - plugin-skill
+        - JLC-parts
+        - Altium-live
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or alternative approaches you have thought about.
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and this has not already been requested.
+          required: true

@@ -1,0 +1,94 @@
+name: Bug report
+description: Report a parsing error, wrong output, crash, or other defect in akcli.
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! `altium-kicad-cli` is a zero-dependency
+        Python CLI that reads/analyzes/draws Altium and KiCad schematics.
+
+        Please fill out the fields below. A **minimal sample file** and the **exact command
+        plus full output** make bugs an order of magnitude faster to fix.
+
+        Do **not** attach proprietary or NDA-covered designs — reduce to a synthetic minimal
+        reproducer instead. All communication happens here on the issue (there is no email).
+  - type: input
+    id: version
+    attributes:
+      label: akcli version
+      description: Output of `akcli --version`.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Install method
+      description: How did you install akcli?
+      options:
+        - plugin
+        - pipx
+        - from source
+    validations:
+      required: true
+  - type: dropdown
+    id: input-format
+    attributes:
+      label: Which input format
+      description: What kind of input triggered the bug?
+      options:
+        - Altium .SchDoc
+        - Altium .SchLib
+        - Altium .PcbDoc
+        - KiCad .kicad_sch
+        - KiCad .kicad_sym
+        - KiCad .kicad_pcb
+        - op-list
+        - jlc
+    validations:
+      required: true
+  - type: textarea
+    id: command-and-output
+    attributes:
+      label: Exact akcli command + full output
+      description: Paste the exact command you ran and the complete output (including any traceback).
+      render: shell
+      placeholder: |
+        $ akcli read board.SchDoc --format json
+        Traceback (most recent call last):
+        ...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: |
+        1. Run `akcli ...`
+        2. Observe ...
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS + Python version
+      description: Output of `python --version` and your operating system.
+      placeholder: "macOS 14.5 / Python 3.12.4"
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and this has not already been reported.
+          required: true
+        - label: I can share a minimal sample file that reproduces this.
+          required: false
+        - label: I understand I must NOT attach proprietary or NDA-covered designs.
+          required: true

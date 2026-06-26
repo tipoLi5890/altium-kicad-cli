@@ -1,0 +1,38 @@
+{
+  "description": "U1.1<->U2.1 are wired together; U1.2 is intentionally open and carries a RECORD-22 No-ERC marker at its tip (1000,1500) so an open-pin ERC check is suppressed there.",
+  "coordinate_units": "altium_location_units",
+  "single_pin_net_count": 1,
+  "no_erc_points": [
+    [
+      1000,
+      1500
+    ]
+  ],
+  "nets": [
+    {
+      "name": null,
+      "is_named": false,
+      "members": [
+        [
+          "U1",
+          "1"
+        ],
+        [
+          "U2",
+          "1"
+        ]
+      ]
+    },
+    {
+      "name": null,
+      "is_named": false,
+      "members": [
+        [
+          "U1",
+          "2"
+        ]
+      ],
+      "note": "open pin, suppressed by No-ERC"
+    }
+  ]
+}

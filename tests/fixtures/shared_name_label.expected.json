@@ -1,0 +1,29 @@
+{
+  "description": "Two disjoint wire clusters each carry a net label with the same Text 'STAT'. The global same-name merge stitches them into ONE net of 4 pins (the STAT/LED1_GPIO_RD class the legacy parser split). Zero single-pin nets.",
+  "coordinate_units": "altium_location_units",
+  "single_pin_net_count": 0,
+  "nets": [
+    {
+      "name": "STAT",
+      "is_named": true,
+      "members": [
+        [
+          "R12",
+          "1"
+        ],
+        [
+          "R7",
+          "1"
+        ],
+        [
+          "U2",
+          "1"
+        ],
+        [
+          "U3",
+          "2"
+        ]
+      ]
+    }
+  ]
+}

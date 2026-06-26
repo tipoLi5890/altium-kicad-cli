@@ -1,0 +1,27 @@
+{
+  "name": "altium-kicad",
+  "owner": {
+    "name": "Li, ching yu"
+  },
+  "description": "Altium + KiCad EDA toolkit as a Claude Code plugin: read Altium .SchDoc and KiCad .kicad_sch with no EDA install, run ERC/design checks, draw KiCad.",
+  "plugins": [
+    {
+      "name": "altium-kicad",
+      "source": "./",
+      "description": "Dual-format EDA toolkit + Claude Code plugin: read Altium binary .SchDoc and KiCad .kicad_sch with no EDA install, run ERC/design checks, draw KiCad. Built for AI coding agents.",
+      "keywords": [
+        "altium",
+        "kicad",
+        "schdoc",
+        "kicad-sch",
+        "eda",
+        "schematic",
+        "pcb",
+        "netlist",
+        "erc",
+        "claude-code",
+        "ai-agents"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# Normalize line endings for text by default; let Git detect.
+* text=auto
+
+# Binary Altium / OLE2 fixtures must never be line-ending mangled on Windows checkout.
+tests/fixtures/** binary
+
+# ...but keep human-authored text fixtures diffable with stable LF endings.
+# (Later patterns win over the blanket "binary" rule above.)
+tests/fixtures/**/*.py        text eol=lf
+tests/fixtures/**/*.txt       text eol=lf
+tests/fixtures/**/*.json      text eol=lf
+tests/fixtures/**/*.md        text eol=lf
+tests/fixtures/**/*.records.txt text eol=lf
+tests/fixtures/MANIFEST.sha256 text eol=lf
+
+# Golden KiCad files are byte-identity gated: force LF so round-trip stays exact.
+*.kicad_sch  text eol=lf
+*.kicad_sym  text eol=lf
+*.kicad_pcb  text eol=lf
+
+# Source + shipped text assets.
+*.py    text eol=lf
+*.toml  text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.sh    text eol=lf
+*.pas   text eol=lf
+bin/akcli text eol=lf

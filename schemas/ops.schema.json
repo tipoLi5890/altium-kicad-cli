@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://altium-kicad-cli/schemas/ops.schema.json",
+  "title": "AkcliOpList",
+  "type": "object",
+  "required": ["protocol_version", "target_format", "ops"],
+  "properties": {
+    "protocol_version": { "const": 1 },
+    "target_format": { "enum": ["kicad", "altium"] },
+    "target_file": { "type": "string" },
+    "run_id": { "type": "string" },
+    "ops": { "type": "array", "items": { "$ref": "#/$defs/op" } }
+  },
+  "$defs": {
+    "point": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+    "endpoint": {
+      "oneOf": [
+        { "$ref": "#/$defs/point" },
+        { "type": "string", "pattern": "^[^.]+\\.[^.]+$" }
+      ]
+    },
+    "rotation": { "enum": [0, 90, 180, 270] },
+    "mirror": { "enum": ["none", "x", "y"] },
+    "op": {
+      "type": "object",
+      "required": ["op"],
+      "oneOf": [
+        {
+          "properties": {
+            "op": { "const": "place_component" },
+            "lib_id": { "type": "string" },
+            "designator": { "type": "string" },
+            "x_mil": { "type": "number" },
+            "y_mil": { "type": "number" },
+            "rotation": { "$ref": "#/$defs/rotation" },
+            "mirror": { "$ref": "#/$defs/mirror" },
+            "value": { "type": "string" },
+            "footprint": { "type": "string" },
+            "symbol_source": { "type": "string" }
+          },
+          "required": ["op", "lib_id", "designator", "x_mil", "y_mil"]
+        },
+        {
+          "properties": {
+            "op": { "const": "set_component_transform" },
+            "designator": { "type": "string" },
+            "rotation": { "$ref": "#/$defs/rotation" },
+            "mirror": { "$ref": "#/$defs/mirror" }
+          },
+          "required": ["op", "designator"]
+        },
+        {
+          "properties": {
+            "op": { "const": "set_component_parameters" },
+            "designator": { "type": "string" },
+            "reference": { "type": "string" },
+            "value": { "type": "string" },
+            "footprint": { "type": "string" },
+            "parameters": { "type": "object" }
+          },
+          "required": ["op", "designator"]
+        },
+        {
+          "properties": {
+            "op": { "const": "add_wire" },
+            "vertices": { "type": "array", "items": { "$ref": "#/$defs/endpoint" }, "minItems": 2 }
+          },
+          "required": ["op", "vertices"]
+        },
+        {
+          "properties": {
+            "op": { "const": "add_junction" },
+            "at": { "$ref": "#/$defs/point" }
+          },
+          "required": ["op", "at"]
+        },
+        {
+          "properties": {
+            "op": { "const": "add_no_connect" },
+            "pin": { "type": "string" }
+          },
+          "required": ["op", "pin"]
+        },
+        {
+          "properties": {
+            "op": { "const": "add_net_label" },
+            "name": { "type": "string" },
+            "at": { "$ref": "#/$defs/point" },
+            "scope": { "enum": ["local", "global", "hierarchical"] },
+            "orientation": { "$ref": "#/$defs/rotation" }
+          },
+          "required": ["op", "name", "at"]
+        },
+        {
+          "properties": {
+            "op": { "const": "place_power_port" },
+            "lib_id": { "type": "string" },
+            "net_name": { "type": "string" },
+            "at": { "$ref": "#/$defs/point" },
+            "rotation": { "$ref": "#/$defs/rotation" }
+          },
+          "required": ["op", "lib_id", "net_name", "at"]
+        },
+        {
+          "properties": {
+            "op": { "const": "add_bus" },
+            "vertices": { "type": "array", "items": { "$ref": "#/$defs/point" }, "minItems": 2 }
+          },
+          "required": ["op", "vertices"]
+        },
+        {
+          "properties": {
+            "op": { "const": "add_bus_entry" },
+            "at": { "$ref": "#/$defs/point" },
+            "size": { "$ref": "#/$defs/point" }
+          },
+          "required": ["op", "at"]
+        },
+        {
+          "properties": {
+            "op": { "const": "add_text" },
+            "text": { "type": "string" },
+            "at": { "$ref": "#/$defs/point" },
+            "angle": { "type": "number" }
+          },
+          "required": ["op", "text", "at"]
+        }
+      ]
+    }
+  }
+}

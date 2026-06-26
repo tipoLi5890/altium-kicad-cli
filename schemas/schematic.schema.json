@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://altium-kicad-cli/schemas/schematic.schema.json",
+  "title": "AkcliSchematic",
+  "description": "Export shape of model.Schematic (origin top-left, +Y down, mils).",
+  "type": "object",
+  "required": ["source_path", "source_format", "components", "nets", "schema_version"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "source_path": { "type": "string" },
+    "source_format": { "enum": ["altium", "kicad"] },
+    "sheets": { "type": "array", "items": { "type": "string" } },
+    "no_erc_points": {
+      "type": "array",
+      "items": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "metadata": { "type": "object" },
+    "components": { "type": "array", "items": { "$ref": "#/$defs/component" } },
+    "nets": { "type": "array", "items": { "$ref": "#/$defs/net" } }
+  },
+  "$defs": {
+    "pinType": {
+      "enum": [
+        "input", "output", "bidirectional", "tri_state", "passive",
+        "power_in", "power_out", "open_collector", "open_emitter",
+        "no_connect", "unspecified"
+      ]
+    },
+    "pin": {
+      "type": "object",
+      "required": ["number", "x_mil", "y_mil"],
+      "properties": {
+        "number": { "type": "string" },
+        "name": { "type": ["string", "null"] },
+        "x_mil": { "type": "number" },
+        "y_mil": { "type": "number" },
+        "electrical_type": { "$ref": "#/$defs/pinType" },
+        "owner_part_id": { "type": "integer" },
+        "unique_id": { "type": ["string", "null"] }
+      }
+    },
+    "component": {
+      "type": "object",
+      "required": ["designator", "x_mil", "y_mil"],
+      "properties": {
+        "designator": { "type": "string" },
+        "library_ref": { "type": ["string", "null"] },
+        "x_mil": { "type": "number" },
+        "y_mil": { "type": "number" },
+        "rotation": { "enum": [0, 90, 180, 270] },
+        "mirror": { "enum": ["none", "x", "y"] },
+        "value": { "type": ["string", "null"] },
+        "footprint": { "type": ["string", "null"] },
+        "unique_id": { "type": ["string", "null"] },
+        "part_count": { "type": "integer" },
+        "sheet": { "type": "string" },
+        "parameters": { "type": "object" },
+        "pins": { "type": "array", "items": { "$ref": "#/$defs/pin" } },
+        "undesignated": { "type": "boolean" }
+      }
+    },
+    "net": {
+      "type": "object",
+      "required": ["name", "members"],
+      "properties": {
+        "name": { "type": "string" },
+        "members": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "string" }, "minItems": 2, "maxItems": 2 }
+        },
+        "aliases": { "type": "array", "items": { "type": "string" } },
+        "source_names": { "type": "array", "items": { "type": "string" } },
+        "is_named": { "type": "boolean" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "merge_reasons": { "type": "array", "items": { "type": "string" } },
+        "stable_id": { "type": "string", "pattern": "^net_[0-9a-f]{12}$" }
+      }
+    }
+  }
+}

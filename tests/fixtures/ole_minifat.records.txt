@@ -1,0 +1,12 @@
+# Altium FileHeader records (reviewable sibling -- NOT parsed at runtime).
+# Index is the POST-HEADER position: the reader drops record 'H' (HEADER),
+# so OwnerIndex N refers to the record printed with index N below.
+ H : |HEADER=Protel for Windows - Schematic Capture Binary File Version 5.0| (auto-prepended)
+ 0 : RECORD=1 Location.X=900 Location.Y=1000 LibReference=RES
+ 1 : RECORD=34 OwnerIndex=0 Text=U1
+ 2 : RECORD=2 OwnerIndex=0 Designator=1 Name=P0.25 Location.X=1010 Location.Y=1000 PinLength=10 PinConglomerate=2 Electrical=4 OwnerPartId=1
+ 3 : RECORD=1 Location.X=2100 Location.Y=1000 LibReference=CAP
+ 4 : RECORD=34 OwnerIndex=3 Text=U2
+ 5 : RECORD=2 OwnerIndex=3 Designator=1 Name=VDD Location.X=2010 Location.Y=1000 PinLength=10 PinConglomerate=2 Electrical=7 OwnerPartId=1
+ 6 : RECORD=27 LocationCount=2 X1=1000 Y1=1000 X2=2000 Y2=1000
+ 7 : RECORD=25 Location.X=1500 Location.Y=1000 Text=V3V3
