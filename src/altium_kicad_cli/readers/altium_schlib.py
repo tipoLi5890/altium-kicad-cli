@@ -15,7 +15,8 @@ Per-symbol record framing notes:
   with its RECORD-1 ``Component``, so nothing is dropped);
 * **binary records are refused loudly** -- a text record's 4th framing byte (the
   flag) is ``0``; any non-zero flag means a binary primitive stream we do not yet
-  decode, so we raise ``ALTIUM_MALFORMED`` rather than mojibake-parse it.
+  decode, so we raise ``ALTIUM_UNSUPPORTED`` (exit 5, unsupported — not "corrupt")
+  rather than mojibake-parse it.
 """
 
 from __future__ import annotations
@@ -55,7 +56,7 @@ def _refuse_binary_records(buf: bytes) -> None:
         flag = buf[pos + 3]
         if flag != 0:
             fail(
-                "ALTIUM_MALFORMED",
+                "ALTIUM_UNSUPPORTED",
                 f"binary symbol record (flag={flag:#x}) unsupported (deferred)",
             )
         pos += 4 + ln

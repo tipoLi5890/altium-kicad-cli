@@ -52,6 +52,21 @@ Not yet tagged or published to PyPI; install from source (see `INSTALL.md`).
 - Documentation (`README.md`, `INSTALL.md`, `SECURITY.md`, `THIRD_PARTY_NOTICES.md`, `docs/SPEC.md`,
   `docs/cli-reference.md`), reference config, and CI matrix.
 
+### Fixed
+- **Footprints** now fall back to the RECORD-41 `Footprint` / `Supplier Footprint` parameter when the
+  RECORD-45/46 model link is empty (npnp-generated parts), removing false `BOM_MISSING_FOOTPRINT`.
+- **Rail voltage inference** no longer mis-fires on underscore-suffixed rails (`V3V3_BNO`, `V3V3_FSR`):
+  the trailing word-boundary that `_` defeated is replaced; logic is now shared in `checks/_rails.py`,
+  and configured `[[rail]]` names match `<rail>_suffix` too. Fixes false `ERC_NO_POWER`.
+- **`export --json`** now errors (exit 2) with guidance instead of emitting non-JSON at exit 0.
+- **`.SchLib` / `.PcbDoc`** binary records now surface as `ALTIUM_UNSUPPORTED` (exit 5, *unsupported*)
+  instead of `ALTIUM_MALFORMED` (exit 3, *parse error*).
+- **`pinmap --expected`** unmatched pins are now `WARNING` (non-zero exit) instead of a silent NOTE.
+- **`-C/--config`** (and other global flags) are accepted before *or* after the subcommand.
+- Report JSON (`check`/`diff`/`pinmap`) now carries `schema_version`.
+- GBK/cp936 fallback for `%UTF8%` values that aren't valid UTF-8 (Ω/µ/± from Chinese-locale tools).
+- `tarfile` extraction uses `filter="data"` (Python 3.14-ready, hardened).
+
 ### Notes
 - Baselines at the first tagged release: package `0.1.0`, `schema_version = "1.0"`,
   `protocol_version = 1`.

@@ -40,10 +40,11 @@ Format) container reader and an Altium record decoder — no Altium Designer, no
 ```bash
 akcli read   main.SchDoc        # parse a .SchDoc to normalized JSON
 akcli net    main.SchDoc         # extract the netlist (net -> pins)
-akcli component main.SchDoc       # list components / designators / values
+akcli component main.SchDoc U10    # one component's pins -> nets (needs a designator)
 ```
 
-Supported Altium inputs: `.SchDoc` (schematic), `.SchLib` (symbol library), `.PcbDoc` (board —
+Supported Altium inputs: `.SchDoc` (schematic), `.SchLib` (symbol library — text-record symbols;
+libraries containing binary symbol records are refused with exit 5, *unsupported*), `.PcbDoc` (board —
 ASCII `Nets6`/`Components6`/`Classes6`/`Rules6` sections for now; binary pad/track sections are
 refused loudly rather than mis-parsed). All Altium access is **read-only**.
 
@@ -104,9 +105,11 @@ akcli jlc add    C7593                 # fetch + convert into a KiCad / Altium l
 
 ## Use with AI coding agents
 
-`akcli` is a plain CLI, so any agent that can run shell commands can drive it once it is on PATH. Every
-command emits structured JSON (`--json`) with a `schema_version`, and the op-list carries a
-`protocol_version`, so output stays machine-checkable and idempotent.
+`akcli` is a plain CLI, so any agent that can run shell commands can drive it once it is on PATH.
+Commands emit structured JSON with `--json` (`read` and the checks carry a `schema_version`; `net` emits
+a net array), and the op-list carries a `protocol_version`, so output stays machine-checkable and
+idempotent. Note: when piping (`akcli … | head`) the shell reports the *pipe's* exit code, not akcli's —
+use `set -o pipefail` if you branch on it.
 
 - **Claude Code** — install the bundled plugin (below) for the `/altium-kicad:circuit-review`,
   `circuit-pinmap`, `circuit-draw`, and `circuit-diff` commands plus a circuit-design skill.

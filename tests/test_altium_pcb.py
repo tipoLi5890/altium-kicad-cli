@@ -80,7 +80,7 @@ def test_binary_section_refused_loudly(tmp_path):
     for section in ("Pads6", "Vias6", "Tracks6", "Arcs6", "Regions6"):
         with pytest.raises(AkcliError) as ei:
             altium_pcb.parse_ascii_section(streams, section)
-        assert ei.value.code == "ALTIUM_MALFORMED"
+        assert ei.value.code == "ALTIUM_UNSUPPORTED"
 
 
 def test_read_does_not_touch_binary_sections(tmp_path):

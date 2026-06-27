@@ -233,7 +233,7 @@ def test_cross_check_expected_pin_not_on_mcu():
     findings = pinmap.run(sch, _cfg("U3"), {"P9.99": "MYSTERY"})
     miss = _by_code(findings, "PINMAP_EXPECTED_PIN_MISSING")
     assert len(miss) == 1
-    assert miss[0].severity is Severity.NOTE
+    assert miss[0].severity is Severity.WARNING
 
 
 def test_cross_check_mismatch_when_pin_floating():

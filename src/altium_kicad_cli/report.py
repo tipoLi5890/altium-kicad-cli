@@ -79,7 +79,9 @@ def _render_text(findings: list[Finding], meta: dict) -> str:
 
 
 def _render_json(findings: list[Finding], meta: dict) -> str:
+    from .model import SCHEMA_VERSION  # local import avoids any import cycle
     payload = {
+        "schema_version": SCHEMA_VERSION,
         "metadata": meta,
         "findings": [
             {

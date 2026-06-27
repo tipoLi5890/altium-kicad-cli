@@ -37,6 +37,7 @@ from ..config import Config
 from ..model import Net, Pin, PinType, Schematic
 from ..report import Finding, Severity
 from ..units import approx_eq, mil_to_nm
+from ._rails import implied_voltage as _implied_voltage, norm as _norm, rail_matches as _rail_matches
 
 __all__ = ["run"]
 
@@ -107,29 +108,7 @@ def _prefix(designator: str) -> str:
     return m.group(0).upper() if m else ""
 
 
-def _norm(name: str) -> str:
-    """Normalize a net/rail name for matching: upper-case, drop a leading ``+``."""
-    return name.upper().lstrip("+").strip()
-
-
-def _implied_voltage(name: str | None) -> float | None:
-    """Best-effort voltage implied by a rail name (``+3V3`` -> 3.3, ``5V`` -> 5)."""
-    if not name:
-        return None
-    s = _norm(name)
-    m = re.search(r"(\d+)V(\d+)\b", s)        # 3V3 / 1V8 / V3V3 ('V' = dot)
-    if m:
-        try:
-            return float(f"{m.group(1)}.{m.group(2)}")
-        except ValueError:
-            return None
-    m = re.search(r"(\d+(?:\.\d+)?)V\b", s)    # 5V / 3.3V / 12V
-    if m:
-        return float(m.group(1))
-    m = re.search(r"\bV(\d+(?:\.\d+)?)\b", s)   # V5 / V3.3
-    if m:
-        return float(m.group(1))
-    return None
+# _norm / _implied_voltage / _rail_matches are shared with power.py — see ._rails.
 
 
 def _is_ground(name: str | None) -> bool:
@@ -243,7 +222,7 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
         names = _net_names(net)
         if any(_is_ground(x) for x in names):
             ground_nets.append(net)
-        elif any(_is_power(x) for x in names) or ({_norm(x) for x in names} & cfg_rail_names):
+        elif any(_is_power(x) for x in names) or any(_rail_matches(x, cfg_rail_names) for x in names):
             power_nets.append(net)
     power_ids = {id(n) for n in power_nets}
     ground_ids = {id(n) for n in ground_nets}

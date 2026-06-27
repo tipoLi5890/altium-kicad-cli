@@ -507,6 +507,12 @@ def _cmd_pinmap(args: argparse.Namespace) -> int:
 
 
 def _cmd_export(args: argparse.Namespace) -> int:
+    if args.json:
+        sys.stderr.write(
+            "ERROR: `export` emits a netlist format — use --format {protel,kicad,csv}; "
+            "for structured netlist JSON use `akcli net --json`\n"
+        )
+        return EXIT["USAGE"]
     path = _require_path(args.path)
     sch = _load_schematic(path)
     from . import exporters
@@ -939,32 +945,44 @@ def _cmd_draw(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------- #
 # parser construction
 # --------------------------------------------------------------------------- #
+# Global flags use ``SUPPRESS`` defaults so they can appear EITHER before or after the
+# subcommand: the shared parent is attached to both the top-level parser and every
+# subparser, and SUPPRESS stops the subparser's copy from clobbering a value parsed
+# before the subcommand. ``main()`` backfills the real defaults after parsing.
+_GLOBAL_DEFAULTS = {
+    "config": None, "verbose": 0, "quiet": False,
+    "json": False, "no_color": False, "debug": False,
+}
+
+
 def _global_flags() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("-C", "--config", metavar="PATH",
+    common.add_argument("-C", "--config", metavar="PATH", default=argparse.SUPPRESS,
                         help="path to altium-kicad-cli.toml (overrides discovery)")
-    common.add_argument("-v", "--verbose", action="count", default=0,
+    common.add_argument("-v", "--verbose", action="count", default=argparse.SUPPRESS,
                         help="increase verbosity (-v, -vv)")
-    common.add_argument("-q", "--quiet", action="store_true",
+    common.add_argument("-q", "--quiet", action="store_true", default=argparse.SUPPRESS,
                         help="suppress non-error logs")
-    common.add_argument("--json", action="store_true",
+    common.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                         help="emit machine-readable JSON")
-    common.add_argument("--no-color", action="store_true", help="disable ANSI color")
-    common.add_argument("--debug", action="store_true",
+    common.add_argument("--no-color", action="store_true", default=argparse.SUPPRESS,
+                        help="disable ANSI color")
+    common.add_argument("--debug", action="store_true", default=argparse.SUPPRESS,
                         help="re-raise exceptions with a full traceback")
     return common
 
 
 def build_parser() -> argparse.ArgumentParser:
+    common = _global_flags()
     parser = argparse.ArgumentParser(
         prog="akcli",
         description="Read Altium .SchDoc/.SchLib/.PcbDoc and KiCad .kicad_sch, "
                     "run ERC/design checks, and draw KiCad schematics.",
+        parents=[common],   # accept global flags before the subcommand too
     )
     parser.add_argument("--version", action="store_true",
                         help="print package + protocol version and exit")
 
-    common = _global_flags()
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
     p = sub.add_parser("read", parents=[common], help="read + normalize a file")
@@ -1086,6 +1104,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    # Backfill global-flag defaults (they use argparse.SUPPRESS so a value given before
+    # the subcommand isn't clobbered by the subparser's copy).
+    for _attr, _default in _GLOBAL_DEFAULTS.items():
+        if not hasattr(args, _attr):
+            setattr(args, _attr, _default)
 
     if getattr(args, "version", False):
         print(f"altium-kicad-cli {__version__} (protocol {PROTOCOL_VERSION})")

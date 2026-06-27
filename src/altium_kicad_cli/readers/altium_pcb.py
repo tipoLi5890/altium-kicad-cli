@@ -67,7 +67,7 @@ def parse_ascii_section(streams: dict[str, bytes], section: str) -> list[dict]:
     """Parse one ASCII section into records; refuse binary sections loudly."""
     if section in BINARY_SECTIONS:
         fail(
-            "ALTIUM_MALFORMED",
+            "ALTIUM_UNSUPPORTED",
             f"section {section!r} is a binary PCB section (decoding deferred)",
         )
     buf = _section_buf(streams, section)

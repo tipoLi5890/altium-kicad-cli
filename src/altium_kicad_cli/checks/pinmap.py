@@ -219,8 +219,11 @@ def run(sch: Schematic, cfg: object | None, expected: dict | None = None) -> lis
             if hit is None:
                 findings.append(
                     Finding(
+                        # WARNING (not NOTE) so an expected table that doesn't line up
+                        # with the schematic fails the exit code instead of green-lighting
+                        # silently (e.g. GPIO-number keys vs symbol pin names).
                         "PINMAP_EXPECTED_PIN_MISSING",
-                        Severity.NOTE,
+                        Severity.WARNING,
                         f"expected pin '{raw_key}' (-> '{signal}') is not present "
                         f"on MCU '{mcu.designator}'",
                         [str(raw_key)],

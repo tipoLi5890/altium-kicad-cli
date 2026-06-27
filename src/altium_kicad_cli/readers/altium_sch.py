@@ -170,7 +170,14 @@ def _build_components(
             rotation=rot,
             mirror=mirror,
             value=r.get("Comment") or (params.get(idx, {}).get("Value")),
-            footprint=fps.get(idx),
+            # RECORD 45/46 model-link first; fall back to the RECORD-41 `Footprint` /
+            # `Supplier Footprint` parameter (npnp-generated parts leave the model-link
+            # empty but write the footprint as a parameter).
+            footprint=(
+                fps.get(idx)
+                or params.get(idx, {}).get("Footprint")
+                or params.get(idx, {}).get("Supplier Footprint")
+            ),
             unique_id=r.get("UniqueId"),
             part_count=gi(r, "PartCount", 1) or 1,
             parameters=params.get(idx, {}),

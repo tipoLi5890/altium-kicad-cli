@@ -24,6 +24,7 @@ ERROR_CODES: frozenset[str] = frozenset(
         "ALTIUM_BAD_SECTOR_SHIFT",
         "ALTIUM_ALLOC_GUARD",
         "ALTIUM_MALFORMED",
+        "ALTIUM_UNSUPPORTED",
         # KiCad S-expression reader
         "KICAD_SEXPR_DEPTH",
         "KICAD_SEXPR_UNTERMINATED",
@@ -75,6 +76,8 @@ _CODE_EXIT: dict[str, int] = {
     "ALTIUM_BAD_SECTOR_SHIFT": EXIT["PARSE"],
     "ALTIUM_ALLOC_GUARD": EXIT["PARSE"],
     "ALTIUM_MALFORMED": EXIT["PARSE"],
+    # a well-formed file using a feature we don't decode yet -> 5 (not "corrupt")
+    "ALTIUM_UNSUPPORTED": EXIT["UNSUPPORTED_FORMAT"],
     "KICAD_SEXPR_DEPTH": EXIT["PARSE"],
     "KICAD_SEXPR_UNTERMINATED": EXIT["PARSE"],
     "KICAD_SEXPR_TOOBIG": EXIT["PARSE"],

@@ -25,6 +25,7 @@ import re
 from ..config import Config
 from ..model import Component, Net, Schematic
 from ..report import Finding, Severity
+from ._rails import implied_voltage as _implied_voltage, norm as _norm
 
 # --- Finding codes (stable, machine-readable) -------------------------------
 POWER_RAIL = "POWER_RAIL"                       # INFO: a rail + its consumers
@@ -71,9 +72,7 @@ def _prefix(designator: str) -> str:
     return m.group(0).upper() if m else ""
 
 
-def _norm(name: str) -> str:
-    """Normalize a net/rail name for matching: upper-case, drop a leading ``+``."""
-    return name.upper().lstrip("+").strip()
+# _norm / _implied_voltage are shared with erc.py — see ._rails.
 
 
 def _is_ground(name: str | None) -> bool:
@@ -84,29 +83,6 @@ def _is_ground(name: str | None) -> bool:
         return True
     # GND-suffixed/prefixed buses (e.g. "GND_USB", "USB_GND")
     return n.startswith("GND") or n.endswith("GND")
-
-
-def _implied_voltage(name: str | None) -> float | None:
-    """Best-effort voltage implied by a rail name (``+3V3`` -> 3.3, ``5V`` -> 5.0)."""
-    if not name:
-        return None
-    s = _norm(name)
-    # 3V3 / 1V8 / V3V3 -> digit 'V' digit (the 'V' is the decimal point)
-    m = re.search(r"(\d+)V(\d+)\b", s)
-    if m:
-        try:
-            return float(f"{m.group(1)}.{m.group(2)}")
-        except ValueError:
-            return None
-    # 5V / 3.3V / 12V (trailing V)
-    m = re.search(r"(\d+(?:\.\d+)?)V\b", s)
-    if m:
-        return float(m.group(1))
-    # V5 / V3.3 (leading V)
-    m = re.search(r"\bV(\d+(?:\.\d+)?)\b", s)
-    if m:
-        return float(m.group(1))
-    return None
 
 
 def _is_power(name: str | None) -> bool:

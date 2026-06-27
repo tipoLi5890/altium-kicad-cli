@@ -99,7 +99,7 @@ def test_binary_symbol_records_refused_loudly(tmp_path):
     p = _write_lib(tmp_path, extra={"BIN/Data": binary_frame})
     with pytest.raises(AkcliError) as ei:
         altium_schlib.read(p)
-    assert ei.value.code == "ALTIUM_MALFORMED"
+    assert ei.value.code == "ALTIUM_UNSUPPORTED"
 
 
 def test_export_stamps_schema_version(tmp_path):

@@ -87,10 +87,17 @@ def fields(r: str) -> dict[str, str]:
         k, v = tok.split("=", 1)
         if k.startswith(_UTF8_PREFIX):
             base = k[len(_UTF8_PREFIX):]
+            raw = v.encode("latin-1", "replace")
             try:
-                v = v.encode("latin-1", "replace").decode("utf-8")
+                v = raw.decode("utf-8")
             except UnicodeDecodeError:
-                v = v.encode("latin-1", "replace").decode("utf-8", "replace")
+                # Not valid UTF-8: tools on a Chinese-locale Windows (e.g. npnp) may
+                # have written the system codepage (GBK/cp936) instead — try that
+                # before giving up to U+FFFD, so Ω/µ/± survive instead of mojibake.
+                try:
+                    v = raw.decode("cp936")
+                except UnicodeDecodeError:
+                    v = raw.decode("utf-8", "replace")
             utf8[base] = v
         else:
             d[k] = v

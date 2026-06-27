@@ -39,10 +39,10 @@ Format）容器讀取器與 Altium 記錄解碼器——不需要 Altium Designe
 ```bash
 akcli read   main.SchDoc        # 將 .SchDoc 解析為正規化 JSON
 akcli net    main.SchDoc         # 擷取 netlist（net -> pins）
-akcli component main.SchDoc       # 列出元件／designator／值
+akcli component main.SchDoc U10    # 單一元件的腳位 -> net（需給 designator）
 ```
 
-支援的 Altium 輸入：`.SchDoc`（電路圖）、`.SchLib`（符號庫）、`.PcbDoc`（電路板——目前支援
+支援的 Altium 輸入：`.SchDoc`（電路圖）、`.SchLib`（符號庫——文字記錄符號；含二進位符號記錄的庫會以 exit 5「不支援」拒絕）、`.PcbDoc`（電路板——目前支援
 ASCII 的 `Nets6`／`Components6`／`Classes6`／`Rules6` 區段；二進位的 pad/track 區段會明確報錯拒絕，
 而不會誤解析）。所有 Altium 存取皆為**唯讀**。
 
@@ -103,9 +103,10 @@ akcli jlc add    C7593                 # 抓取並轉換為 KiCad／Altium 庫
 
 ## 搭配 AI 程式代理使用
 
-`akcli` 就是一個普通 CLI，只要它在 PATH 上，任何能執行 shell 指令的代理都能驅動它。每個指令都會
-輸出帶有 `schema_version` 的結構化 JSON（`--json`），而 op-list 帶有 `protocol_version`，
-因此輸出可保持機器可驗證且冪等。
+`akcli` 就是一個普通 CLI，只要它在 PATH 上，任何能執行 shell 指令的代理都能驅動它。指令以 `--json`
+輸出結構化 JSON（`read` 與各項檢查帶有 `schema_version`；`net` 為陣列），op-list 帶有
+`protocol_version`，因此輸出可保持機器可驗證且冪等。管線（`akcli … | head`）下 shell 回報的是管線的
+exit code 而非 akcli 的——若要據此判斷請加 `set -o pipefail`。
 
 - **Claude Code** — 安裝隨附的外掛（見下方），即可取得 `/altium-kicad:circuit-review`、
   `circuit-pinmap`、`circuit-draw`、`circuit-diff` 指令與 circuit-design skill。
