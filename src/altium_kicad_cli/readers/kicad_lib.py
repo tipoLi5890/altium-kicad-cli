@@ -105,27 +105,51 @@ def _parse_pin(node: sexpr.SNode) -> model.Pin:
     )
 
 
+def _sub_unit_style(name: str | None) -> tuple[int | None, int | None]:
+    """``(unit, style)`` of a ``Name_<unit>_<style>`` sub-symbol name, else ``(None, None)``."""
+    parts = (name or "").rsplit("_", 2)
+    if len(parts) == 3:
+        try:
+            return int(parts[1]), int(parts[2])
+        except ValueError:
+            pass
+    return None, None
+
+
 def _collect_pins(sym: sexpr.SNode) -> list[model.Pin]:
-    """Collect every ``(pin ...)`` of a symbol, including nested unit/style symbols.
+    """Collect every ``(pin ...)`` of a symbol, including nested unit sub-symbols.
 
     KiCad nests pins one level deep inside ``(symbol "Name_<unit>_<style>" ...)``
-    sub-symbols; some hand-written libs put them directly. We walk all descendant
+    sub-symbols; some hand-written libs put them directly. We walk descendant
     ``(symbol ...)`` nodes iteratively (no native recursion) and preserve order.
+
+    Only **body style 1** is collected: a ``_<unit>_2`` sub-symbol is the same
+    physical unit drawn in its alternate (DeMorgan) representation, so counting
+    it would duplicate every pin (each duplicate then collides downstream — the
+    writer's per-pin UUIDs are keyed by pin number, so a 74xx placement was
+    refused with ``DUPLICATE_UUID``). Pins also record their owning unit in
+    ``owner_part_id`` (a ``_0_*`` sub-symbol is common to all units → unit 1).
     """
     pins: list[model.Pin] = []
-    stack: list = [iter(sym.children or [])]
+    stack: list[tuple] = [(iter(sym.children or []), 1)]
     while stack:
+        it, unit = stack[-1]
         try:
-            nd = next(stack[-1])
+            nd = next(it)
         except StopIteration:
             stack.pop()
             continue
         if not nd.is_list:
             continue
         if nd.tag == "pin":
-            pins.append(_parse_pin(nd))
+            pin = _parse_pin(nd)
+            pin.owner_part_id = unit
+            pins.append(pin)
         elif nd.tag == "symbol":
-            stack.append(iter(nd.children or []))
+            u, style = _sub_unit_style(_atom_value(nd, 1))
+            if style is not None and style >= 2:
+                continue  # alternate body style: same pins, skip
+            stack.append((iter(nd.children or []), u if u else unit))
     return pins
 
 

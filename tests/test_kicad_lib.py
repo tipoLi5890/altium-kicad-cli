@@ -155,3 +155,51 @@ def test_pin_offsets_returns_local_tuples():
     d = {n: (x, y) for n, x, y in offs}
     assert d["1"][0] == pytest.approx(0.0)
     assert d["1"][1] == pytest.approx(units.nm_to_mil(units.mm_to_nm(3.81)))
+
+
+# --------------------------------------------------------------------------- #
+# multi-unit + alternate (DeMorgan) body styles — 74xx-style symbols
+# --------------------------------------------------------------------------- #
+_TWO_STYLE_LIB = """
+(kicad_symbol_lib (version 20231120) (generator "test")
+  (symbol "G" (pin_numbers (hide yes)) (in_bom yes) (on_board yes)
+    (property "Reference" "U" (at 0 0 0))
+    (symbol "G_1_1"
+      (pin input line (at -5.08 2.54 0) (length 2.54)
+        (name "A" (effects (font (size 1.27 1.27))))
+        (number "1" (effects (font (size 1.27 1.27)))))
+      (pin output line (at 5.08 0 180) (length 2.54)
+        (name "Y" (effects (font (size 1.27 1.27))))
+        (number "2" (effects (font (size 1.27 1.27))))))
+    (symbol "G_1_2"
+      (pin input line (at -5.08 2.54 0) (length 2.54)
+        (name "A" (effects (font (size 1.27 1.27))))
+        (number "1" (effects (font (size 1.27 1.27)))))
+      (pin output line (at 5.08 0 180) (length 2.54)
+        (name "Y" (effects (font (size 1.27 1.27))))
+        (number "2" (effects (font (size 1.27 1.27))))))
+    (symbol "G_2_1"
+      (pin power_in line (at 0 -7.62 90) (length 2.54)
+        (name "GND" (effects (font (size 1.27 1.27))))
+        (number "3" (effects (font (size 1.27 1.27))))))))
+"""
+
+
+def test_alternate_body_style_pins_not_duplicated(tmp_path):
+    """A ``_<unit>_2`` (DeMorgan) body re-draws the SAME pins: collecting it
+    duplicated every pin number, and the writer's per-pin UUIDs (keyed by pin
+    number) then collided — placing any 74xx part was refused DUPLICATE_UUID."""
+    p = tmp_path / "G.kicad_sym"
+    p.write_text(_TWO_STYLE_LIB)
+    lib = kicad_lib.read(p)
+    g = _by_name(lib, "G")
+    assert sorted(pin.number for pin in g.pins) == ["1", "2", "3"]
+
+
+def test_collected_pins_carry_their_unit(tmp_path):
+    p = tmp_path / "G.kicad_sym"
+    p.write_text(_TWO_STYLE_LIB)
+    lib = kicad_lib.read(p)
+    g = _by_name(lib, "G")
+    units_of = {pin.number: pin.owner_part_id for pin in g.pins}
+    assert units_of == {"1": 1, "2": 1, "3": 2}

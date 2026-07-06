@@ -60,6 +60,13 @@ Not yet tagged or published to PyPI; install from source (see `INSTALL.md`).
   finding says so and points at re-export.
 
 ### Fixed
+- **Alternate (DeMorgan) body styles no longer duplicate every pin:** the KiCad library
+  reader collected pins from every `Name_<unit>_<style>` sub-symbol, including the `_<unit>_2`
+  DeMorgan re-drawing of the same physical unit — so a 74xx-style symbol resolved with each
+  gate pin twice, the writer emitted colliding per-pin UUIDs, and the connectivity gate refused
+  the placement (`DUPLICATE_UUID`, exit 6). Only body style 1 is collected now, and each pin
+  records its owning unit in `owner_part_id` (`_0_*` common sub-symbols map to unit 1). Found by
+  a library-wide sweep placing every derived symbol in KiCad's official 74xx library.
 - **`(extends)`-derived symbols are now FLATTENED into the written `lib_symbols` cache**
   (KiCad-save style): the base's units/pins/graphics are inlined under the derived name (unit
   sub-symbols renamed `Base_u_s` → `Derived_u_s`), the derived symbol's own properties/settings
