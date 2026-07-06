@@ -67,7 +67,7 @@ deterministic op UUID, so regenerating it breaks idempotent re-runs.
 
 ## (4) Op-list authoring patterns
 
-Document shape and the 13-op vocabulary are defined in `schemas/ops.schema.json`
+Document shape and the op vocabulary (16 ops) are defined in `schemas/ops.schema.json`
 (11 core ops + `place_gnd`/`place_vcc` sugar); per-executor support is in
 `schemas/ops.capabilities.json`. Envelope: `{"protocol_version": 1,
 "target_format": "kicad", "ops": [...]}`. Rules the validator and executor enforce:
@@ -92,8 +92,11 @@ Document shape and the 13-op vocabulary are defined in `schemas/ops.schema.json`
   unit is its own instance sharing the designator (`U1` gate A = unit 1, gate B
   = unit 2 ...). `"REF.PIN"` resolves against the instance whose unit owns the
   pin; wiring a pin on an unplaced unit fails loudly.
-- **No delete/move ops exist.** `set_component_transform` changes rotation/mirror
-  only; to reposition, restore the `.bak` and redraw with corrected coordinates.
+- **Delete/move**: `delete_component` (all instances of a designator; attached
+  wires are left for the connectivity gate to flag — delete them explicitly via
+  `delete_object` by uuid), `move_component` (one instance, properties travel
+  with the body; wires do NOT stretch, so re-wire after a move). Deleting an
+  absent target is a replay-safe no-op.
 
 ### Example A — LDO regulator block (new sheet)
 

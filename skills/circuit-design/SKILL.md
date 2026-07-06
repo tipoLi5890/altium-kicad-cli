@@ -75,7 +75,7 @@ header `check` prints before declaring a board clean.
 
 ### (3) Draw / edit a **KiCad** schematic — op-list, then plan, then draw
 
-KiCad is the only writable target. Build an op-list JSON (document shape and the 13-op vocabulary
+KiCad is the only writable target. Build an op-list JSON (document shape and the op vocabulary — 16 ops incl. `delete_component`/`delete_object`/`move_component`
 are defined in **`schemas/ops.schema.json`**; see also `docs/op-list-authoring.md` if present):
 
 ```json
