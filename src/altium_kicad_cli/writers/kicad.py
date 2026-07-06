@@ -374,10 +374,19 @@ def _place_symbol(
 
     root = _root_uuid(doc)
     sym_uuid = instances.deterministic_uuid(root, designator, op_index)
-    pin_uuids = [
-        instances.deterministic_uuid(root, f"{designator}.pin{n}", op_index)
-        for n in pin_numbers
-    ]
+    # A pin NUMBER may legitimately repeat within one symbol (multi-unit parts
+    # with shared pads, e.g. dual DirectFETs: unit A pins 1,2,3 / unit B pins
+    # 1,4,5). Seed later occurrences with a #k suffix so their uuids stay
+    # unique — otherwise the two "(pin "1" ...)" nodes collide and the
+    # connectivity gate refuses the write (DUPLICATE_UUID). The first
+    # occurrence keeps the historical seed, so existing files replay unchanged.
+    pin_uuids = []
+    _seen: dict[str, int] = {}
+    for n in pin_numbers:
+        k = _seen.get(n, 0)
+        _seen[n] = k + 1
+        seed = f"{designator}.pin{n}" if k == 0 else f"{designator}.pin{n}#{k + 1}"
+        pin_uuids.append(instances.deterministic_uuid(root, seed, op_index))
 
     # Idempotent replay: a same-uuid instance already present is replaced wholesale.
     sym = _make_symbol(lib_id, pos_nm, rotation, mirror, sym_uuid, pin_numbers, pin_uuids)
