@@ -250,7 +250,7 @@ class NetPrimitives:
 - Wire/port endpoints MAY be a **pin reference string `"REF.PIN"`** (e.g. `"U3.7"`); the executor snaps it to
   the pin's computed world coordinate. Raw `[x,y]` snaps to grid.
 
-### 2.2 Op vocabulary (LOCKED — 13 ops)
+### 2.2 Op vocabulary (13 LOCKED ops + 3 additive v0.2 ops)
 
 | op | purpose | KiCad writer | Altium live |
 |---|---|---|---|
@@ -265,6 +265,13 @@ class NetPrimitives:
 | `add_bus` | bus polyline | ✅ | ⚠️ `OP_UNSUPPORTED` v1 |
 | `add_bus_entry` | bus entry (fixed 2.54 mm @ 45°) | ✅ | ⚠️ `OP_UNSUPPORTED` v1 |
 | `add_text` | free text/note | ✅ | ✅ |
+| `delete_component` | remove ALL placed instances of a designator (wires left for the gate to flag; absent target = replay-safe no-op) | ✅ | ⚠️ `OP_UNSUPPORTED` v1 |
+| `delete_object` | remove ONE top-level object by uuid | ✅ | ⚠️ `OP_UNSUPPORTED` v1 |
+| `move_component` | move one instance (designator + optional `unit`); its properties travel along, wires are NOT stretched | ✅ | ⚠️ `OP_UNSUPPORTED` v1 |
+
+`place_component` additionally takes an optional `"unit": N` (multi-unit parts: each unit is
+its own placed instance sharing the designator; `"REF.PIN"` resolves against the instance whose
+unit owns the pin, and a pin on an unplaced unit fails loudly).
 
 A per-executor **capability matrix** ships as `schemas/ops.capabilities.json`; an executor returns
 `ERROR: OP_UNSUPPORTED` for any op it cannot map. `place_gnd`/`place_vcc` are documented sugar over
