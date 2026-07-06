@@ -33,6 +33,12 @@ When in doubt, prefer additive, backwards-compatible changes and leave the versi
 ## [Unreleased]
 
 ### Added
+- **Converted libraries import into Altium Designer natively:** the footprint writer now
+  emits the **KiCad 6 dialect** (`(layer)(width)` graphics, version `20211014`) — readable by
+  every KiCad from 6 to 10 *and* by Altium Designer's built-in **Import Wizard » KiCad Design
+  Files** (whose KiCad support is pinned to 6.0x), which converts the produced
+  `.kicad_sym`/`.kicad_mod` to a native `.SchLib`/`.PcbLib`. This replaces the dead
+  npnp `--to altium` path with a vendor-supported one.
 - **`akcli jlc add` is back — in-process, zero-install:** LCSC → KiCad symbol/footprint/3D
   conversion now runs inside akcli via the vendored MIT conversion core of
   **JLC2KiCadLib** (TousstNicolas; license + provenance in

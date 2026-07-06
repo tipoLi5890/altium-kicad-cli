@@ -148,8 +148,15 @@ artwork. Migrate by re-drawing in KiCad and proving net equivalence:
    nets to reproduce.
 2. **Map the library.** For each Altium component pick a KiCad `lib_id`: use symbols
    from a project `.kicad_sym` or the official KiCad libraries (passed to `plan`/`draw`
-   via repeatable `--symbols`, or config `[paths]`). Carry the Altium `value` and
+   via repeatable `--symbols`, or config `[paths]`), or convert real LCSC parts with
+   `akcli jlc add <C-number>`. Carry the Altium `value` and
    resolved `footprint` fields from the `read --json` output into `place_component` ops.
+
+   Going the OTHER way (a library the user needs **inside Altium**): `akcli jlc add`
+   emits KiCad-6-dialect libraries that Altium Designer imports natively —
+   **File » Import Wizard » KiCad Design Files** converts the `.kicad_sym`/`.kicad_mod`
+   to a `.SchLib`/`.PcbLib`. That wizard is the supported route for any KiCad→AD
+   library need; akcli itself never writes Altium files.
 3. **Draw into KiCad.** Author the op-list, then (see the circuit-design skill):
    ```bash
    akcli plan board.kicad_sch --ops ops.json

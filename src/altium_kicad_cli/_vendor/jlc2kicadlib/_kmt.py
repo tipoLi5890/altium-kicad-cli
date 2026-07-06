@@ -9,8 +9,15 @@ call; the serialization below is the modern ``(footprint ...)`` dialect KiCad
 
 Coordinate/unit contract: geometry values arrive in **mm** (the vendored
 handlers convert EasyEDA mils to mm). ``Model.at`` arrives in the legacy
-KicadModTree convention of **inches** and is serialized as a modern
+KicadModTree convention of **inches** and is serialized as an
 ``(offset (xyz ...))`` in mm (x25.4).
+
+Dialect: the serializer emits the **KiCad 6** footprint dialect
+(``(layer ...) (width ...)`` on graphic items, version ``20211014``). Every
+KiCad from 6 through 10 reads it natively — and, decisively, so does **Altium
+Designer's Import Wizard** (File » Import Wizard » KiCad Design Files), whose
+KiCad support is pinned to 6.0x: the same converted library becomes an Altium
+``SchLib``/``PcbLib`` without any extra tool.
 """
 
 from __future__ import annotations
@@ -214,8 +221,9 @@ def _arc_mid(start, end, center):
     return (center[0] + r * math.cos(am), center[1] + r * math.sin(am))
 
 
-def _stroke(width):
-    return f"(stroke (width {_fmt(width)}) (type solid))"
+def _gtail(layer, width):
+    """KiCad-6 graphic-item tail: ``(layer "X") (width W)`` (no stroke node)."""
+    return f"(layer {_q(layer)}) (width {_fmt(width)})"
 
 
 def _serialize_node(node, off, out: list[str]) -> None:
@@ -228,33 +236,32 @@ def _serialize_node(node, off, out: list[str]) -> None:
     if isinstance(node, Line):
         s, e = _shift(node.start, off), _shift(node.end, off)
         out.append(f"{ind}(fp_line (start {_fmt(s[0])} {_fmt(s[1])}) "
-                   f"(end {_fmt(e[0])} {_fmt(e[1])}) {_stroke(node.width)} "
-                   f"(layer {_q(node.layer)}))")
+                   f"(end {_fmt(e[0])} {_fmt(e[1])}) {_gtail(node.layer, node.width)})")
     elif isinstance(node, RectLine) or isinstance(node, RectFill):
         s, e = _shift(node.start, off), _shift(node.end, off)
         width = getattr(node, "width", 0.0)
         fill = "none" if isinstance(node, RectLine) else "solid"
         out.append(f"{ind}(fp_rect (start {_fmt(s[0])} {_fmt(s[1])}) "
-                   f"(end {_fmt(e[0])} {_fmt(e[1])}) {_stroke(width)} "
-                   f"(fill {fill}) (layer {_q(node.layer)}))")
+                   f"(end {_fmt(e[0])} {_fmt(e[1])}) {_gtail(node.layer, width)} "
+                   f"(fill {fill}))")
     elif isinstance(node, Arc):
         s, e = _shift(node.start, off), _shift(node.end, off)
         c = _shift(node.center, off)
         m = _arc_mid(s, e, c)
         out.append(f"{ind}(fp_arc (start {_fmt(s[0])} {_fmt(s[1])}) "
                    f"(mid {_fmt(m[0])} {_fmt(m[1])}) (end {_fmt(e[0])} {_fmt(e[1])}) "
-                   f"{_stroke(node.width)} (layer {_q(node.layer)}))")
+                   f"{_gtail(node.layer, node.width)})")
     elif isinstance(node, Circle):
         c = _shift(node.center, off)
         out.append(f"{ind}(fp_circle (center {_fmt(c[0])} {_fmt(c[1])}) "
                    f"(end {_fmt(c[0] + node.radius)} {_fmt(c[1])}) "
-                   f"{_stroke(node.width)} (fill none) (layer {_q(node.layer)}))")
+                   f"{_gtail(node.layer, node.width)} (fill none))")
     elif isinstance(node, Polygon):
         pts = " ".join(f"(xy {_fmt(p[0] + off[0])} {_fmt(p[1] + off[1])})"
                        for p in node.nodes)
         layer = node.layer or "F.Fab"
-        out.append(f"{ind}(fp_poly (pts {pts}) {_stroke(node.width)} "
-                   f"(fill solid) (layer {_q(layer)}))")
+        out.append(f"{ind}(fp_poly (pts {pts}) {_gtail(layer, node.width)} "
+                   f"(fill solid))")
     elif isinstance(node, Text):
         a = _shift(node.at, off)
         out.append(f"{ind}(fp_text {node.type} {_q(node.text)} "
@@ -304,8 +311,8 @@ class KicadFileHandler:
         fp = self.footprint
         lines = [
             f"(footprint {_q(fp.name)}",
-            '\t(version 20240108)',
-            '\t(generator "akcli")',
+            "\t(version 20211014)",
+            "\t(generator akcli)",
             '\t(layer "F.Cu")',
             f"\t(descr {_q(fp.description)})",
             f"\t(tags {_q(fp.tags)})",
