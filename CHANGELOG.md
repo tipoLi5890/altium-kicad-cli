@@ -60,6 +60,13 @@ Not yet tagged or published to PyPI; install from source (see `INSTALL.md`).
   finding says so and points at re-export.
 
 ### Fixed
+- **Duplicate pin numbers across units no longer collide:** multi-unit parts with shared pads
+  (e.g. dual DirectFETs — unit A pins 1,2,3 / unit B pins 1,4,5) legitimately repeat a pin
+  number, but the writer seeded every per-pin UUID with just `designator.pin<N>`, so the two
+  `(pin "1" ...)` nodes got the same UUID and the connectivity gate refused the write
+  (`DUPLICATE_UUID`). Later occurrences now carry a `#k` suffix in the seed; first occurrences
+  keep the historical seed, so existing schematics replay byte-identically. Found by the
+  library-wide sweep (`Transistor_FET:IRL6297SD` was the one failure in 478).
 - **Alternate (DeMorgan) body styles no longer duplicate every pin:** the KiCad library
   reader collected pins from every `Name_<unit>_<style>` sub-symbol, including the `_<unit>_2`
   DeMorgan re-drawing of the same physical unit — so a 74xx-style symbol resolved with each

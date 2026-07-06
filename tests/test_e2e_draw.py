@@ -140,3 +140,49 @@ def test_derived_symbol_pins_connect_in_kicad_erc(tmp_path):
     text = (net or {}).get("netlist") or ""
     assert '(ref "C77")' in text
     assert re.search(r'\(ref "C77"\)\s*\(pin "2"\)', text)
+
+
+# --------------------------------------------------------------------------- #
+# duplicated pin numbers across units (shared pads, e.g. dual DirectFETs)
+# --------------------------------------------------------------------------- #
+_SHARED_PAD_LIB = """
+(kicad_symbol_lib (version 20231120) (generator "test")
+  (symbol "DUALFET" (pin_numbers (hide yes)) (in_bom yes) (on_board yes)
+    (property "Reference" "Q" (at 0 0 0))
+    (symbol "DUALFET_1_1"
+      (pin passive line (at -5.08 2.54 0) (length 2.54)
+        (name "G1" (effects (font (size 1.27 1.27))))
+        (number "1" (effects (font (size 1.27 1.27)))))
+      (pin passive line (at -5.08 0 0) (length 2.54)
+        (name "S1" (effects (font (size 1.27 1.27))))
+        (number "2" (effects (font (size 1.27 1.27))))))
+    (symbol "DUALFET_2_1"
+      (pin passive line (at -5.08 2.54 0) (length 2.54)
+        (name "G2" (effects (font (size 1.27 1.27))))
+        (number "1" (effects (font (size 1.27 1.27)))))
+      (pin passive line (at -5.08 0 0) (length 2.54)
+        (name "S2" (effects (font (size 1.27 1.27))))
+        (number "3" (effects (font (size 1.27 1.27))))))))
+"""
+
+
+def test_duplicate_pin_numbers_across_units_apply(tmp_path):
+    """Pin "1" exists in BOTH units (shared pad). Per-pin uuids must not
+    collide, or the connectivity gate refuses the whole write (DUPLICATE_UUID)."""
+    lib = tmp_path / "dual.kicad_sym"
+    lib.write_text(_SHARED_PAD_LIB)
+    tgt = tmp_path / "board.kicad_sch"
+    tgt.write_text('(kicad_sch (version 20231120) (generator "akcli") '
+                   '(uuid "11111111-2222-3333-4444-555555555555") (paper "A4"))\n')
+    verify = []
+    results = kw.apply(
+        _oplist({"op": "place_component", "lib_id": "DUALFET",
+                 "designator": "Q1", "x_mil": 2000, "y_mil": 2000}),
+        str(tgt), apply=True, sources=[str(lib)], verify_out=verify,
+    )
+    assert results[0].status == "ok"
+    assert not verify                       # no DUPLICATE_UUID findings
+    text = tgt.read_text()
+    pins = re.findall(r'\(pin "(\d+)" \(uuid "([0-9a-f-]+)"\)\)', text)
+    assert [n for n, _ in pins] == ["1", "2", "1", "3"]
+    assert len({u for _, u in pins}) == 4   # all uuids unique
