@@ -73,6 +73,15 @@ Exit codes: `0` success · `2` bad usage (bad C-number, `--place` without
 `--designator`/`--at`) · `4` part has no EasyEDA CAD data · `6` conversion
 failed / produced nothing · `7` network error.
 
+#### Altium Designer users — the same library imports natively
+
+The produced libraries are written in the **KiCad 6 dialect**, which Altium
+Designer's built-in importer understands: in AD choose
+**File » Import Wizard » KiCad Design Files**, point it at the produced
+`symbol/<lib>.kicad_sym` and `footprint/*.kicad_mod`, and it converts them to a
+native `.SchLib` / `.PcbLib`. No third-party tool needed. Verify the imported
+part against the datasheet in AD just as you would in KiCad.
+
 **A converted library is a claim, not a fact** — the CAD data comes from
 EasyEDA/LCSC and can be wrong (pin mapping, land pattern, 3D origin). Verify
 against the datasheet before wiring the part in.
