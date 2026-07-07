@@ -40,6 +40,7 @@ _EXT_FORMAT = {
     ".kicad_sch": "kicad_sch",
     ".kicad_pcb": "kicad_pcb",
     ".kicad_sym": "kicad_sym",
+    ".prjpcb": "altium_prj",
 }
 
 
@@ -107,6 +108,9 @@ def _load_schematic(path: Path):
     if fmt == "altium_sch":
         from .readers import altium_sch  # lazy
         return altium_sch.read(str(path))
+    if fmt == "altium_prj":
+        from .readers import altium_prj  # lazy
+        return altium_prj.read(str(path))
     if fmt == "kicad_sch":
         from .readers import kicad  # lazy
         return kicad.read_sch(str(path))

@@ -31,8 +31,13 @@ read-only** access — no code path modifies a `.SchDoc`/`.SchLib`/`.PcbDoc`, ev
 Parses:
 - **`.SchDoc`** — components, pins (electrical-tip coordinates), designators,
   parameters, footprints, wires/junctions/net labels/power ports/ports/No-ERC markers
-  → full inferred netlist. Flat sheets only: hierarchical sheet symbols are not
-  extracted (`sheets` is always empty).
+  → full inferred netlist. Hierarchical designs are followed: sheet symbols
+  (RECORD 15/16) recurse into child `.SchDoc`s with per-instance namespaces and
+  sheet-entry↔child-port pairing (Altium *Automatic* scope: ports merge globally
+  only in designs without sheet symbols). `.PrjPcb` is accepted too — akcli reads
+  the project's top sheet and honors `PowerPortNamesTakePriority`. Sheet-entry
+  edge-position scale follows the documented convention; validating against a
+  real AD hierarchical design is still pending — flag it when it matters.
 - **`.SchLib`** — text-record symbol libraries (symbol names + pin counts).
 - **`.PcbDoc`** — ASCII sections only: `Nets6`, `Components6`, `Classes6`, `Rules6`
   → nets, footprints, classes, rules.
@@ -173,7 +178,7 @@ artwork. Migrate by re-drawing in KiCad and proving net equivalence:
 
 What will **not** carry over (plan around it, state it in the report):
 - Symbol artwork, sheet graphics, text/annotation placement — connectivity only.
-- Hierarchy: the Altium reader is flat and the KiCad writer is flat-only v1; the KiCad READER does follow `(sheet ...)` children (per-instance namespaces, sheet-pin<->hierarchical-label connectivity).
+- Hierarchy: the KiCad writer is flat-only v1; the KiCad READER does follow `(sheet ...)` children (per-instance namespaces, sheet-pin<->hierarchical-label connectivity).
 - Binary `.SchLib` symbol graphics and binary `.PcbDoc` copper (pads/tracks/vias).
 - Altium pin electrical types map only ints 0–7 (no `POWER_OUT`/`NO_CONNECT`), so
   ERC fidelity differs slightly between the two sides.

@@ -33,6 +33,16 @@ When in doubt, prefer additive, backwards-compatible changes and leave the versi
 ## [Unreleased]
 
 ### Added
+- **Hierarchical sheets (Altium reader):** a `.SchDoc` root recurses into sheet symbols
+  (RECORD 15 + name/file 32/33), each instance in its own geometric namespace, with
+  sheet-entry (RECORD 16: `Name`/`Side`/`DistanceFromTop`) ↔ child-PORT pairing per Altium's
+  *Automatic* net-identifier scope — ports merge globally only in designs WITHOUT sheet symbols,
+  so two children exposing the same port name stay separate; flat designs read exactly as
+  before. `.PrjPcb` is accepted as input: akcli finds the top sheet (the one no sheet symbol
+  references) and honors `PowerPortNamesTakePriority`. The previous RECORD-16 handling was dead
+  code (it read `Text`/`Location` — real entries carry `Name`/`Side`/`DistanceFromTop`).
+  Runtime-generated hierarchical fixtures; sheet-entry position scale follows the documented
+  convention, real-AD validation flagged as pending.
 - **Op-list authoring kit:** `docs/op-list-authoring.md` (envelope, coordinate contract, all
   16 ops with notes, pipeline, idempotency rules) plus `akcli ops list` (vocabulary + required
   fields + executor support) and `akcli ops template <op>` (fill-in JSON skeleton); the in-code

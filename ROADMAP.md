@@ -25,10 +25,9 @@ Shipped and working today:
 
 Honest limitations:
 
-- **Flat sheets on the Altium side and in the writer**: the Altium reader returns `sheets=[]` for
-  hierarchical projects and the writer rejects any non-root `instances_path`
-  (`HIERARCHICAL_UNSUPPORTED`). *(v0.2.0: the KiCad READER now recurses `(sheet ...)` children with
-  per-instance namespaces and sheet-pin↔hierarchical-label connectivity.)*
+- **The writer is flat-only**: it rejects any non-root `instances_path`
+  (`HIERARCHICAL_UNSUPPORTED`). *(Both READERS now follow hierarchy: KiCad `(sheet ...)` since
+  v0.2.0; Altium sheet symbols + `.PrjPcb` since post-v0.3.1.)*
 - **Binary Altium payloads are not parsed:** binary `.SchLib` symbol records are refused loudly
   (exit 5), but binary `.PcbDoc` sections (`Pads6`, `Tracks6`, `Vias6`, …) are silently *skipped*
   by `read` — the board opens with copper geometry omitted.
@@ -93,8 +92,9 @@ ERC-lite into a tunable, CI-consumable rule engine.
 - [x] Hierarchical KiCad **read**: recurse `(sheet)` nodes into a full multi-sheet netlist with
       correct hierarchical-label scoping (M) — *shipped in v0.2.0 (per-instance namespaces,
       twice-instantiated sheets, cycle/depth guards)*
-- [ ] Altium multi-sheet: RECORD 15 `SheetSymbol` handler plus a `.PrjPcb` project reader (sheet
-      list, `PowerPortNamesTakePriority` and friends) (L)
+- [x] Altium multi-sheet: RECORD 15 `SheetSymbol` handler plus a `.PrjPcb` project reader (sheet
+      list, `PowerPortNamesTakePriority` and friends) (L) — *shipped post-v0.3.1; real-AD scale
+      validation of sheet-entry positions still pending*
 - [ ] Binary `.SchLib` symbol decoder (framed records with non-zero flag byte: pins + basic
       graphics) so real vendor libraries read instead of exiting 5 (L)
 - [ ] Full ERC pin-type conflict matrix (KiCad-style N×N, unconnected `POWER_IN`, open-collector

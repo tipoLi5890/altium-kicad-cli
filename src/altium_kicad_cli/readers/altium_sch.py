@@ -52,6 +52,7 @@ from .altium_records import (
     RECORD_PORT,
     RECORD_POWER_PORT,
     RECORD_SHEET_ENTRY,
+    RECORD_SHEET_SYMBOL,
     RECORD_WIRE,
     coord,
     gi,
@@ -63,12 +64,13 @@ from .altium_records import (
 # 0 = right (+X), 1 = up (+Y), 2 = left (-X), 3 = down (-Y).
 _DIRS = {0: (1, 0), 1: (0, 1), 2: (-1, 0), 3: (0, -1)}
 
-# Scope of an explicit net name by the record that carried it.
+# Scope of an explicit net name by the record that carried it. RECORD 16
+# (sheet entry) is NOT here: real entries carry Name/Side/DistanceFromTop, not
+# Text/Location, and are handled structurally by the hierarchy walker.
 _LABEL_SCOPE = {
     RECORD_NET_LABEL: "local",
     RECORD_POWER_PORT: "power",
     RECORD_PORT: "port",
-    RECORD_SHEET_ENTRY: "sheet_entry",
 }
 
 _TRUE = {"T", "TRUE", "1"}
@@ -240,12 +242,26 @@ def _build_components(
 # ---------------------------------------------------------------------------
 # Net primitives
 # ---------------------------------------------------------------------------
+def _hier_key(sheet_ns: str, name: str) -> str:
+    """Synthetic sheet-entry<->child-port connector text (never names a net)."""
+    return f"\x02hier:{sheet_ns}:{name}"
+
+
 def _build_primitives(
-    recs: list[dict], by_index: dict[int, Component]
+    recs: list[dict], by_index: dict[int, Component],
+    prims: NetPrimitives | None = None, sheet: str = "",
+    hier_mode: bool = False,
 ) -> NetPrimitives:
-    """Emit wires/junctions/labels/power-ports/pins/No-ERC for net inference."""
-    prims = NetPrimitives()
-    sheet = ""
+    """Emit wires/junctions/labels/power-ports/pins/No-ERC for net inference.
+
+    ``sheet`` is the geometric namespace (the sheet-instance path; ``""`` root).
+    ``hier_mode`` implements Altium's *Automatic* net-identifier scope: when the
+    design contains sheet symbols, PORTs stop merging globally by name and
+    instead pair with their own parent's matching sheet entry (the walker adds
+    the entry-side connectors); flat designs keep the historical global-port
+    behavior, so existing reads are unchanged.
+    """
+    prims = prims if prims is not None else NetPrimitives()
 
     for idx, r in enumerate(recs):
         rid = _rid(r)
@@ -261,14 +277,18 @@ def _build_primitives(
         elif rid in _LABEL_SCOPE:
             text = r.get("Text")
             if text:
-                prims.labels.append(
-                    NetLabel(
-                        at=_canon(coord(r, "Location.X"), coord(r, "Location.Y")),
-                        text=text,
-                        scope=_LABEL_SCOPE[rid],
-                        sheet=sheet,
-                    )
-                )
+                scope = _LABEL_SCOPE[rid]
+                at = _canon(coord(r, "Location.X"), coord(r, "Location.Y"))
+                if rid == RECORD_PORT and hier_mode:
+                    # hierarchical scope: the port names its net locally and
+                    # pairs ONLY with this sheet's own entry on the parent.
+                    prims.labels.append(NetLabel(at=at, text=text,
+                                                 scope="local", sheet=sheet))
+                    prims.labels.append(NetLabel(at=at, text=_hier_key(sheet, text),
+                                                 scope="hier", sheet=sheet))
+                else:
+                    prims.labels.append(NetLabel(at=at, text=text,
+                                                 scope=scope, sheet=sheet))
         elif rid == RECORD_NO_ERC:
             prims.no_erc.append(_canon(coord(r, "Location.X"), coord(r, "Location.Y")))
 
@@ -309,16 +329,160 @@ def _metadata(components: list[Component], nets, frac_present: bool) -> dict:
     }
 
 
-def read(path: os.PathLike | str | bytes | bytearray) -> Schematic:
-    """Read a ``.SchDoc`` into a normalized :class:`model.Schematic`."""
+# Depth cap for sheet-symbol recursion (a real design is 2-4 deep).
+_MAX_SHEET_DEPTH = 16
+
+# RECORD-16 Side -> which sheet-symbol edge carries the entry.
+_SIDE_LEFT, _SIDE_RIGHT, _SIDE_TOP, _SIDE_BOTTOM = 0, 1, 2, 3
+
+
+def _sheet_children(recs: list[dict]) -> list[dict]:
+    """Sheet symbols (RECORD 15) with their name/file (32/33) and entries (16).
+
+    Entry positions follow the Altium convention: the symbol's Location is its
+    TOP-LEFT corner in the +Y-up record frame (the body extends right and
+    down), and ``DistanceFromTop`` counts from the side's origin in 1/10
+    Location units. Scale validated against generated fixtures; flagged for
+    confirmation against a real AD hierarchical design.
+    """
+    from ..units import altium_to_mil
+
+    out = []
+    for idx, r in enumerate(recs):
+        if _rid(r) != RECORD_SHEET_SYMBOL:
+            continue
+        x0 = coord(r, "Location.X")
+        y0 = coord(r, "Location.Y")
+        w = coord(r, "XSize")
+        h = coord(r, "YSize")
+        child = {"index": idx, "name": None, "file": None, "entries": []}
+        for r2 in recs:
+            if gi(r2, "OwnerIndex") != idx:
+                continue
+            rid2 = _rid(r2)
+            if rid2 == 32:
+                child["name"] = r2.get("Text")
+            elif rid2 == 33:
+                child["file"] = r2.get("Text")
+            elif rid2 == RECORD_SHEET_ENTRY:
+                name = r2.get("Name") or r2.get("Text")
+                if not name:
+                    continue
+                d = altium_to_mil(gi(r2, "DistanceFromTop", 0) * 10, 0)
+                side = gi(r2, "Side", _SIDE_LEFT)
+                if side == _SIDE_RIGHT:
+                    pt = (x0 + w, y0 - d)
+                elif side == _SIDE_TOP:
+                    pt = (x0 + d, y0)
+                elif side == _SIDE_BOTTOM:
+                    pt = (x0 + d, y0 - h)
+                else:
+                    pt = (x0, y0 - d)
+                child["entries"].append((name, _canon(*pt)))
+        out.append(child)
+    return out
+
+
+def _read_hier(
+    path: os.PathLike | str,
+    *,
+    power_priority: bool = False,
+) -> Schematic:
+    """Read a ``.SchDoc``, recursing into sheet symbols' child documents."""
+    from pathlib import Path as _P
+
+    root_path = _P(os.fspath(path))
+    loaded: list[tuple[str, _P, list[dict], list[dict]]] = []  # ns, path, recs, children
+
+    def _walk(p: _P, ns: str, ancestors: tuple[str, ...]) -> None:
+        recs = _read_fileheader(p)
+        children = _sheet_children(recs)
+        loaded.append((ns, p, recs, children))
+        for child in children:
+            fname = child["file"]
+            if not fname:
+                continue
+            child_path = (p.parent / fname.replace("\\", "/")).resolve()
+            child_ns = f"{ns}/s{child['index']}"
+            child["ns"] = child_ns
+            if len(ancestors) >= _MAX_SHEET_DEPTH:
+                fail("ALTIUM_MALFORMED",
+                     f"sheet nesting deeper than {_MAX_SHEET_DEPTH} at {fname!r}")
+            if str(child_path) in ancestors:
+                fail("ALTIUM_MALFORMED",
+                     f"sheet recursion: {child_path} includes itself via {p}")
+            if not child_path.exists():
+                raise FileNotFoundError(
+                    f"{child_path} (sheet {child['name'] or fname!r} referenced from {p})")
+            _walk(child_path, child_ns, ancestors + (str(child_path),))
+
+    _walk(root_path, "", (str(root_path.resolve()),))
+
+    hier_mode = any(c["entries"] or c["file"] for _, _, _, cs in loaded for c in cs)
+
+    components: list[Component] = []
+    prims = NetPrimitives()
+    prims.power_priority = power_priority
+    sheet_names: list[str] = []
+    frac_present = False
+    for ns, _p, recs, children in loaded:
+        comps, by_index = _build_components(recs)
+        for c in comps:
+            c.sheet = ns
+        components.extend(comps)
+        _build_primitives(recs, by_index, prims, sheet=ns, hier_mode=hier_mode)
+        frac_present = frac_present or any(k.endswith("_Frac") for r in recs for k in r)
+        for child in children:
+            if child.get("name"):
+                sheet_names.append(child["name"])
+            child_ns = child.get("ns")
+            for name, pt in child["entries"]:
+                # An entry is a CONNECTOR, not a net label: emit only the
+                # never-naming hier pair to the child's same-named PORT. (A
+                # raw-name local label here would wrongly merge same-named
+                # entries of two different children on the parent sheet.)
+                if child_ns:
+                    prims.labels.append(NetLabel(at=pt,
+                                                 text=_hier_key(child_ns, name),
+                                                 scope="hier", sheet=ns))
+
+    nets = netbuild.build_nets(prims)
+    return Schematic(
+        source_path=str(path),
+        source_format="altium",
+        components=components,
+        nets=nets,
+        sheets=sheet_names,
+        no_erc_points=list(prims.no_erc),
+        warnings=[],
+        metadata=_metadata(components, nets, frac_present),
+    )
+
+
+def read(
+    path: os.PathLike | str | bytes | bytearray,
+    *,
+    power_priority: bool = False,
+) -> Schematic:
+    """Read a ``.SchDoc`` into a normalized :class:`model.Schematic`.
+
+    A path input recurses into sheet symbols (RECORD 15/16/32/33): child
+    documents load relative to the parent file, each sheet instance is its own
+    geometric namespace, and connectivity crosses sheets through sheet-entry↔
+    child-port pairs (Altium's *Automatic* scope: PORTs merge globally only in
+    designs WITHOUT sheet symbols), global labels excluded, power ports always
+    global. Bytes input stays single-sheet (no filesystem to recurse into).
+    """
+    if isinstance(path, (str, os.PathLike)):
+        return _read_hier(path, power_priority=power_priority)
     recs = _read_fileheader(path)
     components, by_index = _build_components(recs)
     prims = _build_primitives(recs, by_index)
+    prims.power_priority = power_priority
     nets = netbuild.build_nets(prims)
     frac_present = any(k.endswith("_Frac") for r in recs for k in r)
-    src = path if isinstance(path, (str, os.PathLike)) else "<bytes>"
     return Schematic(
-        source_path=str(src),
+        source_path="<bytes>",
         source_format="altium",
         components=components,
         nets=nets,

@@ -114,6 +114,30 @@ class SchDocBuilder:
     def no_erc(self, x: int, y: int) -> int:
         return self.add(22, **{"Location.X": x, "Location.Y": y})
 
+    # -- hierarchy records --------------------------------------------------
+    def sheet_symbol(self, x: int, y: int, w: int, h: int) -> int:
+        """RECORD 15: Location = TOP-LEFT corner (+Y-up frame); extends right/down."""
+        return self.add(15, **{"Location.X": x, "Location.Y": y,
+                               "XSize": w, "YSize": h})
+
+    def sheet_name(self, owner: int, text: str) -> int:
+        return self.add(32, owner=owner, Text=text)
+
+    def sheet_file(self, owner: int, filename: str) -> int:
+        return self.add(33, owner=owner, Text=filename)
+
+    def sheet_entry(self, owner: int, name: str, side: int = 0,
+                    distance: int = 0, iotype: int = 0) -> int:
+        """RECORD 16: Side 0=left 1=right 2=top 3=bottom; DistanceFromTop in
+        1/10 Location units from the side's origin (Altium convention)."""
+        return self.add(16, owner=owner, **{"Name": name, "Side": side,
+                                            "DistanceFromTop": distance,
+                                            "IOType": iotype})
+
+    def port(self, x: int, y: int, text: str, iotype: int = 3) -> int:
+        return self.add(18, **{"Location.X": x, "Location.Y": y,
+                               "Text": text, "IOType": iotype})
+
 
 # ---------------------------------------------------------------------------
 # Serialization

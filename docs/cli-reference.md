@@ -31,10 +31,13 @@ diagnostics. This keeps `akcli ... --json | jq` clean.
 
 ### `akcli read <file> [--md]`
 Parse an Altium or KiCad schematic/PCB/library into the normalized model and print it.
-- Input: `.SchDoc`, `.SchLib`, `.PcbDoc`, `.kicad_sch`, `.kicad_sym`, `.kicad_pcb`.
+- Input: `.SchDoc`, `.SchLib`, `.PcbDoc`, `.PrjPcb`, `.kicad_sch`, `.kicad_sym`, `.kicad_pcb`.
 - A KiCad root sheet **recurses into its `(sheet ...)` children** (paths relative to the parent
   file, cycle- and depth-guarded); every sheet instance contributes its components under the
   designator from the matching `(instances (path ...))` entry.
+- An Altium root **recurses into sheet symbols** the same way (RECORD 15/16/32/33; ports pair
+  with their own sheet entry — Altium *Automatic* scope). A `.PrjPcb` reads the project's top
+  sheet and honors `PowerPortNamesTakePriority`.
 - `--json` prints the full `Schematic`/`Pcb`/`Library` export with `schema_version`; `--md` prints
   a human Markdown summary.
 
