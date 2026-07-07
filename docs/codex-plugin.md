@@ -1,7 +1,7 @@
 # Codex plugin (`.codex-plugin/`)
 
 This repo ships as an **OpenAI Codex plugin** in addition to a Claude Code plugin. A Codex
-plugin bundles the six `akcli` skills (and the Python-version session hook) so Codex can
+plugin bundles the eight `akcli` skills (and the Python-version session hook) so Codex can
 discover, install, and load them as one unit — no manual copying of skill folders.
 
 Spec reference: <https://developers.openai.com/codex/plugins/build>
@@ -26,14 +26,15 @@ altium-kicad-cli/                 # ← plugin root
 │   └── plugin.json               # Codex manifest (this is what makes it a Codex plugin)
 ├── .agents/plugins/
 │   └── marketplace.json          # repo-scoped catalog for `codex plugin marketplace add`
-├── skills/                       # 7 skills, shared with Claude & OpenCode
+├── skills/                       # 8 skills, shared with Claude & OpenCode
 │   ├── circuit-design/SKILL.md   #   core read/analyze/draw mechanics (start here)
 │   ├── schematic-authoring/SKILL.md
 │   ├── schematic-review/SKILL.md
 │   ├── circuit-debug/SKILL.md
 │   ├── altium-interop/SKILL.md
 │   ├── parts-sourcing/SKILL.md
-│   └── jlcpcb-capabilities/SKILL.md
+│   ├── jlcpcb-capabilities/SKILL.md
+│   └── design-calc/SKILL.md      #   standards-cited engineering calculators (akcli calc)
 ├── hooks/
 │   └── hooks.json                # SessionStart Python≥3.11 advisory (portable one-liner)
 ├── .claude-plugin/               # Claude Code manifest + marketplace (unchanged)
