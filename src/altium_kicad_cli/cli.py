@@ -575,6 +575,51 @@ def _jlc_detail(p) -> str:
     return "\n".join(lines)
 
 
+def _cmd_ops(args: argparse.Namespace) -> int:
+    """`ops list` / `ops template <op>` — the op-list authoring kit."""
+    from . import ops as opsmod
+
+    action = getattr(args, "action", None)
+    if action == "list":
+        import json as _json
+        caps = {}
+        try:
+            caps_path = Path(__file__).resolve().parents[2] / "schemas" / "ops.capabilities.json"
+            caps = {k: v for k, v in _json.loads(caps_path.read_text())["ops"].items()}
+        except Exception:
+            caps = {}
+        lines = []
+        for name in sorted(opsmod.OP_NAMES):
+            required = ", ".join(opsmod._OP_REQUIRED.get(name, []))
+            support = ""
+            entry = caps.get(name)
+            if entry:
+                support = "  [kicad:" + ("yes" if entry.get("kicad") else "no")                           + " altium-live:" + ("yes" if entry.get("altium") else "no") + "]"
+            lines.append(f"{name:26} required: {required or '-'}{support}")
+        _emit("\n".join(lines))
+        return EXIT["OK"]
+    if action == "template":
+        name = getattr(args, "opname", None)
+        if not name:
+            raise _ExitWith(EXIT["USAGE"], "ERROR: ops template needs an op name")
+        try:
+            op = opsmod.op_template(name, include_optional=not getattr(args, "required_only", False))
+        except KeyError:
+            raise _ExitWith(
+                EXIT["USAGE"],
+                f"ERROR: unknown op {name!r} (see `akcli ops list`)",
+            )
+        doc = {
+            "protocol_version": opsmod.PROTOCOL_VERSION,
+            "target_format": "kicad",
+            "target_file": "<board.kicad_sch>",
+            "ops": [op],
+        }
+        _emit(_dumps(doc))
+        return EXIT["OK"]
+    raise _ExitWith(EXIT["USAGE"], "ERROR: use `akcli ops list` or `akcli ops template <op>`")
+
+
 def _cmd_expected(args: argparse.Namespace) -> int:
     """Extract an expected pin->signal table from a .dts/.overlay or pinout .md.
 
@@ -1060,6 +1105,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--value-header", metavar="NAME",
                    help="markdown: explicit signal/net column header")
     p.set_defaults(handler=_cmd_expected)
+
+    p = sub.add_parser("ops", parents=[common],
+                       help="op-list authoring kit (list ops, emit op templates)")
+    ops_sub = p.add_subparsers(dest="action", metavar="<action>")
+    pol = ops_sub.add_parser("list", parents=[common],
+                             help="list the op vocabulary with required fields")
+    pol.set_defaults(handler=_cmd_ops, action="list")
+    pot = ops_sub.add_parser("template", parents=[common],
+                             help="emit a fill-in JSON op-list skeleton for one op")
+    pot.add_argument("opname", nargs="?", help="op name, e.g. place_component")
+    pot.add_argument("--required-only", action="store_true",
+                     help="omit optional fields from the skeleton")
+    pot.set_defaults(handler=_cmd_ops, action="template")
+    p.set_defaults(handler=_cmd_ops)
 
     p = sub.add_parser("export", parents=[common], help="emit a netlist")
     p.add_argument("path", nargs="?", help="input schematic")

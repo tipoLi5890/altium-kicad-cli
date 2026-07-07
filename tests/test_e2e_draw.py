@@ -401,3 +401,44 @@ def test_move_missing_component_fails_loudly(tmp_path):
     )
     assert rs[0].status == "error"
     assert rs[0].error_code == "VERIFY_FAILED"
+
+
+# --------------------------------------------------------------------------- #
+# autoplace collision avoidance
+# --------------------------------------------------------------------------- #
+def test_adjacent_labels_do_not_stack(tmp_path):
+    """A power port's value next to a cap's ref must not share an anchor spot.
+
+    Regression for the LDO render where '+3V3' sat on top of 'C2': visible
+    Reference/Value anchors of neighboring parts must keep at least one label
+    extent apart (deterministic bump, so replays stay byte-identical)."""
+    tgt = tmp_path / "board.kicad_sch"
+    tgt.write_text('(kicad_sch (version 20231120) (generator "akcli") '
+                   '(uuid "11111111-2222-3333-4444-555555555555") (paper "A4"))\n')
+    ops = _oplist(
+        {"op": "place_component", "lib_id": "Device:C", "designator": "C1",
+         "x_mil": 2000, "y_mil": 1000, "value": "10u"},
+        {"op": "place_component", "lib_id": "Device:C", "designator": "C2",
+         "x_mil": 2100, "y_mil": 1000, "value": "10u"},   # crowds C1's labels
+    )
+    kw.apply(ops, str(tgt), apply=True, sources=[str(DEVICE)])
+    text = tgt.read_text()
+    import re as _re
+    anchors = []
+    for m in _re.finditer(
+            r'\(property "(Reference|Value)" "[^"]*"\s*\(at ([\d.-]+) ([\d.-]+)',
+            text):
+        anchors.append((m.group(1), float(m.group(2)), float(m.group(3))))
+    vis = [(x, y) for (_k, x, y) in anchors]
+    for i in range(len(vis)):
+        for j in range(i + 1, len(vis)):
+            dx = abs(vis[i][0] - vis[j][0])
+            dy = abs(vis[i][1] - vis[j][1])
+            assert dx >= 2.54 - 1e-6 or dy >= 1.27 - 1e-6, (
+                f"anchors {vis[i]} and {vis[j]} stack (dx={dx:.2f}, dy={dy:.2f})"
+            )
+
+    # and the bump is deterministic: replay stays byte-identical
+    first = tgt.read_bytes()
+    kw.apply(ops, str(tgt), apply=True, sources=[str(DEVICE)])
+    assert tgt.read_bytes() == first

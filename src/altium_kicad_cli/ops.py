@@ -41,7 +41,60 @@ _CORE_OPS: frozenset[str] = frozenset(
     }
 )
 _SUGAR_OPS: frozenset[str] = frozenset({"place_gnd", "place_vcc"})
-OP_NAMES: frozenset[str] = _CORE_OPS | _SUGAR_OPS  # 13 ops total
+OP_NAMES: frozenset[str] = _CORE_OPS | _SUGAR_OPS  # 16 ops total
+
+# Optional per-op fields with template placeholders (kept in sync with
+# schemas/ops.schema.json by test_ops_kit.test_tables_match_schema).
+_OP_OPTIONAL: dict[str, dict] = {
+    "place_component": {"rotation": 0, "mirror": "none", "unit": 1,
+                        "value": "<value>", "footprint": "<Lib:Footprint>",
+                        "symbol_source": "<extra.kicad_sym>"},
+    "set_component_transform": {"rotation": 0, "mirror": "none"},
+    "set_component_parameters": {"reference": "<REF>", "value": "<value>",
+                                 "footprint": "<Lib:Footprint>",
+                                 "parameters": {"<KEY>": "<VALUE>"}},
+    "add_wire": {},
+    "add_bus": {},
+    "add_junction": {},
+    "add_no_connect": {},
+    "add_net_label": {"scope": "local", "orientation": 0},
+    "place_power_port": {"rotation": 0},
+    "place_gnd": {"lib_id": "power:GND", "net_name": "GND", "rotation": 0},
+    "place_vcc": {"lib_id": "power:VCC", "net_name": "VCC", "rotation": 0},
+    "add_bus_entry": {"size": [100, 100]},
+    "add_text": {"angle": 0},
+    "delete_component": {},
+    "delete_object": {},
+    "move_component": {"unit": 1},
+}
+
+# Required-field template placeholders by field name.
+_FIELD_PLACEHOLDER: dict[str, object] = {
+    "lib_id": "<Lib:Symbol>",
+    "designator": "<REF>",
+    "x_mil": 0,
+    "y_mil": 0,
+    "vertices": ["<REF.PIN>", [0, 0]],
+    "at": [0, 0],
+    "pin": "<REF.PIN>",
+    "name": "<NET_NAME>",
+    "net_name": "<NET_NAME>",
+    "text": "<free text>",
+    "uuid": "<object-uuid>",
+}
+
+
+def op_template(name: str, *, include_optional: bool = True) -> dict:
+    """A fill-in-the-blanks skeleton for one op (see ``akcli ops template``)."""
+    if name not in OP_NAMES:
+        raise KeyError(name)
+    op: dict = {"op": name}
+    for field in _OP_REQUIRED.get(name, []):
+        op[field] = _FIELD_PLACEHOLDER.get(field, f"<{field}>")
+    if include_optional:
+        for field, placeholder in _OP_OPTIONAL.get(name, {}).items():
+            op.setdefault(field, placeholder)
+    return op
 
 _VALID_ROTATIONS: frozenset[int] = frozenset({0, 90, 180, 270})
 _VALID_MIRRORS: frozenset[str] = frozenset({"none", "x", "y"})

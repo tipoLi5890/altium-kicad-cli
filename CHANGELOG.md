@@ -33,6 +33,14 @@ When in doubt, prefer additive, backwards-compatible changes and leave the versi
 ## [Unreleased]
 
 ### Added
+- **Op-list authoring kit:** `docs/op-list-authoring.md` (envelope, coordinate contract, all
+  16 ops with notes, pipeline, idempotency rules) plus `akcli ops list` (vocabulary + required
+  fields + executor support) and `akcli ops template <op>` (fill-in JSON skeleton); the in-code
+  tables are drift-guarded against `schemas/ops.schema.json` by tests.
+- **Autoplace collision avoidance:** visible Reference/Value anchors register in a per-apply
+  registry; a new label landing within one label extent of an existing one bumps outward
+  deterministically (replays stay byte-identical). Fixes neighboring parts' texts stacking
+  (the `+3V3`-on-`C2` case).
 - **`check --format sarif|junit`:** SARIF 2.1.0 output for GitHub code scanning (stable
   `partialFingerprints`, schematic path as artifact URI, rule table) and JUnit XML for CI test
   reporters (WARNING+ findings as failed testcases; NOTE/INFO as passed cases with

@@ -100,6 +100,11 @@ multi-unit placement via `place_component`'s optional `"unit"` field.
   pipeline, writing a `<target>.bak` copy alongside the file. The write is rejected (exit `6`)
   if any op errors or the connectivity verifier finds an ERROR.
 
+### `akcli ops <list|template OP> [--required-only]`
+Op-list authoring kit: `list` prints the 16-op vocabulary with required fields
+and per-executor support; `template` emits a fill-in JSON op-list skeleton for
+one op (guide: [docs/op-list-authoring.md](op-list-authoring.md)).
+
 ### `akcli jlc <search|show|add> ...`
 JLCPCB/LCSC part search and library conversion — the only **networked** subcommand family. See
 [docs/jlc.md](jlc.md) for the full reference.

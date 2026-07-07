@@ -64,7 +64,7 @@ deterministic op UUID, so regenerating it breaks idempotent re-runs.
 ## (4) Op-list authoring patterns
 
 Document shape and the op vocabulary (16 ops) are defined in `schemas/ops.schema.json`
-(11 core ops + `place_gnd`/`place_vcc` sugar); per-executor support is in
+(see also `docs/op-list-authoring.md` and `akcli ops list`/`ops template <op>`); per-executor support is in
 `schemas/ops.capabilities.json`. Envelope: `{"protocol_version": 1,
 "target_format": "kicad", "ops": [...]}`. Rules the validator and executor enforce:
 

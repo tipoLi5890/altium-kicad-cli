@@ -272,7 +272,7 @@ def _ctx_new() -> dict:
     ``lib_id`` once, from just its own cached body, is O(1) per op. Safe because
     a cache entry never changes within a run (``ensure_cached`` dedups by id).
     """
-    return {"symdefs": {}}
+    return {"symdefs": {}, "text_anchors": []}
 
 
 def _symdef_from_body(body: SNode, lib_id: str) -> model.SymbolDef:
@@ -433,7 +433,36 @@ _HIDDEN_PROPERTIES = frozenset({"Footprint", "Datasheet", "Description"})
 _PROP_MARGIN_NM = units.mm_to_nm(1.27)
 
 
-def _autoplace_ref_value(sym: SNode, symdef, unit: int, ctxpos: tuple[int, int]) -> None:
+# Two text anchors collide when closer than roughly one label's extent.
+_TEXT_CLEAR_X_NM = units.mm_to_nm(2.54)
+_TEXT_CLEAR_Y_NM = units.mm_to_nm(1.27)
+
+
+def _free_anchor(ctx: dict, pos: tuple[int, int],
+                 step: tuple[int, int]) -> tuple[int, int]:
+    """First anchor at/beyond ``pos`` (stepping by ``step``) clear of others.
+
+    Registered VISIBLE text anchors within ~one label extent count as
+    collisions; the bump direction follows the side the text was placed on, so
+    the result stays deterministic and replay-stable.
+    """
+    anchors = ctx.setdefault("text_anchors", [])
+    x, y = pos
+    for _ in range(8):
+        hit = any(
+            abs(x - ax) < _TEXT_CLEAR_X_NM and abs(y - ay) < _TEXT_CLEAR_Y_NM
+            for ax, ay in anchors
+        )
+        if not hit:
+            break
+        x += step[0]
+        y += step[1]
+    anchors.append((x, y))
+    return (x, y)
+
+
+def _autoplace_ref_value(sym: SNode, symdef, unit: int, ctxpos: tuple[int, int],
+                         ctx: dict | None = None) -> None:
     """Position Reference/Value clear of the body (KiCad-autoplace style).
 
     The writer used to leave every property at the component origin (and the
@@ -441,8 +470,10 @@ def _autoplace_ref_value(sym: SNode, symdef, unit: int, ctxpos: tuple[int, int])
     body. Heuristic: from the placed unit's pin bounding box, put the text to
     the RIGHT of a tall (vertical-pin) part, or ABOVE/BELOW a wide one; power
     symbols show only their value below the anchor and hide the #PWR reference,
-    exactly like eeschema. Deterministic, so replays stay byte-identical.
+    exactly like eeschema. Neighboring parts' labels are avoided via the
+    per-apply anchor registry (deterministic bump, replay-stable).
     """
+    ctx = ctx if ctx is not None else {}
     lib_id_node = sym.find("lib_id")
     lib_id = (lib_id_node.children[1].value or "") if lib_id_node is not None else ""
     comp = _instance_component(sym, lib_id)
@@ -460,16 +491,26 @@ def _autoplace_ref_value(sym: SNode, symdef, unit: int, ctxpos: tuple[int, int])
     if is_power:
         # eeschema: hidden #PWR reference; value just below the anchor.
         _place_prop(sym, "Reference", (ctxpos[0], max_y + _PROP_MARGIN_NM), hide=True)
-        _place_prop(sym, "Value", (ctxpos[0], max_y + 2 * _PROP_MARGIN_NM))
+        vpos = _free_anchor(ctx, (ctxpos[0], max_y + 2 * _PROP_MARGIN_NM),
+                            (0, _PROP_MARGIN_NM))
+        _place_prop(sym, "Value", vpos)
         return
     tall = (max_y - min_y) >= (max_x - min_x)
     if tall:   # vertical pins (R/C/L...): text to the right, left-justified
         x = max_x + _PROP_MARGIN_NM
-        _place_prop(sym, "Reference", (x, ctxpos[1] - _PROP_MARGIN_NM), justify="left")
-        _place_prop(sym, "Value", (x, ctxpos[1] + _PROP_MARGIN_NM), justify="left")
+        rpos = _free_anchor(ctx, (x, ctxpos[1] - _PROP_MARGIN_NM),
+                            (_TEXT_CLEAR_X_NM, 0))
+        vpos = _free_anchor(ctx, (rpos[0], ctxpos[1] + _PROP_MARGIN_NM),
+                            (_TEXT_CLEAR_X_NM, 0))
+        _place_prop(sym, "Reference", rpos, justify="left")
+        _place_prop(sym, "Value", vpos, justify="left")
     else:      # horizontal pins (ICs, connectors): text above/below the body
-        _place_prop(sym, "Reference", (ctxpos[0], min_y - _PROP_MARGIN_NM))
-        _place_prop(sym, "Value", (ctxpos[0], max_y + _PROP_MARGIN_NM))
+        rpos = _free_anchor(ctx, (ctxpos[0], min_y - _PROP_MARGIN_NM),
+                            (0, -_PROP_MARGIN_NM))
+        vpos = _free_anchor(ctx, (ctxpos[0], max_y + _PROP_MARGIN_NM),
+                            (0, _PROP_MARGIN_NM))
+        _place_prop(sym, "Reference", rpos)
+        _place_prop(sym, "Value", vpos)
 
 
 def _place_prop(
@@ -588,7 +629,7 @@ def _op_place_component(doc, op, idx, src_libs, path, ctx) -> list[str]:
     if op.get("footprint") is not None and sym is not None:
         _set_property(sym, "Footprint", str(op["footprint"]))
     if sym is not None:
-        _autoplace_ref_value(sym, _ctx_symdef(doc, ctx, op["lib_id"]), unit, pos)
+        _autoplace_ref_value(sym, _ctx_symdef(doc, ctx, op["lib_id"]), unit, pos, ctx)
     return [uid]
 
 
@@ -743,7 +784,7 @@ def _op_place_power_port(doc, op, idx, src_libs, path, ctx) -> list[str]:
     sym = _symbol_by_uuid(doc, uid)
     if sym is not None:
         _set_property(sym, "Value", str(net_name))
-        _autoplace_ref_value(sym, _ctx_symdef(doc, ctx, lib_id), 1, pos)
+        _autoplace_ref_value(sym, _ctx_symdef(doc, ctx, lib_id), 1, pos, ctx)
     return [uid]
 
 
