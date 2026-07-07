@@ -31,6 +31,8 @@ giving you a scriptable, install-free workflow that an automation pipeline or an
   go through an atomic snapshot → temp → verify → replace pipeline with a pure-Python connectivity gate.
 - **AI-agent native.** Ships as a Claude Code plugin with skills/commands, emits structured JSON with
   `schema_version`, and accepts a versioned op-list for deterministic, idempotent edits.
+- **Standards-cited calculators.** `akcli calc` answers 31 design questions (E-series, IPC-2221,
+  via parasitics, I²C pull-ups, buck/boost, ...) and prints the formal reference with every result.
 
 ## Read Altium files
 
@@ -104,6 +106,26 @@ akcli jlc search "0.1uF 0402 X7R"     # keyword / MPN / category search (needs n
 akcli jlc show   C7593                 # one part by LCSC C-number (--easyeda adds 3D/MPN metadata)
 akcli jlc add    C2040 --3d            # LCSC part -> KiCad symbol + footprint + STEP
 ```
+
+## Engineering calculators
+
+`akcli calc` bundles **31 offline calculators** — E-series snapping and resistor combinations
+(IEC 60063), voltage dividers, LM317/FB regulator worst-case, IPC-2221 track width and clearance,
+via parasitics, fusing current, AWG, microstrip/stripline impedance, RF attenuators, buck/boost
+stages, NE555, op-amp pairs, I²C pull-ups, crystal load caps, thermal, battery, resistor markings,
+and galvanic compatibility. **Every result prints its formal reference** (the standard, datasheet,
+or textbook the formula comes from), and numerics are cross-checked in the test suite against
+KiCad's pcb_calculator readings and published handbook values.
+
+```bash
+akcli calc list                                  # all calculators, grouped, with references
+akcli calc rcombo target=1k series=E24           # synthesize 1 kΩ from stock E24 values
+akcli calc trackwidth i=2 dtemp=10               # IPC-2221 width for 2 A
+akcli calc i2c-pullup vdd=3.3 cb=100p mode=fast  # NXP UM10204 pull-up window
+```
+
+Inputs accept engineering notation (`4k7`, `100n`, `2M2`); `--json` returns
+`{calc, inputs, results, reference}`.
 
 ## Use with AI coding agents
 

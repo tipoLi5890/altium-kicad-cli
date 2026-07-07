@@ -83,6 +83,11 @@ When in doubt, prefer additive, backwards-compatible changes and leave the versi
   reporters (WARNING+ findings as failed testcases; NOTE/INFO as passed cases with
   `system-out`; clean runs emit one passed case). Lint-style exit semantics unchanged.
 
+### Fixed
+- **`calc` output never SI-prefixes non-base units:** values already carrying a prefixed or
+  compound unit (mm, °C/W, m², Ω/km) print plain — the clearance table rendered 0.2 mm as
+  "200 mmm".
+
 ## [0.3.1] - 2026-07-07
 
 ### Added

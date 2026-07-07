@@ -48,7 +48,7 @@ fix before any check is built on top.
 
 ```
                          ┌────────────────────────── CLI / Plugin surface ──────────────────────────┐
- bin/akcli (wrapper) ─▶  cli.py ─▶ subcommands: read net component check diff pinmap plan draw export
+ bin/akcli (wrapper) ─▶  cli.py ─▶ subcommands: read net component check diff pinmap expected ops calc plan draw export jlc
                          skills/ + commands/ (Claude Code) call `akcli …`
                          └──────────────────────────────────────────────────────────────────────────┘
                                                      │
@@ -391,7 +391,7 @@ A per-executor **capability matrix** ships as `schemas/ops.capabilities.json`; a
 | `config.py` | discover + parse + validate `altium-kicad-cli.toml` | `find_config(start:Path)->Path\|None`; `load_config(path)->Config`; `class Config` (`mcu_designator, rails:list, paths:dict, erc_waivers:list`) | `tomllib`, `errors`, `safety` | walk-up discovery from cwd; `--config` override; paths resolve relative to toml dir; reject unknown keys → `BAD_CONFIG`; schema in §3.11 | `test_config.py` |
 | `report.py` | render findings + metadata caveats; text + `--json` | `render(findings,fmt,meta)->str`; `class Finding(code,severity,message,refs)`; `Severity` enum | `model`, `errors` | Always prints metadata header: passive-pin ratio, No-ERC suppressed count, unnamed-net count, frac-coord presence — so a vacuous pass is never read as clean | `test_report.py` |
 | `__main__.py` | `python -m` entry | `from .cli import main; raise SystemExit(main())` | `cli` | thin shim only | covered by `test_cli.py` |
-| `cli.py` | argparse dispatch, exit codes, global flags | `def main(argv=None)->int`; subcommands `read net component check diff pinmap plan draw export` | everything | global `--version` (pkg + protocol), `-C/--config`, `-v/-vv/--quiet`, `--json`, `--no-color`, `--debug`; `draw` defaults `--dry-run`, needs `--apply` to write; stdout = data, stderr = logs | `test_cli.py` |
+| `cli.py` | argparse dispatch, exit codes, global flags | `def main(argv=None)->int`; subcommands `read net component check diff pinmap expected ops calc plan draw export jlc` | everything | global `--version` (pkg + protocol), `-C/--config`, `-v/-vv/--quiet`, `--json`, `--no-color`, `--debug`; `draw` defaults `--dry-run`, needs `--apply` to write; stdout = data, stderr = logs | `test_cli.py` |
 
 ### 3.2 Altium readers (`src/altium_kicad_cli/readers/`)
 

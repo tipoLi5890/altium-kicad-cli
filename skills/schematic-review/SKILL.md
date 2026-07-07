@@ -124,7 +124,9 @@ diff-derived conclusions to Question where the match is doubtful.
 ## Electrical heuristics the tool does not run — apply them yourself
 
 Work through this list for every review; gather evidence with `akcli component` /
-`akcli net` and cite it.
+`akcli net` and cite it. For value sanity, use `akcli calc` (design-calc skill):
+a resistor `eseries` cannot match within ~1 % on E96 is a likely typo; recompute
+suspicious dividers/pull-ups/load caps and cite the printed reference.
 
 - **Decoupling per power pin** — the tool checks one cap per rail per IC at most. For each
   IC, list its supply pins (`akcli component board.SchDoc U3`) and confirm the rail net's

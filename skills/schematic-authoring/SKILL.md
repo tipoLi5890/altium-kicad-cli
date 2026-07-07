@@ -48,6 +48,11 @@ The produced `symbol/akcli.kicad_sym` becomes a `--symbols` source for
 datasheet and `akcli check` after placing. Record the LCSC C-number as an
 `LCSC` parameter on the placed part so the BOM maps designator -> orderable part.
 
+Component **values** come from `akcli calc`, not mental arithmetic: compute the
+network (`vdivider-design`, `regulator-design`, `led`, `i2c-pullup`,
+`crystal-caps`, ...) and place the returned `*_standard` E-series value; quote
+the printed reference in the report (design-calc skill has the full catalog).
+
 ## (3) Seed the target file (new schematics only)
 
 `plan`/`draw` require an existing target with a root `(uuid ...)`. For a brand-new

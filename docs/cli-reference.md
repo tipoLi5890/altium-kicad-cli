@@ -2,7 +2,8 @@
 
 `akcli` (long alias `altium-kicad-cli`) is the command-line entry point of `altium-kicad-cli`. It reads
 Altium binary `.SchDoc`/`.SchLib`/`.PcbDoc` and KiCad `.kicad_sch`/`.kicad_sym`/`.kicad_pcb`, runs
-checks, diffs revisions, and draws KiCad schematics — with no Altium or KiCad install required.
+checks, diffs revisions, draws KiCad schematics, and provides 31 standards-cited engineering
+calculators (`akcli calc`) — with no Altium or KiCad install required.
 
 > This reference is the contract for the CLI surface. It tracks the subcommands and flags defined in
 > `src/altium_kicad_cli/cli.py`.
