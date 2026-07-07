@@ -2,7 +2,7 @@
 
 `akcli` (long alias `altium-kicad-cli`) is the command-line entry point of `altium-kicad-cli`. It reads
 Altium binary `.SchDoc`/`.SchLib`/`.PcbDoc` and KiCad `.kicad_sch`/`.kicad_sym`/`.kicad_pcb`, runs
-checks, diffs revisions, draws KiCad schematics, and provides 31 standards-cited engineering
+checks, diffs revisions, draws KiCad schematics, and provides 36 standards-cited engineering
 calculators (`akcli calc`) — with no Altium or KiCad install required.
 
 > This reference is the contract for the CLI surface. It tracks the subcommands and flags defined in
@@ -86,7 +86,7 @@ Exits `1` when nothing was extracted (an empty table would make `pinmap
 file is missing. The schematic stays authoritative — this table is advisory.
 
 ### `akcli calc [list | info <name> | <name> key=value ...]`
-Offline **engineering calculators** (31): E-series snapping and 2–4-resistor
+Offline **engineering calculators** (36): E-series snapping and 2–4-resistor
 combination search (IEC 60063:2015), voltage dividers and LED resistors,
 LM317/FB regulator networks with worst-case corners (TI SLVS044Y), IPC-2221B
 track width ↔ current and Table 6-1 clearance, via R/thermal/ampacity/L/C

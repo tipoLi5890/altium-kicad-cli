@@ -33,7 +33,7 @@ When in doubt, prefer additive, backwards-compatible changes and leave the versi
 ## [Unreleased]
 
 ### Added
-- **`akcli calc` — 31 offline engineering calculators**, each stamped with its formal
+- **`akcli calc` — 36 offline engineering calculators**, each stamped with its formal
   reference: E-series snap + 2–4-resistor combination search (IEC 60063:2015, tabulated
   E1–E24 + formula E48/E96/E192 with the 9.20 exception), dividers/LED/RC/LC
   (Horowitz & Hill 3rd ed.), LM317/FB regulator networks with exhaustive worst-case corner
