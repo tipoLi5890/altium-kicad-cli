@@ -55,6 +55,10 @@ Run the design checks (ERC-lite + power + BOM hygiene) and print findings.
 - `--erc` / `--power` / `--bom` select check families (default: all).
 - **Lint-style exit:** non-zero (`1`) when findings are present.
 - `--exit-zero` forces exit `0` even with findings (report mode).
+- `--format text|json|sarif|junit` — `sarif` emits SARIF 2.1.0 for GitHub code
+  scanning (stable `partialFingerprints`, schematic path as the artifact URI);
+  `junit` emits JUnit XML for CI test reporters (WARNING+ findings become
+  failed testcases). Exit semantics are unchanged by the format.
 
 ### `akcli diff <file_a> <file_b>`
 Diff two schematic revisions. Nets are matched by **membership** (not display name); components by

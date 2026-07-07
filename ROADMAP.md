@@ -101,7 +101,7 @@ ERC-lite into a tunable, CI-consumable rule engine.
       mixes) behind the existing 20 %-typed-pins confidence demotion (M)
 - [ ] `[check]` section in `altium-kicad-cli.toml`: per-rule enable/severity, rail current capacity,
       decoupling requirements, component+pin-level waivers (M)
-- [ ] `check --format sarif|junit` output for GitHub code scanning and CI test reporters, built on
+- [x] `check --format sarif|junit` output for GitHub code scanning and CI test reporters, built on
       the v0.2 findings schema (M)
 - [ ] Golden-file regression corpus: frozen `check`/`net`/`diff --json` snapshots over real Altium +
       KiCad boards, schema-validated in CI (M)

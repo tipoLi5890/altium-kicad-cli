@@ -32,7 +32,11 @@ When in doubt, prefer additive, backwards-compatible changes and leave the versi
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+- **`check --format sarif|junit`:** SARIF 2.1.0 output for GitHub code scanning (stable
+  `partialFingerprints`, schematic path as artifact URI, rule table) and JUnit XML for CI test
+  reporters (WARNING+ findings as failed testcases; NOTE/INFO as passed cases with
+  `system-out`; clean runs emit one passed case). Lint-style exit semantics unchanged.
 
 ## [0.3.1] - 2026-07-07
 

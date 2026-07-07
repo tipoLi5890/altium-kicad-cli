@@ -434,8 +434,8 @@ def _cmd_check(args: argparse.Namespace) -> int:
         findings.extend(_run_check(name, sch, cfg, args))
 
     meta = _schematic_meta(sch)
-    fmt = "json" if args.json else "text"
-    _emit(_report.render(findings, fmt, meta))
+    fmt = getattr(args, "format", None) or ("json" if args.json else "text")
+    _emit(_report.render(findings, fmt, meta, source=str(path)))
     return _findings_exit(findings, args)
 
 
@@ -1032,6 +1032,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--bom", action="store_true", help="run BOM-hygiene checks")
     p.add_argument("--exit-zero", action="store_true",
                    help="always exit 0 (report mode)")
+    p.add_argument("--format", choices=["text", "json", "sarif", "junit"],
+                   help="output format (sarif: GitHub code scanning; junit: CI test reporters)")
     p.set_defaults(handler=_cmd_check)
 
     p = sub.add_parser("diff", parents=[common], help="net-level diff of two schematics")
