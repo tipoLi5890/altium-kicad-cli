@@ -119,8 +119,9 @@ hand-computed mil arithmetic.
 
 - [x] Editing ops: `delete_component` / `delete_object` (any node by uuid, covering wires/labels)
       and a real `move_component` (x/y, properties travel along) (M) — *shipped in v0.2.0*
-- [ ] Op-list authoring kit: the missing `docs/op-list-authoring.md`, `akcli ops template <op>`
-      scaffolder driven by `ops.schema.json` + `ops.capabilities.json`, next-free-grid-slot
+- [x] Op-list authoring kit: `docs/op-list-authoring.md` + `akcli ops list` / `ops template <op>`
+      scaffolder (tables drift-guarded against `ops.schema.json`; capabilities matrix shown in
+      `ops list`) — next-free-grid-slot helper still open
       placement helper (M)
 - [ ] PreToolUse hook in the plugin: run `validate_oplist` before any `draw` invocation and warn on
       `--apply` without a preceding `plan` (S)
