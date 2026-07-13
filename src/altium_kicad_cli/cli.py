@@ -38,6 +38,7 @@ from .commands import checks as _checks_cmd
 from .commands import drawing as _drawing_cmd
 from .commands import jlc as _jlc_cmd
 from .commands import query as _query_cmd
+from .commands import sim as _sim_cmd
 from .commands import view as _view_cmd
 from .commands._shared import _ExitWith
 from .errors import EXIT, AkcliError, as_error, to_exit
@@ -111,6 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
     _drawing_cmd.register(sub, common)
     _calc_cmd.register(sub, common)
     _jlc_cmd.register(sub, common)
+    _sim_cmd.register(sub, common)
 
     return parser
 

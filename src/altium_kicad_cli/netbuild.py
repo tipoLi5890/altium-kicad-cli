@@ -247,7 +247,9 @@ def expand_bus_vector(text: str) -> list[str]:
     ``K[3..0]`` bus both resolve). A plain (non-vector) label on a bus
     contributes NO members — eeschema treats it as a member-less bus, so an
     unlabeled rip next to it stays unconnected. Group notation ``{...}`` and
-    bus aliases are out of scope.
+    bus aliases are out of scope: kicad-cli 10.0.4 ignores ``(bus_alias ...)``
+    in netlist export (an alias-labeled bus is member-less, so this returns
+    ``[]`` for the alias name — matching eeschema; see tests/test_bus_alias.py).
     """
     m = _VECTOR_RE.match(text)
     if m is None:

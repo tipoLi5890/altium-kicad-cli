@@ -125,6 +125,28 @@ Say so when a user asks, and use the conservative IPC-2221 fit
    `ldo-headroom`, comparator thresholds vs the input common-mode limit,
    battery capacity at the actual load current. Prefer table values; read
    curves for trends only, and say which table row you used.
+6. **Turn the computed target into a `sim.json` assertion.** A calculator gives
+   you the number you *designed for*; `akcli sim` proves the *drawn* circuit
+   actually hits it. After computing (say) a divider midpoint or an RC corner,
+   write the same value as a bound and let libngspice check it:
+
+   ```jsonc
+   // vdivider-design said v_out ≈ 1.65 V → assert the built sheet agrees
+   {"name": "mid", "meas": "MAX v(mid) from=0 to=1m", "approx": "1.65", "tol": "0.02"}
+   ```
+
+   Assertion bounds accept the same engineering notation as calc inputs
+   (`1.65`, `25m`, `4.7k`), so the calculator's result drops in verbatim — no
+   unit juggling. This closes the loop: **calc = intended value, sim = measured
+   value, and a mismatch is a non-zero exit.** See the schematic-authoring skill
+   and `docs/sim.md`.
+7. **A diode with no SPICE model? Fit one from the same datasheet row.** When
+   `akcli sim` reports a diode `unmodeled`, take the forward-voltage table row you
+   already read (step 5) and run `akcli sim fit-diode --point 0.37@20m --n-prior 1.05`
+   to get a `.model` card — then `--apply <sch> --designator D1 --write` stamps
+   `Sim.Device`/`Sim.Params` onto the part so the next `sim` run resolves it. This
+   is the **datasheet → model** leg that complements calc → sim; see the
+   parts-sourcing skill for pulling the PDF and `docs/sim.md#akcli-sim-fit-diode--datasheet--spice-model`.
 
 ## Honesty rules
 

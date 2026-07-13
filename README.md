@@ -37,6 +37,9 @@ giving you a scriptable, install-free workflow that an automation pipeline or an
   `schema_version`, and accepts a versioned op-list for deterministic, idempotent edits.
 - **Standards-cited calculators.** `akcli calc` answers 60 design questions (E-series, IPC-2221,
   via parasitics, I²C pull-ups, buck/boost, ...) and prints the formal reference with every result.
+- **Simulate and assert.** `akcli sim` renders a schematic to a SPICE deck, runs it through KiCad's
+  libngspice in a crash-isolated child, and turns `.meas` results into pass/fail findings you gate CI
+  on — or emits the deck with `--deck-only` when no engine is installed.
 
 ## Read Altium files
 
@@ -149,6 +152,33 @@ serves ONE local dashboard for both worlds: `/calc` (auto-compute forms,
 physical-style SVG diagrams, shareable URLs, op-list export) and `/live` (a
 draw-timeline for a watched `.kicad_sch` with per-step ERC findings, diff
 ghosting, and SSE push) — localhost-only, zero deps.
+
+## Simulate and assert
+
+`akcli sim` turns a schematic into a SPICE deck, runs it through KiCad's bundled
+**libngspice** (in a crash- and timeout-isolated child subprocess), and compares
+the `.meas` results against pass/fail bounds you declare in a `sim.json` — a
+failed assertion is a normal non-zero exit you can gate CI on. Components resolve
+to SPICE devices through a first-hit-wins ladder (`Sim.*` KiCad fields → `models`
+overrides → an R/C/L heuristic that leaves un-modellable parts loudly
+`unmodeled`, never guessed). No ngspice installed? `--deck-only` still emits the
+deck.
+
+```bash
+akcli sim board.kicad_sch --deck-only                  # emit the SPICE deck, no engine
+akcli sim board.kicad_sch --sim board.sim.json         # run + assert, exit 1 on failure
+akcli sim board.kicad_sch --sim board.sim.json --sweep temp=0,25,60   # corner matrix
+akcli sim fit-diode --point 0.37@20m --name DBAT       # datasheet forward point -> .model
+```
+
+The engine is auto-discovered (macOS/Linux/Windows KiCad, or force one with
+`AKCLI_NGSPICE`); `sim.json` bounds accept engineering notation (`25m`, `4.7k`)
+and a lower + upper bound in one entry forms a two-sided window; `--sweep` re-runs
+the asserts across a corner matrix; `--wave` writes a tidy CSV; a floating node is
+auto-fixed with `.option rshunt`. `akcli sim fit-diode` fits a diode `.model` from
+datasheet forward-voltage points and can write it back onto the schematic
+(`--apply --write`), closing the datasheet → model loop with `jlc datasheet`. See
+[docs/sim.md](docs/sim.md) for the full reference.
 
 ## Use with AI coding agents
 

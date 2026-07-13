@@ -25,6 +25,23 @@ otherwise it is skipped and the release still succeeds.
 The tag (minus the leading `v`) **must** equal the `pyproject.toml` version, or
 the workflow fails fast before building anything.
 
+## Docs conformance gate (contributor note)
+
+`tests/test_docs_conformance.py` runs in CI and guards the docs against drift, so
+keep it in mind when editing any `README*.md`, `docs/*.md`, or `skills/*/SKILL.md`:
+
+- **Every ` ```-fenced `akcli …` line is validated** against a live
+  `build_parser()` — an unknown subcommand or an unknown `--flag` fails the test.
+  Write real, current invocations (`<placeholders>` and `$VARS` are substituted
+  automatically). If a fenced line legitimately is **not** a runnable command (a
+  usage synopsis, an entry-point string), append a ` # doc-noqa` comment to that
+  line to opt it out.
+- **The `N ops` / `N macros` / `N calculators` counts** (and their zh-Hans/zh-Hant
+  forms) are asserted equal to the live registries. When you add an op, macro, or
+  calculator, update every count in the docs in the same change or the gate fails.
+
+Run it locally with `python -m pytest tests/test_docs_conformance.py -q`.
+
 ## PyPI publishing
 
 PyPI publishing is opt-in and uses

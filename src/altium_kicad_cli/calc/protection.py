@@ -34,7 +34,8 @@ _R10 = (1.0, 1.25, 1.6, 2.0, 2.5, 3.15, 4.0, 5.0, 6.3, 8.0)
      Param("v_surge", "V", "surge open-circuit voltage", default=1000.0),
      Param("z_source", "Ω", "surge source impedance", default=2.0)),
 )
-def _calc_tvs(v_line_max, v_ic_absmax, v_clamp, v_surge, z_source) -> list[Result]:
+def _calc_tvs(v_line_max: float, v_ic_absmax: float, v_clamp: float,
+              v_surge: float, z_source: float) -> list[Result]:
     if v_clamp <= v_line_max:
         raise CalcError("v_clamp must exceed v_line_max (TVS would conduct "
                         "in normal operation) — check V_RWM instead")
@@ -61,11 +62,11 @@ def _calc_tvs(v_line_max, v_ic_absmax, v_clamp, v_surge, z_source) -> list[Resul
           "I²t, and interrupting rating must exceed the prospective fault "
           "current — both from datasheets, not computed here.",
 )
-def _calc_fuse(i_load, derate, temp_factor) -> list[Result]:
+def _calc_fuse(i_load: float, derate: float, temp_factor: float) -> list[Result]:
     if i_load <= 0 or not 0 < derate <= 1 or not 0 < temp_factor <= 1.2:
         raise CalcError("bad i_load/derate/temp_factor")
     need = i_load / (derate * temp_factor)
-    pick = None
+    pick: float | None = None
     for dec in (0.1, 1.0, 10.0, 100.0):
         for m in _R10:
             v = m * dec
@@ -90,7 +91,8 @@ def _calc_fuse(i_load, derate, temp_factor) -> list[Result]:
      Param("i_steady", "A", "steady-state RMS current", default=0.0),
      Param("r_hot", "Ω", "NTC hot resistance (datasheet)", default=0.0)),
 )
-def _calc_inrush(v_supply, ac, i_inrush_max, c_bulk, i_steady, r_hot) -> list[Result]:
+def _calc_inrush(v_supply: float, ac: str, i_inrush_max: float, c_bulk: float,
+                  i_steady: float, r_hot: float) -> list[Result]:
     if min(v_supply, i_inrush_max, c_bulk) <= 0:
         raise CalcError("v_supply, i_inrush_max, c_bulk must be positive")
     v_pk = v_supply * (math.sqrt(2) if ac == "ac" else 1.0)

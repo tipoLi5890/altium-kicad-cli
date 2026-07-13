@@ -30,6 +30,92 @@ All notable changes to `altium-kicad-cli` are documented here. The format is bas
 
 When in doubt, prefer additive, backwards-compatible changes and leave the version contracts untouched.
 
+## [0.6.0] - 2026-07-13
+
+### Added
+- **`akcli sim <sch>` — simulate a schematic with libngspice and assert on the results.** The
+  schematic is rendered to a SPICE deck (net → node mapping, component → device via a first-hit-wins
+  model-resolution ladder of `Sim.*` KiCad-native fields → `sim.json` `models` overrides → prefix
+  heuristic), run through libngspice **in an isolated child subprocess** (crash- and timeout-safe),
+  and its `.meas` results are compared against pass/fail bounds (`gt`/`lt`/`ge`/`le`/`approx`+`tol`,
+  engineering notation accepted) declared in a `sim.json` spec. `--deck-only` emits the deck and
+  exits `0` without any engine (engine-free plan/review mode); `--wave OUT.csv` dumps simulated
+  vectors; `--gnd NET` names SPICE node `0`; `--timeout`, `--exit-zero`, and `--json` round out the
+  flags. Findings: `SIM_ASSERT_FAIL`/`SIM_MEAS_FAILED` (ERROR), `SIM_UNMODELED`/`SIM_DANGLING_PIN`/
+  `SIM_BAD_STIMULUS` (WARNING). The engine is discovered via `AKCLI_NGSPICE` (a path, or `off`) →
+  macOS KiCad bundle → `find_library` → Linux sonames → Windows KiCad; a missing engine exits `7`
+  (`NGSPICE_MISSING`). `sim.json` is validated by `schemas/sim.schema.json`. The deck builder
+  centralizes SPICE's `M`-means-milli / mega-is-`MEG` value fix and the title-line and B-source
+  whitespace gotchas. Includes `sim.models.fit_diode()` for turning datasheet forward-voltage points
+  into a `.model` line (table-anchored single-point fit preferred over eyeballed curve fits). See
+  [docs/sim.md](docs/sim.md).
+- **`akcli sim fit-diode` — datasheet → SPICE model, on the command line.** Fit a diode `.model`
+  from `--point V@I` datasheet forward-voltage points (`--rs-point` for series resistance, `--cjo`
+  for junction capacitance, `--n-prior`/`--name`); prints the `.model` card + `Sim.Params` (or
+  `--json`). `--apply SCH --designator REF` plans a native `set_component_parameters` write that
+  stamps `Sim.Device`/`Sim.Params` onto that component — a **dry run** printing the op-list unless
+  `--write` (which commits through the KiCad writer with a rotated `.bak`). Closes the datasheet →
+  model loop with `jlc datasheet` (+ `jlc datasheet --resolve-mpn`, below).
+- **`akcli sim --sweep NAME=v1,v2,...` — corner matrices.** Re-runs the assert pass across a
+  repeatable Cartesian corner matrix (component-value override `R21=2.2k,3.3k` on a schematic deep
+  copy, or `temp=0,25,60` injected as `.option temp=`); ≤64 corners, engine-only. Prints a
+  per-corner verdict table (or `{corners:[...]}` JSON) and exits `1` if any corner fails.
+- **Two-sided asserts** — a `sim.json` assert entry may now carry both a lower (`gt`/`ge`) **and** an
+  upper (`lt`/`le`) bound in one entry (e.g. `{"ge":"3.0","le":"3.6"}` for a rail window); the
+  violated side is named on failure. `approx` stays exclusive.
+- **`--wave OUT.csv` now writes a tidy CSV** — a single `time` column plus one verbatim column per
+  `options.wave_vectors` entry (ngspice's `wrdata` repeats the scale column in front of every vector;
+  `sim/wave.rewrite_wrdata()` collapses it). Paths with spaces are handled.
+- **Sim floating-node hardening.** The deck builder detects a net with no DC path to ground
+  (`SIM_FLOATING_NODE`, naming the stranding parts) and, under the default `options.rshunt` policy
+  (absent/`"auto"`), auto-appends `.option rshunt=1e12` to keep the DC operating point solvable
+  (`SIM_RSHUNT_ADDED` NOTE); `false` never emits it, a number/string always does. A power-named net
+  (`+*`/`VCC*`/`VDD*`/`VBAT*`/`VSUP*`) with no voltage-source drive warns `SIM_UNDRIVEN_RAIL`.
+- **`akcli jlc datasheet --resolve-mpn`** (schematic target) — MPN-only BOM lines get an exact-match
+  catalog lookup (same policy as `jlc bom`) to pin a C-number before the EasyEDA resolve; misses stay
+  `not-found` with a nearest-MPN note, network errors exit `7`.
+- **Anti-drift docs gate** (`tests/test_docs_conformance.py`) — every ` ```-fenced `akcli …` line in
+  the docs is validated against a live `build_parser()` (unknown subcommand or flag fails the test),
+  and the `N ops` / `N macros` / `N calculators` counts (plus their zh-Hans/zh-Hant forms) are
+  asserted equal to the live registries. A ` # doc-noqa` comment opts a genuinely non-command fenced
+  line out.
+
+### Changed
+- **`akcli jlc datasheet` output now cross-links the datasheet → model loop** and its structured
+  positions coverage was extended: the `intent`, `bom`, and `libsync` checkers now attach structured
+  `pos`/`anchors` to their findings (SARIF fingerprints stay byte-stable for genuinely positionless
+  cases).
+- **CI: mypy beachhead extended to `src/altium_kicad_cli/calc/`** (added to `[tool.mypy] files` in
+  `pyproject.toml` — enforced by the existing bare-`mypy` CI step) alongside `parts/`.
+- **CI: GitHub Actions bumped** to current major versions (`actions/checkout` v7, `setup-python` v6,
+  `setup-node` v6, `upload-artifact` v7, `download-artifact` v8, `softprops/action-gh-release` v3),
+  and the Linux `kicad-cli` job now installs libngspice and **fails** if any libngspice-gated live sim
+  test is skipped (no silent skips).
+- **`bus_alias` is documented as an arbitrated no-op** — ground-truth tested against `kicad-cli`
+  10.0.4, a `(bus_alias ...)` declaration is ignored for netlisting (an alias-labeled bus is
+  member-less), so `akcli` matches it by design.
+
+### Fixed
+- **docs/sim.md gained a floating-node troubleshooting section** — skipping an IC can strand cap-only nets (555 CV, regulator VIN), the DC operating point goes singular, and the transient starts unconverged; the documented `options.extra_cards: [".option rshunt=1e12"]` remedy was live-validated (spiro rev C channel matches its reference sim to 6 significant figures).
+- **`akcli sim` adversarial-review round.** (1) **Diode/BJT polarity** — the deck builder now derives
+  a diode's/transistor's SPICE terminal order from pin **names** (`A`/`K`, `C`/`B`/`E`), not pin
+  numbers; KiCad numbers stock diode pins `K`=1/`A`=2, so the old pin-number order silently reversed
+  polarity (a peak/envelope detector charged the wrong way). Ambiguous names now emit a
+  `SIM_PIN_ORDER_ASSUMED` warning. (2) A net literally named `N1` is no longer merged with a generated
+  unnamed-net node — the generator skips reserved tokens (`SIM_NODE_COLLISION` on a true clash).
+  (3) A `spec.models` entry with a missing/unknown `device` infers the element letter from its
+  `model_card`/subckt (or fails `BAD_CONFIG`) instead of emitting a bare designator that ngspice
+  mis-parses. (4) A deck ngspice cannot parse is now an engine failure (exit `7` with the parse error
+  visible) instead of a false clean exit, even for a zero-assertion spec. (5) `engine.run` resolves a
+  relative `workdir` before spawning the child. (6) A stimulus `node` matching no net warns
+  `SIM_UNKNOWN_STIMULUS_NODE` with close-match suggestions. (7) Stimulus `name` is now required,
+  identifier-shaped (`^[A-Za-z][A-Za-z0-9_]*$`), and unique. (8) `fit_diode` validates/clamps its
+  single-point `n_prior` and rejects non-positive `rs_point` inputs. (9) Windows KiCad discovery sorts
+  install versions numerically (`10.0` > `9.0`). (10) Node sanitizing restricts to ASCII
+  `[A-Za-z0-9_]`. (11) `--wave` paths containing spaces now work. (12) The unmodeled-device hint points
+  at real surfaces (`Sim.*`, `spec.models`, `models.fit_diode`) instead of a then-nonexistent
+  `akcli sim fit-diode` subcommand (which this cycle now ships — see Added above).
+
 ## [0.5.0] - 2026-07-13
 
 ### Added

@@ -65,8 +65,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..errors import AkcliError, fail
-from ..model import Net, PinRef, Schematic
-from ..report import Finding, Severity
+from ..model import Net, Pin, PinRef, Schematic
+from ..report import Finding, Severity, anchor
 
 PROTOCOL_VERSION = 1
 MODES = ("exact", "subset")
@@ -242,6 +242,36 @@ def _refs(members) -> list[str]:
     return [f"{d}.{p}" for d, p in members]
 
 
+def _pin_index(sch: Schematic) -> dict[PinRef, Pin]:
+    """Map every ``(designator, pin_number)`` to its :class:`model.Pin`."""
+    index: dict[PinRef, Pin] = {}
+    for c in sch.components:
+        for p in c.pins:
+            index[(c.designator, p.number)] = p
+    return index
+
+
+def _pin_anchors(
+    tokens: list[str], pin_index: dict[PinRef, Pin]
+) -> tuple[tuple[float, float] | None, list[dict]]:
+    """Anchor each ``REF.PIN`` token that resolves to a real pin (positionless
+    tokens — an unknown pin or an unmatched wildcard pattern — are skipped).
+    Returns ``(pos, anchors)`` where ``pos`` is the first anchored pin's
+    position, or ``None`` if none of ``tokens`` resolve."""
+    anchors: list[dict] = []
+    pos: tuple[float, float] | None = None
+    for token in tokens:
+        ref, _, num = token.partition(".")
+        pin = pin_index.get((ref, num))
+        if pin is None:
+            continue
+        p = (pin.x_mil, pin.y_mil)
+        anchors.append(anchor("pin", token, p))
+        if pos is None:
+            pos = p
+    return pos, anchors
+
+
 def run(sch: Schematic, spec: IntentSpec) -> list[Finding]:
     """Assert ``spec`` against the schematic's built netlist. Pure, deterministic.
 
@@ -249,6 +279,7 @@ def run(sch: Schematic, spec: IntentSpec) -> list[Finding]:
     the individual pins), plus one finding per shorted intent-net group.
     """
     findings: list[Finding] = []
+    pin_idx = _pin_index(sch)
 
     known_pins: set[PinRef] = {
         (c.designator, p.number) for c in sch.components for p in c.pins
@@ -313,11 +344,14 @@ def run(sch: Schematic, spec: IntentSpec) -> list[Finding]:
         }
         if not hits:
             all_tokens = [m.token for m in members]
+            pos, anchors_ = _pin_anchors(all_tokens, pin_idx)
             findings.append(Finding(
                 INTENT_NET_NOT_FOUND, Severity.ERROR,
                 f"intent net '{name}': no actual net contains any of its "
                 f"pin(s): {', '.join(all_tokens)}",
                 refs=all_tokens,
+                pos=pos,
+                anchors=anchors_,
             ))
             continue
         best = min(
@@ -340,11 +374,15 @@ def run(sch: Schematic, spec: IntentSpec) -> list[Finding]:
             and not any(pr in actual_members for pr in candidates[m])
         )
         if missing:
+            pos, anchors_ = _pin_anchors(missing, pin_idx)
+            anchors_.append(anchor("net", label))
             findings.append(Finding(
                 INTENT_MISSING_MEMBER, Severity.ERROR,
                 f"intent net '{name}' (matched actual net '{label}'): "
                 f"missing member(s): {', '.join(missing)}",
                 refs=missing,
+                pos=pos,
+                anchors=anchors_,
             ))
 
         if net_spec.mode == "exact":
@@ -354,11 +392,15 @@ def run(sch: Schematic, spec: IntentSpec) -> list[Finding]:
             literal_want = {(m.ref, m.pin) for m in members if not m.is_wildcard}
             extra = sorted(f"{d}.{p}" for d, p in actual_members - literal_want)
             if extra:
+                pos, anchors_ = _pin_anchors(extra, pin_idx)
+                anchors_.append(anchor("net", label))
                 findings.append(Finding(
                     INTENT_EXTRA_MEMBER, Severity.ERROR,
                     f"intent net '{name}' (matched actual net '{label}'): "
                     f"extra member(s) not in intent: {', '.join(extra)}",
                     refs=extra,
+                    pos=pos,
+                    anchors=anchors_,
                 ))
 
     # Two intent nets landing on ONE actual net is a short against intent.
@@ -370,11 +412,13 @@ def run(sch: Schematic, spec: IntentSpec) -> list[Finding]:
         if len(names) < 2:
             continue
         quoted = ", ".join(f"'{n}'" for n in names)
+        shorted_label = _net_label(sch.nets[idx])
         findings.append(Finding(
             INTENT_NETS_SHORTED, Severity.ERROR,
             f"intent nets {quoted} resolve to the same actual net "
-            f"'{_net_label(sch.nets[idx])}' — shorted against intent",
+            f"'{shorted_label}' — shorted against intent",
             refs=names,
+            anchors=[anchor("net", shorted_label)],
         ))
 
     return findings

@@ -29,9 +29,10 @@ from pathlib import Path
 
 from .. import model, relink
 from ..errors import AkcliError
+from ..readers import kicad as _krd
 from ..readers import kicad_lib, sexpr
 from ..readers.kicad_lib import _read_text
-from ..report import Finding, Severity
+from ..report import Finding, Severity, anchor
 
 LIB_EMBED_STALE = "LIB_EMBED_STALE"          # WARNING: pin signature drifted
 LIB_EMBED_OLD_FORMAT = "LIB_EMBED_OLD_FORMAT"  # NOTE: cache predates current format
@@ -55,8 +56,18 @@ def run(path: os.PathLike | str, lib_dirs: object = None) -> list[Finding]:
     if not cached:
         return []
     if lib_dirs:
-        return _stale_findings(libsyms, cached, relink.resolve_lib_dirs(lib_dirs))
+        return _stale_findings(doc, libsyms, cached, relink.resolve_lib_dirs(lib_dirs))
     return _old_format_findings(doc, cached)
+
+
+def _first_instance_pos(doc: sexpr.SNode, lib_id: str) -> tuple[float, float] | None:
+    """World (x_mil, y_mil) of the first placed symbol instance of ``lib_id``."""
+    for sym in _krd._placed_symbols(doc):
+        if (_krd._av(sym.find("lib_id"), 1) or "") == lib_id:
+            at = sym.find("at")
+            return (_krd._mm_to_mil(_krd._fnum(at, 1)),
+                    _krd._mm_to_mil(_krd._fnum(at, 2)))
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -73,7 +84,7 @@ def _pin_signature(symdef: model.SymbolDef) -> tuple:
 
 
 def _stale_findings(
-    libsyms: sexpr.SNode, cached: list[sexpr.SNode], dirs: list[Path]
+    doc: sexpr.SNode, libsyms: sexpr.SNode, cached: list[sexpr.SNode], dirs: list[Path]
 ) -> list[Finding]:
     findings: list[Finding] = []
     emb_lib = kicad_lib.library_from_lib_symbols(libsyms)
@@ -111,12 +122,15 @@ def _stale_findings(
         if nums:
             more = " ..." if len(nums) > 6 else ""
             diffs.append("pins " + ", ".join(nums[:6]) + more)
+        pos = _first_instance_pos(doc, lib_id)
         findings.append(Finding(
             LIB_EMBED_STALE, Severity.WARNING,
             f"embedded symbol {lib_id!r} pin signature differs from "
             f"{lib_file.name} ({'; '.join(diffs)}) — re-embed with "
             "`akcli relink-symbols`",
             refs=[lib_id, str(lib_file)],
+            pos=pos,
+            anchors=[anchor("component", lib_id, pos)] if pos is not None else [],
         ))
     return findings
 
@@ -150,12 +164,24 @@ def _old_format_findings(
         )
     if not telltales:
         return []
+    shown = missing[:8]
+    old_anchors = []
+    old_pos = None
+    for lib_id in shown:
+        p = _first_instance_pos(doc, lib_id)
+        if p is None:
+            continue
+        old_anchors.append(anchor("component", lib_id, p))
+        if old_pos is None:
+            old_pos = p
     return [Finding(
         LIB_EMBED_OLD_FORMAT, Severity.NOTE,
         "embedded lib_symbols look older than the current KiCad format ("
         + "; ".join(telltales) + ") — refresh with "
         "`akcli relink-symbols <sch> --libs <symbol dir>`",
-        refs=missing[:8],
+        refs=shown,
+        pos=old_pos,
+        anchors=old_anchors,
     )]
 
 

@@ -10,7 +10,7 @@ before/after net-connectivity diff, and provides 60 standards-cited engineering 
 > `src/altium_kicad_cli/cli.py`.
 
 ```
-akcli [GLOBAL FLAGS] <subcommand> [ARGS...]
+akcli [GLOBAL FLAGS] <subcommand> [ARGS...]   # doc-noqa (usage synopsis, not a runnable line)
 ```
 
 **Convention:** `stdout` carries data (parsed JSON/text results); `stderr` carries logs and
@@ -60,7 +60,11 @@ Extract the netlist (net → pin membership) using the shared `netbuild` engine.
   unconnected); `NAME[a..b]` vector expansion is inclusive at both ends in either
   order (`K[3..0]` → K3…K0); local bus labels are sheet-scoped while **global**
   bus labels merge member nets across sheets. So `akcli net`/`diff` on a
-  bus-carried KiCad design reports the bus-carried nets correctly.
+  bus-carried KiCad design reports the bus-carried nets correctly. A
+  `(bus_alias ...)` declaration is deliberately **ignored** for netlisting —
+  ground-truth tested against `kicad-cli` 10.0.4, an alias-labeled bus is
+  member-less (identical to no alias), and a vector-looking alias name still
+  expands as the vector — so `akcli` matches `kicad-cli` here by design.
 - **Performance:** `netbuild` uses an `O(log n + k)` orthogonal-segment index, so
   connectivity on large ladder/bus sheets is near-linear (a ~5100-segment sheet
   builds in a fraction of a second); the semantics are byte-identical to the
@@ -470,6 +474,40 @@ subcommand family. Network failures exit `7` (`ERROR: NETWORK: ...`); transient 
 retried with backoff, and a stale cached response is served with a warning when retries are
 exhausted. See [docs/jlc.md](jlc.md) for the full reference.
 
+### `akcli sim <sch> [--sim FILE] [--deck-only] [--out PATH] [--gnd NET] [--wave OUT.csv] [--sweep NAME=v1,v2,...] [--timeout S] [--exit-zero]`
+Simulate a schematic with **libngspice** and assert on the results. `akcli sim` renders the
+schematic to a SPICE deck (net → node mapping, component → device via the model-resolution ladder,
+`sim.json` stimuli → `V`/`I`/`B` sources), runs it in an **isolated child subprocess** (crash- and
+timeout-safe), reads back the `.meas` measurements, and compares each against a bound declared in
+`sim.json` (`gt`/`lt`/`ge`/`le`/`approx`+`tol`, engineering notation accepted; a lower + an upper
+bound in one entry forms a two-sided range). `--deck-only` emits the deck and exits `0` **without**
+ngspice (the engine-free plan/review mode — write it with `--out`, or `--json` for
+`{deck_sha, deck, warnings, unmodeled}`); otherwise `--sim FILE` is required. `--gnd NET` names the
+net that becomes SPICE node `0` (default `GND`). `--wave OUT.csv` dumps the simulated vectors as a
+**tidy CSV** (one `time` column + one column per `options.wave_vectors` entry). `--sweep
+NAME=v1,v2,...` re-runs the assert pass across a Cartesian corner matrix (component-value override
+`R21=2.2k,3.3k` or `temp=0,25,60`; repeatable, ≤64 corners; engine-only) and prints a per-corner
+verdict table, exiting `1` if any corner fails. `--timeout S` kills the engine after S seconds
+(default `60`). `--exit-zero` reports without failing. Text output is an engine/deck-sha header, an
+always-printed measured-value table, then findings; `--json` returns
+`{deck_sha, engine, measured, findings, ok}`. The engine is discovered via `AKCLI_NGSPICE` (a path,
+or `off` to disable) → macOS KiCad bundle → `find_library` → Linux sonames → Windows KiCad; when
+none loads, run mode prints `ERROR: NGSPICE_MISSING` and exits `7`. New in this cycle, the deck
+builder auto-appends `.option rshunt=1e12` when it detects a floating node (`SIM_FLOATING_NODE`) and
+warns `SIM_UNDRIVEN_RAIL` for a power-named net with no source. See [docs/sim.md](sim.md) for the
+full reference (`sim.json` format, the model-resolution ladder, `fit_diode`, and the `M`/`MEG` deck
+gotchas).
+
+### `akcli sim fit-diode --point V@I [--rs-point V@I] [--cjo F] [--n-prior N] [--name MODEL] [--apply SCH --designator REF [--write]]`
+Fit a SPICE diode `.model` from datasheet forward-voltage points (`0.37@20m` = 0.37 V @ 20 mA;
+`--point` repeatable). A single point plus the ideality prior (`--n-prior`, default `1.05` Schottky)
+solves `IS` directly — the honest default over eyeballed curve fits; `--rs-point` adds series
+resistance and `--cjo` a junction capacitance. Prints the `.model` card + `Sim.Params`, or `--json`
+for `{name, model_card, sim_params, params, note}`. `--apply SCH --designator REF` plans a native
+`set_component_parameters` write stamping `Sim.Device`/`Sim.Params` onto that component (a **dry
+run** printing the op-list unless `--write`, which commits through the KiCad writer with a rotated
+`.bak`). This closes the datasheet → model loop with [`jlc datasheet`](jlc.md).
+
 ## Exit codes
 
 | Code | Meaning |
@@ -481,7 +519,7 @@ exhausted. See [docs/jlc.md](jlc.md) for the full reference.
 | `4` | File not found. |
 | `5` | Unsupported format (incl. `ALTIUM_UNSUPPORTED` features). |
 | `6` | Op-list or verify failure (incl. `--strict-nets` refusal, `relink-symbols` gate refusal, `PROTOCOL_MISMATCH`). |
-| `7` | Required external tool missing **or network failure** (`KICAD_CLI_MISSING`/`KICAD_CLI_TIMEOUT`, `jlc` `ERROR: NETWORK`, `BINFETCH_*`). |
+| `7` | Required external tool missing **or network failure** (`KICAD_CLI_MISSING`/`KICAD_CLI_TIMEOUT`, `jlc` `ERROR: NETWORK`, `BINFETCH_*`, `sim`'s `NGSPICE_MISSING`/`NGSPICE_FAILED`). |
 
 ## Structured errors
 
@@ -527,4 +565,8 @@ akcli plan board.kicad_sch --ops ops.json --symbols Device.kicad_sym
 akcli draw board.kicad_sch --ops ops.json --symbols Device.kicad_sym --apply --strict-nets
 akcli check board.kicad_sch --intent intent.json          # assert the intent held
 akcli relink-symbols board.kicad_sch --apply              # refresh embedded lib_symbols
+akcli sim board.kicad_sch --deck-only                     # emit the SPICE deck (no ngspice)
+akcli sim board.kicad_sch --sim board.sim.json            # run + assert, exit 1 on failure
+akcli sim board.kicad_sch --sim board.sim.json --sweep temp=0,25,60   # corner matrix
+akcli sim fit-diode --point 0.37@20m --n-prior 1.05 --name DBAT       # datasheet -> .model
 ```

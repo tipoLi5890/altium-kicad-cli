@@ -85,7 +85,7 @@ Statuses: `ok` · `low-stock` (below `--min-stock` or the needed quantity) · `o
 present (`no-part-id` never fails the run; `--exit-zero` forces `0`); exit
 `7` on a network error.
 
-### `akcli jlc datasheet <C-number|MPN|sch> [--fetch] [--out DIR] [--force] [--json]`
+### `akcli jlc datasheet <C-number|MPN|sch> [--fetch] [--out DIR] [--force] [--resolve-mpn] [--json]`
 
 Resolve — and with `--fetch`, download — **datasheet PDFs**. The target is one
 LCSC C-number, one exact MPN (catalog-matched like `jlc bom`), or a schematic:
@@ -95,7 +95,15 @@ then every BOM line carrying an `LCSC` parameter is resolved in one run.
 akcli jlc datasheet C2984661                     # print the PDF URL + MPN/manufacturer
 akcli jlc datasheet TCRT5000 --fetch             # exact-MPN match, download the PDF
 akcli jlc datasheet board.kicad_sch --fetch      # whole BOM -> ~/.cache/akcli/datasheets/
+akcli jlc datasheet board.kicad_sch --resolve-mpn --fetch   # MPN-only lines get a catalog lookup first
 ```
+
+**`--resolve-mpn`** (schematic target only) is opt-in: for BOM lines that carry
+an MPN but no `LCSC` C-number, it first does an exact-match catalog lookup (same
+in-stock/basic/stock preference policy as `jlc bom`, one search per distinct MPN)
+to pin a C-number before the normal EasyEDA resolve. A hit is resolved like any
+other; a miss stays `not-found` with a nearest-MPN note. A network error during
+the lookup exits `7`.
 
 Resolution goes through the part's **EasyEDA component record** — the
 jlcsearch mirror never carries datasheet links, and `lcsc.com` bot-gates
@@ -119,10 +127,16 @@ the *wrong* part) is `no-link` with the LCSC product-page hint.
 
 Statuses: `resolved` · `fetched` · `cached` · `page-link` · `no-link` ·
 `not-found` · `no-lcsc` (BOM line without an `LCSC` parameter; pin one via
-`jlc bom --suggest/--fix` first) · `fetch-failed`. Exit `1` when anything
-short of a PDF remains (`page-link`, `no-link`, `not-found`, `fetch-failed`;
-`no-lcsc` never fails the run; `--exit-zero` forces `0`); exit `7` on a
-network error.
+`jlc bom --suggest/--fix` — or `--resolve-mpn` when the line carries an MPN)
+· `fetch-failed`. Exit `1` when anything short of a PDF remains (`page-link`,
+`no-link`, `not-found`, `fetch-failed`; `no-lcsc` never fails the run;
+`--exit-zero` forces `0`); exit `7` on a network error.
+
+> **Datasheet → SPICE model loop.** Once you have the PDF, its forward-voltage
+> table row feeds [`akcli sim fit-diode`](sim.md#akcli-sim-fit-diode--datasheet--spice-model),
+> which fits a `.model` and can write `Sim.Device`/`Sim.Params` straight back onto
+> the schematic (`--apply --write`) — so a sourced part becomes a simulatable one
+> without leaving the CLI.
 
 ### `akcli jlc show <C-number> [--easyeda] [--json]`
 

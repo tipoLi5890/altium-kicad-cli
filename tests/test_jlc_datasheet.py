@@ -278,6 +278,161 @@ def test_cli_schematic_batch(monkeypatch, tmp_path, capsys):
     assert rc == EXIT["OK"] if doc["problems"] == 0 else EXIT["FINDINGS"]
 
 
+def test_resolve_mpn_only_rows_hit_miss_and_dedupe(monkeypatch):
+    """--resolve-mpn helper: one search per distinct MPN, hit + miss rewrite."""
+    from altium_kicad_cli.commands.jlc import _resolve_mpn_only_rows
+    from altium_kicad_cli.parts import search as parts_search
+
+    class _P:
+        def __init__(self, lcsc, mpn, stock=10, basic=True):
+            self.lcsc, self.mpn, self.stock, self.basic = lcsc, mpn, stock, basic
+
+    calls = []
+
+    def _search(q, limit=10, cache_dir=None):
+        calls.append(q)
+        if q.casefold() == "lm339":
+            return [_P("C1", "LM339"), _P("C2", "LM339N")]
+        return [_P("C9", "NEAR-999")]
+
+    monkeypatch.setattr(parts_search, "search", _search)
+
+    rows = [
+        ds.DatasheetRow(refs=["U1"], mpn="LM339", status="no-lcsc"),
+        ds.DatasheetRow(refs=["U2"], mpn="LM339", status="no-lcsc"),  # dedupe
+        ds.DatasheetRow(refs=["U3"], mpn="NOPE-999", status="no-lcsc"),  # miss
+        ds.DatasheetRow(refs=["J1"], status="no-lcsc"),               # no mpn
+        ds.DatasheetRow(refs=["R1"], lcsc="C11702"),                  # untouched
+    ]
+    _resolve_mpn_only_rows(rows, cache=None)
+
+    assert calls.count("LM339") == 1                 # deduped across U1/U2
+    assert "NOPE-999" in calls
+    by_refs = {tuple(r.refs or []): r for r in rows}
+    assert by_refs[("U1",)].lcsc == "C1" and by_refs[("U1",)].status == ""
+    assert by_refs[("U2",)].lcsc == "C1" and by_refs[("U2",)].status == ""
+    assert by_refs[("U3",)].status == "not-found"
+    assert "nearest" in by_refs[("U3",)].note
+    assert by_refs[("J1",)].status == "no-lcsc"       # no mpn: left alone
+    assert by_refs[("R1",)].lcsc == "C11702"          # already had lcsc
+
+
+def test_resolve_mpn_only_rows_finds_exact_beyond_first_ten(monkeypatch):
+    """A short generic MPN whose exact row ranks 11th must still be found:
+    the exact-resolution search widens past the old limit=10 cap."""
+    from altium_kicad_cli.commands.jlc import _resolve_mpn_only_rows
+    from altium_kicad_cli.parts import search as parts_search
+
+    class _P:
+        def __init__(self, lcsc, mpn, stock=10, basic=True):
+            self.lcsc, self.mpn, self.stock, self.basic = lcsc, mpn, stock, basic
+
+    # Ten longer/marketing variants rank ahead of the exact casefold match.
+    pool = [_P(f"C{i}", f"BSS138LT{i}G") for i in range(10)]
+    pool.append(_P("C999", "BSS138"))          # the exact match, 11th row
+
+    seen: dict = {}
+
+    def _search(q, limit=10, cache_dir=None):
+        seen["limit"] = limit
+        return pool[:limit]
+
+    monkeypatch.setattr(parts_search, "search", _search)
+    rows = [ds.DatasheetRow(refs=["Q1"], mpn="BSS138", status="no-lcsc")]
+    _resolve_mpn_only_rows(rows, cache=None)
+
+    assert seen["limit"] > 10                   # searches wider than the old cap
+    assert rows[0].lcsc == "C999"               # exact match found …
+    assert rows[0].status == ""                 # … not flipped to not-found
+
+
+def test_cli_schematic_resolve_mpn_hit_and_miss(monkeypatch, tmp_path, capsys):
+    from altium_kicad_cli.parts import search as parts_search
+
+    class _P:
+        def __init__(self, lcsc, mpn, stock=10, basic=True):
+            self.lcsc, self.mpn, self.stock, self.basic = lcsc, mpn, stock, basic
+
+    sch = model.Schematic(
+        source_path="<t>", source_format="kicad",
+        components=[
+            _comp("U1", {"MPN": "LM339"}),      # hit
+            _comp("U3", {"MPN": "NOPE-999"}),   # miss
+            _comp("J1"),                        # no MPN at all: stays no-lcsc
+        ], nets=[])
+    tgt = tmp_path / "board.kicad_sch"
+    tgt.write_text("(kicad_sch)")
+    monkeypatch.setattr("altium_kicad_cli.commands.jlc._load_schematic",
+                        lambda p: sch)
+
+    def _search(q, limit=10, cache_dir=None):
+        if q.casefold() == "lm339":
+            return [_P("C1", "LM339"), _P("C2", "LM339N")]
+        return [_P("C9", "NEAR-999")]
+
+    monkeypatch.setattr(parts_search, "search", _search)
+    monkeypatch.setattr(ds, "resolve",
+                        lambda lcsc, **kw: ds.DatasheetRow(
+                            lcsc=lcsc, mpn="LM339", url=PDF_URL,
+                            status="resolved"))
+
+    rc = main(["jlc", "datasheet", str(tgt), "--resolve-mpn", "--json"])
+    doc = json.loads(capsys.readouterr().out)
+    rows = doc["rows"]
+    by_refs = {tuple(r["refs"] or []): r for r in rows}
+    assert by_refs[("U1",)]["status"] == "resolved"
+    assert by_refs[("U3",)]["status"] == "not-found"
+    assert "nearest" in by_refs[("U3",)]["note"]
+    assert by_refs[("J1",)]["status"] == "no-lcsc"
+    assert rc == EXIT["FINDINGS"]                     # U3 not-found is a problem
+
+
+def test_cli_schematic_resolve_mpn_flag_off_keeps_old_behavior(
+        monkeypatch, tmp_path, capsys):
+    from altium_kicad_cli.parts import search as parts_search
+
+    sch = model.Schematic(
+        source_path="<t>", source_format="kicad",
+        components=[_comp("U1", {"MPN": "LM339"})], nets=[])
+    tgt = tmp_path / "board.kicad_sch"
+    tgt.write_text("(kicad_sch)")
+    monkeypatch.setattr("altium_kicad_cli.commands.jlc._load_schematic",
+                        lambda p: sch)
+
+    def _boom(*a, **kw):
+        raise AssertionError("catalog must not be searched without --resolve-mpn")
+
+    monkeypatch.setattr(parts_search, "search", _boom)
+
+    rc = main(["jlc", "datasheet", str(tgt), "--json"])
+    doc = json.loads(capsys.readouterr().out)
+    row = doc["rows"][0]
+    assert row["status"] == "no-lcsc"
+    assert "--resolve-mpn" in row["note"]
+    assert rc == EXIT["OK"]                   # no-lcsc alone isn't a "problem"
+
+
+def test_resolve_mpn_only_rows_network_error_maps_to_exit_7(
+        monkeypatch, tmp_path, capsys):
+    from altium_kicad_cli.parts import search as parts_search
+
+    sch = model.Schematic(
+        source_path="<t>", source_format="kicad",
+        components=[_comp("U1", {"MPN": "LM339"})], nets=[])
+    tgt = tmp_path / "board.kicad_sch"
+    tgt.write_text("(kicad_sch)")
+    monkeypatch.setattr("altium_kicad_cli.commands.jlc._load_schematic",
+                        lambda p: sch)
+
+    def _net(q, limit=10, cache_dir=None):
+        raise parts_search.JlcNetworkError("boom")
+
+    monkeypatch.setattr(parts_search, "search", _net)
+    rc = main(["jlc", "datasheet", str(tgt), "--resolve-mpn"])
+    assert rc == EXIT["TOOL_MISSING"]
+    assert "NETWORK" in capsys.readouterr().err
+
+
 def test_cli_bare_target_is_usage_error(capsys):
     assert main(["jlc", "datasheet"]) == EXIT["USAGE"]
 

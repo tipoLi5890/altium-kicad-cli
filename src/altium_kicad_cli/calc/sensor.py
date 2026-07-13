@@ -42,7 +42,8 @@ from .registry import CalcError, Param, Result, register
           "a chemistry/load-specific figure. Never promise runtime without "
           "margin — capacity falls further with cold and pulse loads.",
 )
-def _calc_battery_life(capacity, i_avg, derating) -> list[Result]:
+def _calc_battery_life(capacity: float, i_avg: float,
+                        derating: float) -> list[Result]:
     if capacity <= 0 or i_avg <= 0 or not 0 < derating <= 1:
         raise CalcError("need capacity > 0, i_avg > 0, 0 < derating <= 1")
     hours = capacity * derating / i_avg
@@ -68,7 +69,8 @@ def _calc_battery_life(capacity, i_avg, derating) -> list[Result]:
           "rising threshold sees Rf+Rpu (output released) but the falling "
           "threshold still sees Rf to GND — hysteresis is asymmetric.",
 )
-def _calc_comparator_hysteresis(vcc, r1, r2, rf, rpu) -> list[Result]:
+def _calc_comparator_hysteresis(vcc: float, r1: float, r2: float, rf: float,
+                                 rpu: float) -> list[Result]:
     if vcc <= 0 or min(r1, r2, rf) <= 0 or rpu < 0:
         raise CalcError("need vcc, r1, r2, rf > 0 and rpu >= 0")
     g1, g2 = 1 / r1, 1 / r2
@@ -95,8 +97,8 @@ def _calc_comparator_hysteresis(vcc, r1, r2, rf, rpu) -> list[Result]:
     notes="τ too small = excess ripple; τ too large = envelope smeared "
           "(diagonal clipping). Diode drop and source impedance ignored.",
 )
-def _calc_envelope_detector(c_hold, r_bleed, f_carrier, f_signal,
-                            margin) -> list[Result]:
+def _calc_envelope_detector(c_hold: float, r_bleed: float, f_carrier: float,
+                            f_signal: float, margin: float) -> list[Result]:
     if min(c_hold, r_bleed, f_carrier, f_signal) <= 0 or margin < 1:
         raise CalcError("need positive c_hold/r_bleed/frequencies, margin >= 1")
     if f_carrier <= f_signal:
@@ -135,7 +137,8 @@ def _calc_envelope_detector(c_hold, r_bleed, f_carrier, f_signal,
     notes="Quick go/no-go at VIN_min; use `ldo` for IQ, efficiency and "
           "thermal (θJA/Tj). Dissipation is worst at VIN_max, not VIN_min.",
 )
-def _calc_ldo_headroom(vin_min, vout, v_dropout, i_load) -> list[Result]:
+def _calc_ldo_headroom(vin_min: float, vout: float, v_dropout: float,
+                        i_load: float) -> list[Result]:
     if not 0 < vout < vin_min or v_dropout < 0 or i_load <= 0:
         raise CalcError("need 0 < vout < vin_min, v_dropout >= 0, i_load > 0")
     headroom = vin_min - vout

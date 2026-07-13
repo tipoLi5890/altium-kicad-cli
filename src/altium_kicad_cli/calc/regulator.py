@@ -33,9 +33,11 @@ def _vout(kind: str, r1: float, r2: float, vref: float, iadj: float) -> float:
     return vref * (1 + r1 / r2)   # fb: r1 = top, r2 = bottom
 
 
-def _corners(kind, r1, r2, tol_pct, vref_min, vref_max, iadj_min, iadj_max):
+def _corners(kind: str, r1: float, r2: float, tol_pct: float, vref_min: float,
+             vref_max: float, iadj_min: float,
+             iadj_max: float) -> tuple[float, float]:
     t = tol_pct / 100.0
-    vals = []
+    vals: list[float] = []
     for f1, f2, vr, ia in itertools.product(
             (1 - t, 1 + t), (1 - t, 1 + t),
             (vref_min, vref_max), (iadj_min, iadj_max)):
@@ -56,8 +58,9 @@ def _corners(kind, r1, r2, tol_pct, vref_min, vref_max, iadj_min, iadj_max):
      Param("iadj_max", "A", "ADJ pin current max", default=100e-6),
      Param("tol", "%", "resistor tolerance", default=1.0)),
 )
-def _calc_regulator(kind, r1, r2, vref, vref_min, vref_max, iadj, iadj_max,
-                    tol) -> list[Result]:
+def _calc_regulator(kind: str, r1: float, r2: float, vref: float,
+                     vref_min: float, vref_max: float, iadj: float,
+                     iadj_max: float, tol: float) -> list[Result]:
     if r1 <= 0 or r2 <= 0:
         raise CalcError("resistors must be positive")
     if kind == "fb":
@@ -85,7 +88,8 @@ def _calc_regulator(kind, r1, r2, vref, vref_min, vref_max, iadj, iadj_max,
            default=240.0),
      Param("series", "", "E series", default="E96", choices=tuple(SERIES))),
 )
-def _calc_regulator_design(kind, vout, vref, iadj, r_fixed, series) -> list[Result]:
+def _calc_regulator_design(kind: str, vout: float, vref: float, iadj: float,
+                            r_fixed: float, series: str) -> list[Result]:
     if vout <= vref:
         raise CalcError(f"vout must exceed vref ({vref:g} V)")
     if kind == "adj3":

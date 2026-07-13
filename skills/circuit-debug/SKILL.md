@@ -173,7 +173,7 @@ Exit-code table (frozen in `errors.py`):
 | 4 | file not found | fix the path |
 | 5 | unsupported format (`ALTIUM_UNSUPPORTED`, wrong input kind) | expected refusal — see below |
 | 6 | op-list / verify failure | fix ops or connectivity (§3) |
-| 7 | external tool missing / network | install hint on stderr; only `jlc` needs network |
+| 7 | external tool missing / network | install hint on stderr; `jlc` needs network, `sim` needs libngspice (`NGSPICE_MISSING`/`NGSPICE_FAILED`) |
 
 Known deliberate refusals (exit 5 — **unsupported, not corrupt**; do not file these as parse bugs):
 binary `.SchLib` symbol records; binary `.PcbDoc` fills/regions/texts/polygons (pads/vias/
@@ -187,6 +187,48 @@ What to report upstream when akcli itself seems wrong: the one-line `ERROR: CODE
 stderr, the full traceback from re-running with `--debug`, the `akcli --version` output (package +
 protocol version), the exact command line, and the smallest input file that reproduces. Parse
 failures (exit 3) on files that open fine in Altium/KiCad are always report-worthy.
+
+## 5. `akcli sim` as a hypothesis tester
+
+Connectivity tools tell you *what is wired to what*; they cannot tell you *why the
+node sits at the wrong voltage* or *why the detector never latches*. When a bug is
+behavioral, turn the hypothesis into a simulation and let libngspice adjudicate.
+
+The move: state the hypothesis as a measurable bound, build a minimal `sim.json`
+that reproduces the suspect stage, and run it.
+
+```bash
+# "the divider should sit at half-rail but the ADC reads full-scale"
+akcli sim board.kicad_sch --deck-only              # (1) read the deck: is the node even wired right?
+akcli sim board.kicad_sch --sim probe.sim.json     # (2) measure it: does v(mid) match the theory?
+akcli sim board.kicad_sch --sim probe.sim.json --json | jq '.measured'   # raw numbers to compare
+```
+
+Debugging tactics specific to `sim`:
+
+- **`--deck-only` first, always.** It runs with no ngspice and shows the exact
+  net→node mapping. A bug is often visible right here: a stimulus wired to a
+  *floating* node because its `node` field did not match the net name after
+  sanitizing (net `+3V3` → node `_3V3`; the stimulus must say `"+3V3"`, the net
+  name, not `"3V3"`). A node that should be shared but shows two different tokens
+  is a real connectivity split.
+- **`SIM_UNMODELED` warnings are diagnostic.** If the stage under test contains a
+  diode/transistor/IC the tool would not guess a model for, it is *omitted from
+  the deck* — so a "wrong" measurement may just mean the part isn't in the
+  simulation. Model it (`Sim.*` fields, a `models` entry, or `fit_diode`) before
+  trusting the result.
+- **A failed measurement (`SIM_MEAS_FAILED`) is a finding, not a crash.** A `WHEN`
+  edge that never crosses (e.g. `t_detect` on a detector that never latches)
+  comes back as `None`/`failed` — which is frequently the bug you were chasing.
+- **Bisect with the deck.** Copy the `--deck-only` output, delete stages, and
+  re-measure to localize where the behavior diverges from intent.
+- **The IS-1000× trap (model, not circuit).** A diode fit from eyeballed
+  datasheet *curve* coordinates can land IS ~1000× high; its phantom reverse
+  leakage then breaks peak-detectors and sample-holds. If a detector "won't hold"
+  in sim but the topology is right, suspect the model — refit from a datasheet
+  *table* row with an ideality prior (`fit_diode`, single point). See `docs/sim.md`.
+
+Full reference (engine discovery, `sim.json` format, exit codes): `docs/sim.md`.
 
 ## Companion material
 

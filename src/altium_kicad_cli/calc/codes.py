@@ -34,7 +34,7 @@ _TOL_COLOR = {1: "brown", 2: "red", 0.5: "green", 0.25: "blue",
      Param("tolerance", "%", "tolerance band", default=1.0),
      Param("bands", "", "band count", default="5", choices=("4", "5"))),
 )
-def _calc_rescolor(value, tolerance, bands) -> list[Result]:
+def _calc_rescolor(value: float, tolerance: float, bands: str) -> list[Result]:
     if value <= 0:
         raise CalcError("value must be positive")
     ndig = 2 if bands == "4" else 3
@@ -69,7 +69,7 @@ _EIA96_MULT = {"Z": 0.001, "Y": 0.01, "R": 0.01, "X": 0.1, "S": 0.1,
     (Param("code", "", "printed marking, e.g. 472, 4R7, 1002, 01C",
            text=True),),
 )
-def _calc_smdcode(code) -> list[Result]:
+def _calc_smdcode(code: str) -> list[Result]:
     s = str(code).strip().upper()
     if not s:
         raise CalcError("give code=<marking>")
@@ -118,7 +118,7 @@ _ENV_LIMIT = {"harsh": 0.15, "normal": 0.25, "controlled": 0.50}
      Param("environment", "", "service environment", default="normal",
            choices=tuple(_ENV_LIMIT))),
 )
-def _calc_galvanic(metal1, metal2, environment) -> list[Result]:
+def _calc_galvanic(metal1: str, metal2: str, environment: str) -> list[Result]:
     if not metal1 or not metal2:
         raise CalcError(f"give metal1= and metal2= from {sorted(_ANODIC)}")
     v1, v2 = _ANODIC[metal1], _ANODIC[metal2]

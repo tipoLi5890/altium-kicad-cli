@@ -35,7 +35,7 @@ from __future__ import annotations
 import re
 
 from ..model import Component, Schematic
-from ..report import Finding, Severity
+from ..report import Finding, Severity, anchor
 
 __all__ = ["run"]
 
@@ -101,6 +101,10 @@ def _identity(comp: Component) -> object:
     return uid if uid is not None else ("__no_uid__", id(comp))
 
 
+def _pos(comp: Component) -> tuple[float, float]:
+    return (comp.x_mil, comp.y_mil)
+
+
 def _real_components(sch: Schematic) -> list[Component]:
     """Components eligible for BOM checks.
 
@@ -130,6 +134,16 @@ def run(sch: Schematic) -> list[Finding]:
             continue
         distinct = {_identity(c) for c in members}
         if len(distinct) > 1:
+            # One anchor per distinct placement sharing the offending desig —
+            # the ambiguity IS "which of these is really `desig`".
+            seen_ids: set = set()
+            dup_anchors = []
+            for c in members:
+                ident = _identity(c)
+                if ident in seen_ids:
+                    continue
+                seen_ids.add(ident)
+                dup_anchors.append(anchor("component", desig, _pos(c)))
             findings.append(
                 Finding(
                     code="BOM_DUPLICATE_DESIGNATOR",
@@ -139,6 +153,8 @@ def run(sch: Schematic) -> list[Finding]:
                         f"components ({len(members)} placements)"
                     ),
                     refs=[desig],
+                    pos=_pos(members[0]),
+                    anchors=dup_anchors,
                 )
             )
 
@@ -171,11 +187,17 @@ def run(sch: Schematic) -> list[Finding]:
 
     # --- corrupt (U+FFFD-bearing) text, aggregated per schematic ----------------
     corrupt: list[str] = []
+    corrupt_anchors = []
+    corrupt_pos: tuple[float, float] | None = None
     for desig, members in groups.items():
         for c in members:
             texts = [c.value, *(c.parameters or {}).values()]
             if any(t and "�" in t for t in texts):
                 corrupt.append(desig)
+                p = _pos(c)
+                corrupt_anchors.append(anchor("component", desig, p))
+                if corrupt_pos is None:
+                    corrupt_pos = p
                 break
     if corrupt:
         findings.append(
@@ -191,6 +213,8 @@ def run(sch: Schematic) -> list[Finding]:
                     "preserves the original text"
                 ),
                 refs=corrupt,
+                pos=corrupt_pos,
+                anchors=corrupt_anchors,
             )
         )
 
@@ -198,6 +222,7 @@ def run(sch: Schematic) -> list[Finding]:
     for desig, members in groups.items():
         has_value = any(_clean(c.value) or _part_identity(c) for c in members)
         has_footprint = any(_clean(c.footprint) for c in members)
+        pos = _pos(members[0])
         if not has_value:
             findings.append(
                 Finding(
@@ -205,6 +230,8 @@ def run(sch: Schematic) -> list[Finding]:
                     severity=Severity.WARNING,
                     message=f"component {desig} has no value",
                     refs=[desig],
+                    pos=pos,
+                    anchors=[anchor("component", desig, pos)],
                 )
             )
         if not has_footprint:
@@ -214,6 +241,8 @@ def run(sch: Schematic) -> list[Finding]:
                     severity=Severity.WARNING,
                     message=f"component {desig} has no footprint",
                     refs=[desig],
+                    pos=pos,
+                    anchors=[anchor("component", desig, pos)],
                 )
             )
 

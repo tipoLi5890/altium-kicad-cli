@@ -24,6 +24,14 @@ from ._shared import (
 )
 
 
+# Catalog depth for an *exact*-MPN resolution (datasheet --resolve-mpn / the
+# standalone-MPN path). The jlcsearch mirror ranks longer/marketing variants
+# ahead of a short generic MPN, so a depth of 10 could push the true exact
+# casefold match past the cut and mis-report the part as not-found; search wider
+# and let the exact-match filter pick it out.
+_MPN_RESOLVE_LIMIT = 100
+
+
 def _jlc_price(p) -> str:
     return f"${p:.4f}" if isinstance(p, (int, float)) else "-"
 
@@ -255,6 +263,38 @@ def _cmd_jlc_bom(args: argparse.Namespace) -> int:
     return EXIT["OK"]
 
 
+def _resolve_mpn_only_rows(rows: list, cache) -> None:
+    """In-place: pin a C-number onto ``no-lcsc`` rows via exact MPN match.
+
+    One catalog search per *distinct* MPN (casefold-deduped across BOM
+    refs) — misses are rewritten to ``not-found`` with the nearest-MPN
+    hint, same as the standalone-MPN lookup path. Network errors propagate
+    (``JlcNetworkError``) so the caller can map them to exit 7.
+    """
+    from ..parts import search as parts_search  # lazy: networked
+
+    pending = [r for r in rows if r.status == "no-lcsc" and r.mpn]
+    by_mpn: dict[str, list] = {}
+    for r in pending:
+        by_mpn.setdefault(r.mpn.casefold(), []).append(r)
+    for key, group in by_mpn.items():
+        mpn = group[0].mpn
+        results = parts_search.search(mpn, limit=_MPN_RESOLVE_LIMIT,
+                                      cache_dir=cache)
+        exact = [p for p in results if p.mpn.casefold() == key]
+        exact.sort(key=lambda p: (p.stock > 0, p.basic, p.stock), reverse=True)
+        for r in group:
+            if exact:
+                r.lcsc = exact[0].lcsc
+                r.mpn = exact[0].mpn
+                r.status = ""
+                r.note = ""
+            else:
+                near = f" (nearest: {results[0].mpn})" if results else ""
+                r.status = "not-found"
+                r.note = "no exact MPN match" + near
+
+
 def _cmd_jlc_datasheet(args: argparse.Namespace) -> int:
     """`jlc datasheet <target>` — resolve (and fetch) datasheet PDFs.
 
@@ -278,10 +318,17 @@ def _cmd_jlc_datasheet(args: argparse.Namespace) -> int:
     elif Path(target).exists():
         sch = _load_schematic(_require_path(target))
         rows = ds.rows_for_schematic(sch)
+        if getattr(args, "resolve_mpn", False):
+            try:
+                _resolve_mpn_only_rows(rows, cache)
+            except parts_search.JlcNetworkError as exc:
+                sys.stderr.write(f"ERROR: NETWORK: {exc.message}\n")
+                return EXIT["TOOL_MISSING"]
     else:
         # MPN: exact match against the catalog, prefer in-stock/Basic depth
         try:
-            results = parts_search.search(target, limit=10, cache_dir=cache)
+            results = parts_search.search(target, limit=_MPN_RESOLVE_LIMIT,
+                                          cache_dir=cache)
         except parts_search.JlcNetworkError as exc:
             sys.stderr.write(f"ERROR: NETWORK: {exc.message}\n")
             return EXIT["TOOL_MISSING"]
@@ -587,6 +634,10 @@ def register(sub, common) -> None:
                           "or ~/.cache/akcli/datasheets)")
     pds.add_argument("--force", action="store_true",
                      help="re-download even when the file already exists")
+    pds.add_argument("--resolve-mpn", dest="resolve_mpn", action="store_true",
+                     help="for MPN-only BOM lines, exact-match the catalog "
+                          "(same policy as `jlc bom`) to pin a C-number "
+                          "before resolving (one search per distinct MPN)")
     pds.add_argument("--exit-zero", action="store_true",
                      help="always exit 0 (report mode)")
     pds.set_defaults(handler=_cmd_jlc_datasheet)

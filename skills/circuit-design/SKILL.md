@@ -79,7 +79,7 @@ engineering calculators — E-series snap, dividers, IPC-2221 track width, I²C 
 
 ### (3) Draw / edit a **KiCad** schematic — op-list, then plan, then draw
 
-KiCad is the only writable target. Build an op-list JSON (document shape and the op vocabulary — 16 ops incl. `delete_component`/`delete_object`/`move_component`
+KiCad is the only writable target. Build an op-list JSON (document shape and the op vocabulary — 18 ops + 9 macros incl. `delete_component`/`delete_object`/`add_sheet`
 are defined in **`schemas/ops.schema.json`**; guide: `docs/op-list-authoring.md`, scaffolder: `akcli ops list` / `akcli ops template <op>`):
 
 ```json

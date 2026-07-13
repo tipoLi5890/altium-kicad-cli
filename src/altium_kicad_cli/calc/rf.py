@@ -59,7 +59,7 @@ def _calc_wavelength(f: float, er: float) -> list[Result]:
      Param("d_outer", "m", "shield inner diameter"),
      Param("er", "", "dielectric relative permittivity", default=1.0)),
 )
-def _calc_coax(d_inner, d_outer, er) -> list[Result]:
+def _calc_coax(d_inner: float, d_outer: float, er: float) -> list[Result]:
     if not 0 < d_inner < d_outer:
         raise CalcError("need 0 < d_inner < d_outer")
     z0 = ETA0 / (2 * math.pi * math.sqrt(er)) * math.log(d_outer / d_inner)
@@ -74,7 +74,7 @@ def _calc_coax(d_inner, d_outer, er) -> list[Result]:
      Param("diameter", "m", "wire diameter d"),
      Param("er", "", "effective relative permittivity", default=1.0)),
 )
-def _calc_twinlead(spacing, diameter, er) -> list[Result]:
+def _calc_twinlead(spacing: float, diameter: float, er: float) -> list[Result]:
     if not 0 < diameter <= spacing:
         raise CalcError("need 0 < diameter ≤ spacing")
     z0 = ETA0 / (math.pi * math.sqrt(er)) * math.acosh(spacing / diameter)
@@ -104,7 +104,7 @@ def _hj_eeff(u: float, er: float) -> float:
     notes="Zero trace thickness assumed; solder mask ignored. Confirm "
           "production stackups with the fab's field solver.",
 )
-def _calc_microstrip(width, height, er) -> list[Result]:
+def _calc_microstrip(width: float, height: float, er: float) -> list[Result]:
     if width <= 0 or height <= 0 or er < 1:
         raise CalcError("need width, height > 0 and er ≥ 1")
     u = width / height
@@ -137,7 +137,7 @@ def _ellipk(k: float) -> float:
      Param("er", "", "dielectric relative permittivity", default=4.5)),
     notes="Exact for zero trace thickness, centered strip.",
 )
-def _calc_stripline(width, spacing, er) -> list[Result]:
+def _calc_stripline(width: float, spacing: float, er: float) -> list[Result]:
     if width <= 0 or spacing <= 0 or er < 1:
         raise CalcError("need width, spacing > 0 and er ≥ 1")
     k = math.tanh(math.pi * width / (2 * spacing))
@@ -163,7 +163,8 @@ def _calc_stripline(width, spacing, er) -> list[Result]:
     notes="Closed-form estimate (loose coupling, zero thickness); for "
           "production impedance control use the fab's field solver.",
 )
-def _calc_diffpair(width, spacing, height, er, topology) -> list[Result]:
+def _calc_diffpair(width: float, spacing: float, height: float, er: float,
+                    topology: str) -> list[Result]:
     if min(width, spacing, height) <= 0 or er < 1:
         raise CalcError("width, spacing, height must be positive; er ≥ 1")
     if topology == "microstrip":
@@ -196,7 +197,7 @@ _MATCH_REF = ("D.M. Pozar, Microwave Engineering 4th ed. (2012) §5.1 "
     notes="Series element on the low-R side, shunt on the high-R side. Both "
           "low-pass (L series + C shunt) and high-pass duals are given.",
 )
-def _calc_lmatch(f, r_source, r_load) -> list[Result]:
+def _calc_lmatch(f: float, r_source: float, r_load: float) -> list[Result]:
     if min(f, r_source, r_load) <= 0:
         raise CalcError("f, r_source, r_load must be positive")
     if abs(r_source - r_load) < 1e-12:
@@ -226,7 +227,8 @@ def _calc_lmatch(f, r_source, r_load) -> list[Result]:
           "applies to the higher-R side and must exceed √(R_hi/R_lo − 1). "
           "Low-pass form: shunt C — series L — shunt C.",
 )
-def _calc_pimatch(f, r_source, r_load, q) -> list[Result]:
+def _calc_pimatch(f: float, r_source: float, r_load: float,
+                   q: float) -> list[Result]:
     if min(f, r_source, r_load) <= 0:
         raise CalcError("f, r_source, r_load must be positive")
     r_hi, r_lo = max(r_source, r_load), min(r_source, r_load)
@@ -273,7 +275,8 @@ def _att_snap(name: str, exact: float, series: str) -> list[Result]:
      Param("series", "", "E series for snapping", default="E96",
            choices=tuple(SERIES))),
 )
-def _calc_attenuator(db, z0, topology, series) -> list[Result]:
+def _calc_attenuator(db: float, z0: float, topology: str,
+                      series: str) -> list[Result]:
     if db <= 0 or z0 <= 0:
         raise CalcError("need db > 0 and z0 > 0")
     a = 10 ** (db / 20)

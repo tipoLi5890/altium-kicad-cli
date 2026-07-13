@@ -964,3 +964,179 @@ def test_reversed_vector_range_inclusive_both_ends(bus_hier_parity):
     assert ee["K0"] == {("R9", "1"), ("R10", "1")}
     named = _akcli_named(kreader.read_sch(bus_hier_parity))
     assert named["K3"] == ee["K3"] and named["K0"] == ee["K0"]
+
+
+# --------------------------------------------------------------------------- #
+# (g) bus aliases — raw-text hierarchy (the writer cannot emit bus_alias or put
+# labels/buses on a child sheet). Verdict locked (kicad-cli 10.0.4): a
+# (bus_alias "NAME" (members ...)) has NO effect on the exported netlist. A bus
+# labeled with the alias name behaves like a plain, member-less bus — the
+# netlist is identical whether or not the alias is declared:
+#   * a rip labeled with a declared member keeps its own label's SCOPE (a local
+#     "EN" stays sheet-local; it does NOT globalize the way a group "{...}" or
+#     vector "A[0..3]" bus member does), so cross-sheet member rips never merge;
+#   * when the alias NAME is itself a vector ("A[0..3]"), the vector wins and
+#     the declared members are ignored.
+# akcli matches for free: it expands vector labels and treats every non-vector
+# label (alias names included) as member-less, and never reads (bus_alias ...).
+# --------------------------------------------------------------------------- #
+def _bus_alias_fixture(d: Path, alias_name: str, members: list[str],
+                       root_rips, child_rips, *, declare_alias: bool = True) -> Path:
+    U = _bus_uuid_counter()
+
+    def wire(a, b, tag="wire"):
+        return (f'({tag} (pts (xy {_mm(a[0])} {_mm(a[1])}) '
+                f'(xy {_mm(b[0])} {_mm(b[1])}))'
+                f' (stroke (width 0) (type default)) (uuid "{U()}"))')
+
+    def label(text, x, y, tag="label", extra=""):
+        return (f'({tag} "{text}" {extra}(at {_mm(x)} {_mm(y)} 0)'
+                f' (effects (font (size 1.27 1.27))) (uuid "{U()}"))')
+
+    def entry(x, y):
+        return (f'(bus_entry (at {_mm(x)} {_mm(y)}) (size 2.54 2.54)'
+                f' (stroke (width 0) (type default)) (uuid "{U()}"))')
+
+    def sym(ref, x, y, path):
+        return (
+            f'(symbol (lib_id "RR") (at {_mm(x)} {_mm(y)} 0) (unit 1)\n'
+            f'  (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)\n'
+            f'  (uuid "{U()}")\n'
+            f'  (property "Reference" "{ref}" (at 0 0 0)'
+            f' (effects (font (size 1.27 1.27))))\n'
+            f'  (property "Value" "RR" (at 0 0 0)'
+            f' (effects (font (size 1.27 1.27))))\n'
+            f'  (pin "1" (uuid "{U()}"))\n  (pin "2" (uuid "{U()}"))\n'
+            f'  (instances (project "busalias"'
+            f' (path "{path}" (reference "{ref}") (unit 1)))))'
+        )
+
+    def rip(body, bus_x, y, ref, lbl, path):
+        fx, fy = bus_x + 100, y + 100
+        body.append(entry(bus_x, y))
+        body.append(wire((fx, fy), (fx + 600, fy)))
+        if lbl:
+            body.append(label(lbl, fx + 300, fy))
+        body.append(sym(ref, fx + 600, fy + 150, path))
+
+    def alias():
+        mem = " ".join(f'"{m}"' for m in members)
+        return f'(bus_alias "{alias_name}" (members {mem}))'
+
+    libblock = "(lib_symbols\n" + "\n".join(_LIB.splitlines()[1:-1]) + ")"
+    rootpath = f"/{_BUS_ROOT_UUID}"
+    childpath = f"/{_BUS_ROOT_UUID}/{_BUS_SHEET_UUID}"
+
+    rb: list[str] = []
+    if declare_alias:
+        rb.append(alias())
+    rb.append(wire((4000, 2000), (4000, 8000), tag="bus"))
+    rb.append(label(alias_name, 4000, 2200, tag="global_label",
+                    extra="(shape input) "))
+    y = 2500
+    for ref, lbl in root_rips:
+        rip(rb, 4000, y, ref, lbl, rootpath)
+        y += 600
+    rb.append(
+        f'(sheet (at {_mm(14000)} {_mm(2000)}) (size {_mm(1000)} {_mm(800)})\n'
+        f'  (stroke (width 0.1524) (type solid)) (fill (color 0 0 0 0))\n'
+        f'  (uuid "{_BUS_SHEET_UUID}")\n'
+        f'  (property "Sheetname" "child" (at 0 0 0)'
+        f' (effects (font (size 1.27 1.27))))\n'
+        f'  (property "Sheetfile" "child.kicad_sch" (at 0 0 0)'
+        f' (effects (font (size 1.27 1.27))))\n'
+        f'  (instances (project "busalias"'
+        f' (path "/{_BUS_ROOT_UUID}" (page "2")))))'
+    )
+    root = (f'(kicad_sch (version 20231120) (generator "eeschema")'
+            f' (uuid "{_BUS_ROOT_UUID}") (paper "A4")\n{libblock}\n'
+            + "\n".join(rb) + "\n)\n")
+    (d / "busalias_root.kicad_sch").write_text(root)
+
+    cb: list[str] = []
+    if declare_alias:
+        cb.append(alias())
+    cb.append(wire((4000, 2000), (4000, 8000), tag="bus"))
+    cb.append(label(alias_name, 4000, 2200, tag="global_label",
+                    extra="(shape input) "))
+    y = 2500
+    for ref, lbl in child_rips:
+        rip(cb, 4000, y, ref, lbl, childpath)
+        y += 600
+    child = (f'(kicad_sch (version 20231120) (generator "eeschema")'
+             f' (uuid "{U()}") (paper "A4")\n{libblock}\n'
+             + "\n".join(cb) + "\n)\n")
+    (d / "child.kicad_sch").write_text(child)
+    return d / "busalias_root.kicad_sch"
+
+
+@pytest.fixture(scope="module")
+def bus_alias_parity(tmp_path_factory):
+    d = tmp_path_factory.mktemp("parity_bus_alias")
+    return _bus_alias_fixture(
+        d, "CTRL", ["EN", "RST", "D[0..3]"],
+        [("R1", "EN"), ("R3", "D2"), ("R5", "XX")],
+        [("R2", "EN"), ("R4", "D2"), ("R6", "XX")],
+    )
+
+
+@needs_kicad
+def test_bus_alias_partition_parity(bus_alias_parity):
+    assert _ee_partition(_export_nets(bus_alias_parity)) == _akcli_partition(
+        kreader.read_sch(bus_alias_parity))
+
+
+@needs_kicad
+def test_bus_alias_members_stay_sheet_local(bus_alias_parity):
+    # A group/vector bus would merge EN and D2 across sheets; the alias never
+    # does — its members inherit each rip label's local scope.
+    ee = _export_nets(bus_alias_parity)
+    assert ee["/EN"] == {("R1", "1")}
+    assert ee["/child/EN"] == {("R2", "1")}
+    assert ee["/D2"] == {("R3", "1")}
+    assert ee["/child/D2"] == {("R4", "1")}
+    part = _akcli_partition(kreader.read_sch(bus_alias_parity))
+    assert frozenset({("R1", "1")}) in part
+    assert frozenset({("R2", "1")}) in part
+    assert frozenset({("R1", "1"), ("R2", "1")}) not in part
+
+
+@needs_kicad
+def test_bus_alias_declaration_has_no_netlist_effect(tmp_path):
+    # THE verdict: declaring the alias changes nothing in the exported netlist.
+    d1 = tmp_path / "with"
+    d1.mkdir()
+    with_alias = _export_nets(_bus_alias_fixture(
+        d1, "CTRL", ["EN", "RST", "D[0..3]"],
+        [("R1", "EN"), ("R3", "D2")], [("R2", "EN"), ("R4", "D2")],
+        declare_alias=True))
+    d0 = tmp_path / "without"
+    d0.mkdir()
+    without = _export_nets(_bus_alias_fixture(
+        d0, "CTRL", ["EN", "RST", "D[0..3]"],
+        [("R1", "EN"), ("R3", "D2")], [("R2", "EN"), ("R4", "D2")],
+        declare_alias=False))
+    assert _ee_partition(with_alias) == _ee_partition(without)
+
+
+@pytest.fixture(scope="module")
+def bus_alias_vector_collision(tmp_path_factory):
+    # alias NAME "A[0..3]" also parses as a vector; members X, Y are decoys.
+    d = tmp_path_factory.mktemp("parity_bus_alias_vec")
+    return _bus_alias_fixture(
+        d, "A[0..3]", ["X", "Y"],
+        [("R1", "A2"), ("R3", "X")],
+        [("R2", "A2"), ("R4", "X")],
+    )
+
+
+@needs_kicad
+def test_bus_alias_vector_name_collision_vector_wins(bus_alias_vector_collision):
+    ee = _export_nets(bus_alias_vector_collision)
+    # the vector member A2 is a real global bus member and merges cross-sheet;
+    # the alias member X is ignored and stays sheet-local.
+    assert ee["A2"] == {("R1", "1"), ("R2", "1")}
+    assert ee["/X"] == {("R3", "1")}
+    assert ee["/child/X"] == {("R4", "1")}
+    assert _ee_partition(ee) == _akcli_partition(
+        kreader.read_sch(bus_alias_vector_collision))

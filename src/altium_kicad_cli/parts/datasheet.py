@@ -223,7 +223,9 @@ def rows_for_schematic(sch: "Schematic") -> list[DatasheetRow]:
 
     Lines carrying only an MPN (or nothing) are surfaced as ``no-lcsc`` —
     resolving them would mean a catalog search per line; ``jlc bom
-    --suggest/--fix`` is the tool that pins C-numbers first.
+    --suggest/--fix`` pins C-numbers first, or pass ``--resolve-mpn`` to
+    this command to exact-match the catalog inline (one search per
+    distinct MPN).
     """
     from .bom_jlc import collect_lines
     rows: list[DatasheetRow] = []
@@ -235,5 +237,5 @@ def rows_for_schematic(sch: "Schematic") -> list[DatasheetRow]:
             rows.append(DatasheetRow(
                 refs=line.refs, mpn=line.mpn, status="no-lcsc",
                 note=("no LCSC parameter — pin a C-number first "
-                      "(jlc bom --suggest/--fix)")))
+                      "(jlc bom --suggest/--fix) or pass --resolve-mpn")))
     return rows

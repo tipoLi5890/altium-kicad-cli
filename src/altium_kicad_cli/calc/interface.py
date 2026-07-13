@@ -30,7 +30,8 @@ from .registry import CalcError, Param, Result, register
           "on the bus. Each bias resistor also counts toward the unit-load "
           "budget of the driver.",
 )
-def _calc_rs485(vcc, z0, n_term, v_ab_min) -> list[Result]:
+def _calc_rs485(vcc: float, z0: float, n_term: float,
+                 v_ab_min: float) -> list[Result]:
     if min(vcc, z0, n_term, v_ab_min) <= 0:
         raise CalcError("all parameters must be positive")
     r_par = z0 / n_term                       # parallel terminations
@@ -55,7 +56,7 @@ def _calc_rs485(vcc, z0, n_term, v_ab_min) -> list[Result]:
     (Param("z0", "Ω", "cable impedance", default=120.0),
      Param("c_split", "F", "split capacitor to GND", default=4.7e-9)),
 )
-def _calc_can(z0, c_split) -> list[Result]:
+def _calc_can(z0: float, c_split: float) -> list[Result]:
     if z0 <= 0 or c_split <= 0:
         raise CalcError("z0 and c_split must be positive")
     half = z0 / 2

@@ -24,7 +24,8 @@ only writable target; the writer is flat (single-sheet) v1.
 requirements → block plan → part selection → op-list → `akcli plan` (read the
 **Net changes** block) → `akcli draw` (dry-run) → `akcli draw --apply`
 (`--strict-nets` when editing an existing sheet) → re-read + `akcli check`
-(+ `--intent` when a snapshot exists).
+(+ `--intent` when a snapshot exists) → **verify behavior with `akcli sim`
+before ordering** (see below).
 
 ## (1) Block plan before any op
 
@@ -357,3 +358,27 @@ acceptance test. Matching is by pin membership, so renames don't false-fail;
 when other tools add pins). For key nets only, prefer a small hand-written
 intent file over a full snapshot — it asserts design intent, not incidental
 wiring.
+
+## (8) Verify behavior with `akcli sim` before ordering
+
+`check` and `intent` prove the sheet is *connected as planned*; they say nothing
+about whether the circuit *works*. Before you order boards, turn the block plan's
+numeric intent (a divider's midpoint, an RC corner, a detector threshold, a
+regulator's output) into a machine-checkable simulation:
+
+```bash
+akcli sim board.kicad_sch --deck-only                  # inspect the SPICE deck it would run
+akcli sim board.kicad_sch --sim board.sim.json         # run + assert, exit 1 on any violation
+```
+
+`sim.json` declares the stimuli (a supply, a stimulus current, a signal source),
+the analyses, and one bound per behavior you care about — e.g.
+`{"name": "mid", "meas": "MAX v(mid) from=0 to=1m", "approx": "1.65", "tol": "0.02"}`.
+Bounds accept the same engineering notation as `akcli calc`, so a value you
+computed there drops straight into an assertion (see the design-calc skill).
+Components resolve to SPICE devices via the `Sim.*`-fields → `sim.json` `models`
+→ heuristic ladder; anything the tool cannot honestly model is reported
+`SIM_UNMODELED` (a loud warning, never a silent guess) — give those parts a
+`Sim.*` field, a `models` entry, or a `fit_diode` model card. `--deck-only`
+works with no ngspice installed, so it doubles as a review/CI plan step. Full
+reference: `docs/sim.md`.

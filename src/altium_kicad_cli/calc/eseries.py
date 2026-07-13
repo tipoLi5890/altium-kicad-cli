@@ -20,6 +20,7 @@ References:
 from __future__ import annotations
 
 import bisect
+from typing import cast
 
 from .registry import CalcError, Param, Result, register
 from .si import fmt_eng
@@ -120,7 +121,7 @@ def _calc_eseries(value: float, series: str) -> list[Result]:
     return out
 
 
-def _pairs(values: list[float]):
+def _pairs(values: list[float]) -> list[tuple[float, str]]:
     """All 2-element series/parallel combos, sorted by value."""
     combos: list[tuple[float, str]] = []
     n = len(values)
@@ -134,11 +135,12 @@ def _pairs(values: list[float]):
     return combos
 
 
-def _best_near(sorted_combos, target: float):
+def _best_near(sorted_combos: list[tuple[float, str]],
+                target: float) -> tuple[float, str] | None:
     """Best (value, expr) in a sorted combo list near ``target``."""
     keys = [c[0] for c in sorted_combos]
     i = bisect.bisect_left(keys, target)
-    best = None
+    best: tuple[float, str] | None = None
     for k in (i - 1, i, i + 1):
         if 0 <= k < len(sorted_combos):
             v, expr = sorted_combos[k]
@@ -171,20 +173,23 @@ def _calc_rcombo(target: float, series: str, exclude1: float, exclude2: float,
     if not pool:
         raise CalcError("empty value pool (check rmin/rmax/excludes)")
 
-    def sol(v, expr, count):
+    def sol(v: float, expr: str, count: int) -> dict[str, object]:
         return {"expression": expr, "value": v, "n": count,
                 "error_pct": round((v - target) / target * 100.0, 6)}
 
     # 1R
-    best_single, err = None, float("inf")
+    best_single: float | None = None
+    err = float("inf")
     for v in pool:
         if abs(v - target) < err:
             best_single, err = v, abs(v - target)
+    assert best_single is not None       # pool is non-empty (checked above)
     one = sol(best_single, fmt_eng(best_single), 1)
 
     # 2R exhaustive
     pairs = _pairs(pool)
     v2 = _best_near(pairs, target)
+    assert v2 is not None                # pairs is non-empty (pool is non-empty)
     two = sol(v2[0], v2[1], 2)
 
     # 3R: single ⊕ pair
@@ -195,7 +200,7 @@ def _calc_rcombo(target: float, series: str, exclude1: float, exclude2: float,
             hit = _best_near(pairs, target - a)
             if hit:
                 v = a + hit[0]
-                if three is None or abs(v - target) < abs(three["value"] - target):
+                if three is None or abs(v - target) < abs(cast(float, three["value"]) - target):
                     three = sol(v, f"{fmt_eng(a)} + ({hit[1]})", 3)
         # parallel: pair must hit a*target/(a-target)
         if a > target:
@@ -203,7 +208,7 @@ def _calc_rcombo(target: float, series: str, exclude1: float, exclude2: float,
             hit = _best_near(pairs, want)
             if hit:
                 v = a * hit[0] / (a + hit[0])
-                if three is None or abs(v - target) < abs(three["value"] - target):
+                if three is None or abs(v - target) < abs(cast(float, three["value"]) - target):
                     three = sol(v, f"{fmt_eng(a)} ∥ ({hit[1]})", 3)
 
     # 4R: pair ⊕ pair
@@ -213,18 +218,19 @@ def _calc_rcombo(target: float, series: str, exclude1: float, exclude2: float,
             hit = _best_near(pairs, target - p1)
             if hit:
                 v = p1 + hit[0]
-                if four is None or abs(v - target) < abs(four["value"] - target):
+                if four is None or abs(v - target) < abs(cast(float, four["value"]) - target):
                     four = sol(v, f"({e1}) + ({hit[1]})", 4)
         if p1 > target:
             want = p1 * target / (p1 - target)
             hit = _best_near(pairs, want)
             if hit:
                 v = p1 * hit[0] / (p1 + hit[0])
-                if four is None or abs(v - target) < abs(four["value"] - target):
+                if four is None or abs(v - target) < abs(cast(float, four["value"]) - target):
                     four = sol(v, f"({e1}) ∥ ({hit[1]})", 4)
 
     solutions = [s for s in (one, two, three, four) if s]
-    best = min(solutions, key=lambda s: abs(s["error_pct"]))
+    best = min(solutions, key=lambda s: abs(cast(float, s["error_pct"])))
     return [Result("best", best["expression"], "",
-                   f"= {fmt_eng(best['value'], 'Ω')} ({best['error_pct']:+.4f}%)"),
+                   f"= {fmt_eng(cast(float, best['value']), 'Ω')} "
+                   f"({cast(float, best['error_pct']):+.4f}%)"),
             Result("solutions", solutions)]

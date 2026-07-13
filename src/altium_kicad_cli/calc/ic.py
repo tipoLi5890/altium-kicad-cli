@@ -34,7 +34,7 @@ from .registry import CalcError, Param, Result, register
     notes="Duty (output high) is always > 50 % in this basic topology; "
           "bypass RB with a diode for < 50 %.",
 )
-def _calc_ne555_astable(ra, rb, c) -> list[Result]:
+def _calc_ne555_astable(ra: float, rb: float, c: float) -> list[Result]:
     if min(ra, rb, c) <= 0:
         raise CalcError("ra, rb, c must be positive")
     f = 1.44 / ((ra + 2 * rb) * c)
@@ -51,7 +51,7 @@ def _calc_ne555_astable(ra, rb, c) -> list[Result]:
     (Param("r", "Ω", "timing resistor"),
      Param("c", "F", "timing capacitor")),
 )
-def _calc_ne555_mono(r, c) -> list[Result]:
+def _calc_ne555_mono(r: float, c: float) -> list[Result]:
     if r <= 0 or c <= 0:
         raise CalcError("r, c must be positive")
     return [Result("pulse_width", 1.1 * r * c, "s")]
@@ -67,7 +67,8 @@ def _calc_ne555_mono(r, c) -> list[Result]:
      Param("r_ref", "Ω", "chosen R_g (non-inv) / R_in (inv)", default=10e3),
      Param("series", "", "E series", default="E96", choices=tuple(SERIES))),
 )
-def _calc_opamp_gain(gain, topology, r_ref, series) -> list[Result]:
+def _calc_opamp_gain(gain: float, topology: str, r_ref: float,
+                      series: str) -> list[Result]:
     if r_ref <= 0:
         raise CalcError("r_ref must be positive")
     if topology == "non-inverting":
@@ -102,7 +103,8 @@ _I2C_FMAX = {"standard": 100e3, "fast": 400e3, "fast-plus": 1e6}
            choices=("standard", "fast", "fast-plus")),
      Param("series", "", "E series", default="E24", choices=tuple(SERIES))),
 )
-def _calc_i2c_pullup(vdd, cb, mode, series) -> list[Result]:
+def _calc_i2c_pullup(vdd: float, cb: float, mode: str,
+                      series: str) -> list[Result]:
     if vdd <= 0.4 or cb <= 0:
         raise CalcError("need vdd > 0.4 V and cb > 0")
     rmin = (vdd - 0.4) / 3e-3
@@ -128,7 +130,7 @@ def _calc_i2c_pullup(vdd, cb, mode, series) -> list[Result]:
     notes="Cstray is typically 2–5 pF; verify oscillation margin (gm) per "
           "AN2867 §4 for low-power oscillators.",
 )
-def _calc_crystal_caps(cl, cstray, series) -> list[Result]:
+def _calc_crystal_caps(cl: float, cstray: float, series: str) -> list[Result]:
     ideal = 2 * (cl - cstray)
     if ideal <= 0:
         raise CalcError("C_L must exceed C_stray")
@@ -150,10 +152,11 @@ def _calc_crystal_caps(cl, cstray, series) -> list[Result]:
      Param("theta_jc", "°C/W", "junction-to-case", default=5.0),
      Param("theta_cs", "°C/W", "case-to-sink (pad/grease)", default=0.5)),
 )
-def _calc_thermal(p, ta, theta_ja, tj_max, theta_jc, theta_cs) -> list[Result]:
+def _calc_thermal(p: float, ta: float, theta_ja: float, tj_max: float,
+                   theta_jc: float, theta_cs: float) -> list[Result]:
     if p <= 0:
         raise CalcError("power must be positive")
-    out = []
+    out: list[Result] = []
     if theta_ja > 0:
         out.append(Result("tj_no_heatsink", ta + p * theta_ja, "°C",
                           "compare against the device Tj(max)"))

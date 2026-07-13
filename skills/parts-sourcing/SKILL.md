@@ -110,6 +110,7 @@ akcli component board.kicad_sch U1             # confirm the placed part's pin -
 akcli jlc datasheet C2984661                  # resolve: PDF URL + MPN + manufacturer
 akcli jlc datasheet C2984661 --fetch          # download -> ~/.cache/akcli/datasheets/
 akcli jlc datasheet board.kicad_sch --fetch   # every BOM line with an LCSC id, one run
+akcli jlc datasheet board.kicad_sch --resolve-mpn --fetch  # MPN-only lines: catalog lookup first
 ```
 
 - Links come from the part's **EasyEDA record** (szlcsc-hosted PDF; the jlcsearch
@@ -127,6 +128,11 @@ akcli jlc datasheet board.kicad_sch --fetch   # every BOM line with an LCSC id, 
   `akcli calc` inputs (design-calc skill rule 5) and margin-check the placed
   circuit against the absolute-max column. Quote the table row (symbol,
   condition, min/typ/max) in the report so review can retrace it.
+- **Datasheet → SPICE model (diodes).** A forward-voltage table row also feeds
+  `akcli sim fit-diode --point 0.37@20m --n-prior 1.05` (a Schottky prior), which
+  fits a `.model` and can write `Sim.Device`/`Sim.Params` straight onto the part
+  (`--apply <sch> --designator D1 --write`) — turning a sourced diode into a
+  simulatable one. See `docs/sim.md` and the design-calc skill.
 - Batch mode surfaces `no-lcsc` lines — pin C-numbers first with
   `jlc bom --suggest/--fix`, then re-run.
 - **Live dashboard BOM links:** when `akcli view live <sch>` runs its networked

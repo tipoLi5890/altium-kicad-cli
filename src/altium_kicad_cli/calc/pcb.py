@@ -58,11 +58,12 @@ def _ipc_area_mil2(i: float, dtemp: float, k: float) -> float:
     notes="Fit valid to ΔT ≤ 100 °C, ≤35 A external / 17.5 A internal, "
           "width ≤ 400 mil. IPC-2152 gives measured (less conservative) data.",
 )
-def _calc_trackwidth(i, dtemp, thickness, length, rho) -> list[Result]:
+def _calc_trackwidth(i: float, dtemp: float, thickness: float, length: float,
+                      rho: float) -> list[Result]:
     if i <= 0 or dtemp <= 0 or thickness <= 0:
         raise CalcError("i, dtemp, thickness must be positive")
     h_mil = thickness / _MIL
-    out = []
+    out: list[Result] = []
     for label, k in (("external", 0.048), ("internal", 0.024)):
         a_mil2 = _ipc_area_mil2(i, dtemp, k)
         w = a_mil2 / h_mil * _MIL          # meters
@@ -84,7 +85,8 @@ def _calc_trackwidth(i, dtemp, thickness, length, rho) -> list[Result]:
      Param("layer", "", "layer position", default="external",
            choices=("external", "internal"))),
 )
-def _calc_trackcurrent(width, dtemp, thickness, layer) -> list[Result]:
+def _calc_trackcurrent(width: float, dtemp: float, thickness: float,
+                        layer: str) -> list[Result]:
     a_mil2 = (width / _MIL) * (thickness / _MIL)
     k = 0.048 if layer == "external" else 0.024
     return [Result("i_max", k * dtemp ** 0.44 * a_mil2 ** 0.725, "A")]
@@ -102,7 +104,8 @@ def _calc_trackcurrent(width, dtemp, thickness, layer) -> list[Result]:
           "licensed data with no public closed form — this tool refuses to "
           "fake it. The 2221 fit is the conservative classic.",
 )
-def _calc_tracktemp(width, i, thickness, layer) -> list[Result]:
+def _calc_tracktemp(width: float, i: float, thickness: float,
+                     layer: str) -> list[Result]:
     if min(width, i, thickness) <= 0:
         raise CalcError("width, i, thickness must be positive")
     a_mil2 = (width / _MIL) * (thickness / _MIL)
@@ -169,8 +172,9 @@ def _calc_clearance(voltage: float) -> list[Result]:
      Param("trise", "s", "signal rise time (for reactance)", default=1e-9),
      Param("rho", "Ω·m", "plating resistivity", default=RHO_CU)),
 )
-def _calc_via(drill, plating, length, pad, clearance_hole, z0, i, er,
-              dtemp, trise, rho) -> list[Result]:
+def _calc_via(drill: float, plating: float, length: float, pad: float,
+              clearance_hole: float, z0: float, i: float, er: float,
+              dtemp: float, trise: float, rho: float) -> list[Result]:
     if drill <= 0 or plating <= 0 or length <= 0:
         raise CalcError("drill, plating, length must be positive")
     d_outer = drill + 2 * plating
@@ -211,7 +215,8 @@ def _calc_via(drill, plating, length, pad, clearance_hole, z0, i, er,
           "steady-state fusing estimate for round wire. Estimates only — "
           "never use as a protection design without margin.",
 )
-def _calc_fusing(width, thickness, diameter, time, ambient, tmelt) -> list[Result]:
+def _calc_fusing(width: float, thickness: float, diameter: float, time: float,
+                  ambient: float, tmelt: float) -> list[Result]:
     if diameter > 0:
         area = math.pi / 4 * diameter ** 2
     elif width > 0:

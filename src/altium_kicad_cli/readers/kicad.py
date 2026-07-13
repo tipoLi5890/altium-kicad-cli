@@ -383,6 +383,15 @@ def _collect_wires_labels(
                     )
                 )
 
+    # (bus_alias ...) is intentionally NOT read into a primitive. kicad-cli
+    # 10.0.4 ignores bus aliases in netlist export: a bus labeled with an alias
+    # name behaves exactly like a plain, member-less bus (the netlist is
+    # identical with or without the declaration), and an alias name that is
+    # itself a vector expands as the vector. netbuild already reproduces this
+    # for free — non-vector labels carry no members — so expanding aliases here
+    # would only DIVERGE from eeschema. Verdicts locked in tests/test_bus_alias.py
+    # and tests/test_kicad_parity.py section (g).
+
     for nc in root.find_all("no_connect"):
         at = nc.find("at")
         prims.no_erc.append(

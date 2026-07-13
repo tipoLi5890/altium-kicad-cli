@@ -51,12 +51,13 @@ _RESERVED = {"list", "info"}
 
 
 def register(name: str, title: str, group: str, reference: str,
-             params: tuple[Param, ...], notes: str = ""):
+             params: tuple[Param, ...], notes: str = ""
+             ) -> Callable[[Callable[..., list[Result]]], Callable[..., list[Result]]]:
     """Decorator: add ``func`` to the registry under ``name``."""
     if name in _RESERVED:
         raise ValueError(f"calculator name {name!r} is reserved")
 
-    def deco(func):
+    def deco(func: Callable[..., list[Result]]) -> Callable[..., list[Result]]:
         if name in CALCS:
             raise ValueError(f"duplicate calculator {name!r}")
         CALCS[name] = Calc(name=name, title=title, group=group,
@@ -70,7 +71,7 @@ class CalcError(ValueError):
     """Bad input to a calculator (maps to exit 2 at the CLI layer)."""
 
 
-def compute(name: str, raw: dict[str, str]) -> dict:
+def compute(name: str, raw: dict[str, str]) -> dict[str, object]:
     """Run calculator ``name`` with string inputs; returns the full envelope."""
     from .si import parse_value
 

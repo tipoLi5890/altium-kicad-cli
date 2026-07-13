@@ -25,7 +25,7 @@ def _val(v: float) -> str:
     return fmt_eng(v, "").replace(" ", "")
 
 
-def _r(results, key):
+def _r(results: dict, key: str) -> float:
     cell = results.get(key)
     if cell is None or not isinstance(cell.get("value"), (int, float)):
         raise CalcError(f"--ops: result {key!r} missing — nothing to place")
@@ -63,8 +63,8 @@ MAPPABLE = {
 }
 
 
-def _attenuator_parts(r):
-    parts = []
+def _attenuator_parts(r: dict) -> list[tuple[str, str, str]]:
+    parts: list[tuple[str, str, str]] = []
     n = 1
     for key in ("r_series_std", "r_shunt_std", "r_bridge_std"):
         if key in r:

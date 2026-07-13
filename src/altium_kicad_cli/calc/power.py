@@ -29,7 +29,8 @@ from .registry import CalcError, Param, Result, register
      Param("eff", "", "estimated efficiency", default=0.9)),
     notes="ΔI_L of 20–40 % of Iout is the usual design window (SLVA477B §3).",
 )
-def _calc_buck(vin, vout, iout, fsw, ripple_pct, vripple, eff) -> list[Result]:
+def _calc_buck(vin: float, vout: float, iout: float, fsw: float,
+               ripple_pct: float, vripple: float, eff: float) -> list[Result]:
     if not 0 < vout < vin:
         raise CalcError("need 0 < vout < vin")
     if iout <= 0 or fsw <= 0 or not 0 < eff <= 1:
@@ -57,7 +58,8 @@ def _calc_buck(vin, vout, iout, fsw, ripple_pct, vripple, eff) -> list[Result]:
      Param("vripple", "V", "allowed output voltage ripple", default=0.01),
      Param("eff", "", "estimated efficiency", default=0.9)),
 )
-def _calc_boost(vin, vout, iout, fsw, ripple_pct, vripple, eff) -> list[Result]:
+def _calc_boost(vin: float, vout: float, iout: float, fsw: float,
+                ripple_pct: float, vripple: float, eff: float) -> list[Result]:
     if not 0 < vin < vout:
         raise CalcError("need 0 < vin < vout")
     if iout <= 0 or fsw <= 0 or not 0 < eff <= 1:
@@ -89,7 +91,8 @@ def _calc_boost(vin, vout, iout, fsw, ripple_pct, vripple, eff) -> list[Result]:
      Param("ta", "°C", "ambient temperature", default=25.0),
      Param("tj_max", "°C", "junction limit", default=125.0)),
 )
-def _calc_ldo(vin, vout, iout, iq, v_dropout, theta_ja, ta, tj_max) -> list[Result]:
+def _calc_ldo(vin: float, vout: float, iout: float, iq: float, v_dropout: float,
+              theta_ja: float, ta: float, tj_max: float) -> list[Result]:
     if not 0 < vout < vin or iout <= 0:
         raise CalcError("need 0 < vout < vin and iout > 0")
     p = (vin - vout) * iout + vin * iq
@@ -117,7 +120,8 @@ def _calc_ldo(vin, vout, iout, iq, v_dropout, theta_ja, ta, tj_max) -> list[Resu
      Param("fsw", "Hz", "switching frequency", default=100e3),
      Param("r_driver", "Ω", "driver internal resistance", default=1.0)),
 )
-def _calc_gate_drive(qg, v_drive, t_switch, fsw, r_driver) -> list[Result]:
+def _calc_gate_drive(qg: float, v_drive: float, t_switch: float, fsw: float,
+                      r_driver: float) -> list[Result]:
     if min(qg, v_drive, t_switch, fsw) <= 0:
         raise CalcError("qg, v_drive, t_switch, fsw must be positive")
     i_pk = qg / t_switch
@@ -144,7 +148,7 @@ def _calc_gate_drive(qg, v_drive, t_switch, fsw, r_driver) -> list[Result]:
     notes="Use a Kelvin (4-wire) footprint; the value is usually a special "
           "shunt part, not an E-series resistor.",
 )
-def _calc_shunt(i_max, v_sense, adc_fs) -> list[Result]:
+def _calc_shunt(i_max: float, v_sense: float, adc_fs: float) -> list[Result]:
     if i_max <= 0 or v_sense <= 0:
         raise CalcError("i_max and v_sense must be positive")
     r = v_sense / i_max
@@ -173,7 +177,8 @@ def _calc_shunt(i_max, v_sense, adc_fs) -> list[Result]:
     notes="First-order DCM-boundary sizing only — leakage, snubber, and "
           "core selection still required. Switch sees VIN_max + VOR + spike.",
 )
-def _calc_flyback(vin_min, vout, iout, fsw, vor, vd, eff) -> list[Result]:
+def _calc_flyback(vin_min: float, vout: float, iout: float, fsw: float,
+                   vor: float, vd: float, eff: float) -> list[Result]:
     if min(vin_min, vout, iout, fsw, vor) <= 0 or not 0 < eff <= 1:
         raise CalcError("bad inputs")
     duty = vor / (vor + vin_min)
@@ -196,7 +201,7 @@ def _calc_flyback(vin_min, vout, iout, fsw, vor, vd, eff) -> list[Result]:
      Param("i_avg", "A", "average load current"),
      Param("derating", "", "usable-capacity factor", default=0.8)),
 )
-def _calc_battery(capacity, i_avg, derating) -> list[Result]:
+def _calc_battery(capacity: float, i_avg: float, derating: float) -> list[Result]:
     if capacity <= 0 or i_avg <= 0 or not 0 < derating <= 1:
         raise CalcError("bad capacity/i_avg/derating")
     hours = capacity * derating / i_avg

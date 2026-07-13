@@ -763,7 +763,7 @@ classifiers = [
 ]
 
 [project.scripts]
-akcli = "altium_kicad_cli.cli:main"
+akcli = "altium_kicad_cli.cli:main"   # doc-noqa (pyproject entry point, not a CLI command)
 altium-kicad-cli = "altium_kicad_cli.cli:main"
 
 [project.optional-dependencies]

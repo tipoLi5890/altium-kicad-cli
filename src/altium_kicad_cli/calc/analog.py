@@ -26,7 +26,8 @@ _HYST_REF = ("TI SLVA954, Analog Engineer's Circuit: Inverting comparator "
              "with hysteresis")
 
 
-def _hyst_thresholds(vcc, r1, r2, rh, voh, vol):
+def _hyst_thresholds(vcc: float, r1: float, r2: float, rh: float, voh: float,
+                      vol: float) -> tuple[float, float]:
     g1, g2, gh = 1 / r1, 1 / r2, 1 / rh
     s = g1 + g2 + gh
     vt_hi = (vcc * g1 + voh * gh) / s
@@ -45,7 +46,8 @@ def _hyst_thresholds(vcc, r1, r2, rh, voh, vol):
      Param("vol", "V", "output low level", default=0.0)),
     notes="Inverting topology: signal on IN−, this 3-resistor node on IN+.",
 )
-def _calc_hysteresis(vcc, r1, r2, rh, voh, vol) -> list[Result]:
+def _calc_hysteresis(vcc: float, r1: float, r2: float, rh: float, voh: float,
+                      vol: float) -> list[Result]:
     if min(r1, r2, rh) <= 0 or vcc <= 0:
         raise CalcError("vcc and all resistors must be positive")
     voh = voh or vcc
@@ -65,7 +67,8 @@ def _calc_hysteresis(vcc, r1, r2, rh, voh, vol) -> list[Result]:
      Param("series", "", "E series", default="E96", choices=tuple(SERIES))),
     notes="Assumes rail-to-rail output (VOH = VCC, VOL = 0).",
 )
-def _calc_hysteresis_design(vcc, vt_rising, vt_falling, r1, series) -> list[Result]:
+def _calc_hysteresis_design(vcc: float, vt_rising: float, vt_falling: float,
+                             r1: float, series: str) -> list[Result]:
     if not 0 < vt_falling < vt_rising < vcc:
         raise CalcError("need 0 < vt_falling < vt_rising < vcc")
     g1 = 1 / r1
@@ -99,7 +102,8 @@ def _calc_hysteresis_design(vcc, vt_rising, vt_falling, r1, series) -> list[Resu
     notes="Equal-component variant: R1 = R2, C1 = C2; gain K = 3 − 1/Q sets "
           "Q, so the amp runs at K ≈ 1.59 for Butterworth.",
 )
-def _calc_sallen_key(fc, c, q, r_gain, series) -> list[Result]:
+def _calc_sallen_key(fc: float, c: float, q: float, r_gain: float,
+                      series: str) -> list[Result]:
     if fc <= 0 or c <= 0 or q <= 0:
         raise CalcError("fc, c, q must be positive")
     k = 3 - 1 / q
@@ -127,7 +131,8 @@ def _calc_sallen_key(fc, c, q, r_gain, series) -> list[Result]:
      Param("r_source", "Ω", "source impedance (0 = skip settling)", default=0.0),
      Param("c_sample", "F", "sample/input capacitance", default=0.0)),
 )
-def _calc_adc(bits, vref, r_source, c_sample) -> list[Result]:
+def _calc_adc(bits: float, vref: float, r_source: float,
+              c_sample: float) -> list[Result]:
     n = int(bits)
     if not 1 <= n <= 32:
         raise CalcError("bits must be 1..32")

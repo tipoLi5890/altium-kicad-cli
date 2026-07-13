@@ -1,0 +1,73 @@
+* akcli builtin behavioral SPICE library (clean-room).
+*
+* These are lightweight behavioral macromodels -- enough to make a circuit
+* oscillate, compare, or sink a photocurrent for a sanity-level transient/AC
+* run. They are NOT vendor models and carry no proprietary parameters; every
+* threshold below is a textbook/datasheet-derived nominal, cited inline.
+*
+* All values are pure ASCII. Loaded on demand by sim.models.resolve() when a
+* Sim.Device / spec.models entry names one of these subcircuits.
+
+*------------------------------------------------------------------------------
+* AKCLI_COMP555 - behavioral NE555 astable/monostable core.
+*
+* Datasheet-derived thresholds (TI NE555, Fig. functional block): the two
+* internal comparators trip at 2/3 VCC (THRESHOLD) and 1/3 VCC (TRIGGER); an
+* internal 3 x 5k divider sets the CONTROL node to 2/3 VCC when pin 5 is open.
+* The SR latch (reset-dominant) is modeled as a slew-limited memory node; the
+* discharge transistor (pin 7) is an open-collector sink active while OUT low.
+* Standard pin order: 1 GND  2 TRIG  3 OUT  4 RESET  5 CTRL  6 THRES  7 DISCH
+* 8 VCC.
+*------------------------------------------------------------------------------
+.subckt AKCLI_COMP555 GND TRIG OUT RESET CTRL THRES DISCH VCC
+* internal control divider: CTRL = 2/3 VCC, cx (= trigger ref) = 1/3 VCC
+R1 VCC CTRL 5k
+R2 CTRL cx 5k
+R3 cx GND 5k
+* weak pull-up so an unconnected RESET pin defaults inactive (high)
+Rrst VCC RESET 1meg
+* comparator flags: set when TRIG < 1/3 VCC, reset when THRES > 2/3 VCC
+Bset s 0 V=(v(TRIG)<v(cx)) ? 1 : 0
+Brst r 0 V=(v(THRES)>v(CTRL)) ? 1 : 0
+* reset-dominant SR latch as a slew-limited memory node q (RESET active-low)
+Blatch nq 0 V=(v(RESET)<0.7) ? 0 : ((v(r)>0.5) ? 0 : ((v(s)>0.5) ? 1 : v(q)))
+Rlat nq q 100
+Clat q 0 10n
+* push-pull output buffer (rail-0.1 V swing)
+Bout OUT 0 V=(v(q)>0.5) ? v(VCC)-0.1 : 0.1
+Rout OUT GND 1meg
+* open-collector discharge: ~10 ohm sink to GND while output low (q=0)
+Bdis DISCH 0 I=(v(q)<0.5) ? v(DISCH)/10 : 0
+.ends AKCLI_COMP555
+
+*------------------------------------------------------------------------------
+* AKCLI_COMPARATOR - behavioral open-collector comparator (e.g. LM393-style).
+*
+* High input impedance (1 meg to ground on each input, textbook nominal for a
+* bipolar comparator front end). The open-collector output sinks to ~0 V when
+* v(inp) > v(inn) and floats otherwise; a tanh() gives a finite ~20 mV/decade
+* transition instead of an ideal step so the transient solver stays happy.
+* Pin order: inp inn out vcc.
+*------------------------------------------------------------------------------
+.subckt AKCLI_COMPARATOR inp inn out vcc
+Rin1 inp 0 1meg
+Rin2 inn 0 1meg
+* output sink current: (out/10) scaled by a smooth 0..1 gate on (inp-inn)
+Bout out 0 I=(v(out)/10)*(0.5+0.5*tanh(100*(v(inp)-v(inn))))
+.ends AKCLI_COMPARATOR
+
+*------------------------------------------------------------------------------
+* AKCLI_PHOTOTRANS - behavioral phototransistor collector-emitter path
+* (TCRT5000-style reflective sensor output stage).
+*
+* Models the linear-region collector current as {gain} x a 1 mA reference,
+* gated off near saturation (Vce < ~0.1 V) so the device behaves like a real
+* current sink into a load resistor. {gain} lets the caller scale the nominal
+* photocurrent to the coupling of their optics. Drive/modulate by wiring an
+* external current stimulus into the collector node (TCRT-style).
+* Pin order: c e ; param: gain.
+*------------------------------------------------------------------------------
+.subckt AKCLI_PHOTOTRANS c e params: gain=1
+Bce c e I={gain}*1m*(0.5+0.5*tanh(20*(v(c)-v(e)-0.1)))
+Rce c e 10meg
+.ends AKCLI_PHOTOTRANS
