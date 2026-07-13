@@ -93,7 +93,7 @@ def compute(name: str, raw: dict[str, str]) -> dict:
             elif p.text:
                 kwargs[p.name] = raw[p.name]
             else:
-                kwargs[p.name] = parse_value(raw[p.name], p.name)
+                kwargs[p.name] = parse_value(raw[p.name], p.name, p.unit)
         elif p.default is not None:
             kwargs[p.name] = p.default
         else:

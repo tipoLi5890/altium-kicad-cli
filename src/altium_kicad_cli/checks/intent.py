@@ -8,24 +8,50 @@ Intent file (JSON)::
 
     {"protocol_version": 1,
      "mode": "exact",                    # or "subset"; default "exact"
-     "nets": {"SWCLK": ["U1.4", "J2.2"], ...}}
+     "nets": {
+        "SWCLK": ["U1.4", "J2.2"],       # plain list -> uses document mode
+        "GND": {"members": ["R*.2", "U?.1"], "mode": "subset"}
+     }}
+
+A net value is EITHER the classic plain list of ``"REF.PIN"`` strings, OR an
+object ``{"members": [...], "mode": "exact"|"subset"}`` that overrides the
+document-level ``mode`` for that one net (``protocol_version`` stays 1 — this
+is an additive format upgrade, old plain-list documents keep working
+unchanged).
 
 Member strings are ``"REF.PIN"`` split on the FIRST dot — designators never
-contain dots, pin numbers may (``"U1.P0.25"`` parses as pin ``P0.25``).
+contain dots, pin numbers may (``"U1.P0.25"`` parses as pin ``P0.25``). The
+REF part may be an ``fnmatch`` wildcard (``"R*.1"``, ``"U?.3"``) — the pin
+part is always literal. A wildcard member is satisfied when AT LEAST ONE
+actual schematic pin matches both the REF pattern and the literal pin number;
+if none match at all it is reported as ``INTENT_MISSING_MEMBER``, naming the
+pattern itself (never an expansion). **Wildcards are ignored when computing
+EXTRA members in exact mode**: only the net's literal (non-wildcard) members
+are subtracted from the matched actual net's membership, so an actual pin
+that is present ONLY because it happens to match a wildcard pattern still
+shows up as an extra member. This keeps ``exact`` honest — a wildcard is a
+existence assertion ("at least one R matches"), not a closed-world
+enumeration of every R that may be on the net.
 
 ``run(sch, spec)`` matches each intent net onto the actual net (``sch.nets``,
 the shared netbuild output) containing the MOST of its listed pins — never by
 display name, because auto-names churn and designers rename freely. It reports:
 
-* ``INTENT_PIN_UNKNOWN``    (ERROR) — a listed REF.PIN does not exist in the schematic
+* ``INTENT_PIN_UNKNOWN``    (ERROR) — a listed literal REF.PIN does not exist
+  in the schematic (wildcards are exempt — they may legitimately match zero
+  or many pins)
 * ``INTENT_NET_NOT_FOUND``  (ERROR) — no actual net contains any listed pin
-* ``INTENT_MISSING_MEMBER`` (ERROR) — an intent pin is absent from the matched net
+* ``INTENT_MISSING_MEMBER`` (ERROR) — an intent pin (or wildcard pattern) is
+  absent from the matched net
 * ``INTENT_EXTRA_MEMBER``   (ERROR, exact mode only) — the matched net carries
-  pins the intent omits; ``subset`` mode asserts containment and skips this
+  pins the intent's literal members omit; ``subset`` mode asserts containment
+  and skips this
 * ``INTENT_NETS_SHORTED``   (ERROR) — two intent nets resolve to the SAME actual net
 
 ``snapshot(sch)`` emits a valid intent document from the current netlist (named
 nets only by default), enabling the snapshot -> edit -> assert workflow.
+Snapshot output always uses the plain-list net-value form (no wildcards, no
+per-net mode overrides — those are authored by hand).
 
 ``load`` raises ``BAD_CONFIG`` naming the offending entry for shape errors and
 ``PROTOCOL_MISMATCH`` for a wrong ``protocol_version`` (mirrors ops.py).
@@ -33,6 +59,7 @@ nets only by default), enabling the snapshot -> edit -> assert workflow.
 
 from __future__ import annotations
 
+import fnmatch
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -51,13 +78,48 @@ INTENT_EXTRA_MEMBER = "INTENT_EXTRA_MEMBER"
 INTENT_NETS_SHORTED = "INTENT_NETS_SHORTED"
 
 _TOP_KEYS = frozenset({"protocol_version", "mode", "nets"})
+_NET_OBJECT_KEYS = frozenset({"members", "mode"})
+_WILDCARD_CHARS = frozenset("*?[")
+
+
+@dataclass(frozen=True)
+class Member:
+    """One intent-net member: a concrete pin, or an fnmatch wildcard on REF.
+
+    ``is_wildcard`` is derived automatically from ``ref`` (True when it
+    contains any of ``* ? [``) — the pin part is never a wildcard.
+    """
+
+    ref: str
+    pin: str
+    is_wildcard: bool = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "is_wildcard",
+                            any(c in self.ref for c in _WILDCARD_CHARS))
+
+    @property
+    def token(self) -> str:
+        return f"{self.ref}.{self.pin}"
+
+
+@dataclass
+class NetSpec:
+    """One intent net: its members plus its effective mode.
+
+    ``mode`` is already resolved at load time — the net's own override if it
+    supplied one via the object net-value form, else the document's mode.
+    """
+
+    members: list[Member] = field(default_factory=list)
+    mode: str = "exact"
 
 
 @dataclass
 class IntentSpec:
-    """A validated intent document: net name -> the pins it must contain."""
+    """A validated intent document: net name -> its NetSpec."""
 
-    nets: dict[str, list[PinRef]] = field(default_factory=dict)
+    nets: dict[str, NetSpec] = field(default_factory=dict)
     mode: str = "exact"
     protocol_version: int = PROTOCOL_VERSION
 
@@ -65,18 +127,18 @@ class IntentSpec:
 # --------------------------------------------------------------------------- #
 # load / validate
 # --------------------------------------------------------------------------- #
-def _parse_member(net_name: str, raw: object, where: str) -> PinRef:
+def _parse_member(net_name: str, raw: object, where: str) -> Member:
     if not isinstance(raw, str):
         fail("BAD_CONFIG",
              f"{where}: net '{net_name}': member {raw!r} must be a string "
-             "'REF.PIN' (e.g. 'U1.2')")
+             "'REF.PIN' (e.g. 'U1.2' or 'R*.1')")
     token = raw.strip()
     ref, dot, pin = token.partition(".")
     if not dot or not ref or not pin:
         fail("BAD_CONFIG",
              f"{where}: net '{net_name}': member {raw!r} must be 'REF.PIN' "
-             "(e.g. 'U1.2')")
-    return (ref, pin)
+             "(e.g. 'U1.2' or 'R*.1')")
+    return Member(ref=ref, pin=pin)
 
 
 def load(path: str | Path) -> IntentSpec:
@@ -118,20 +180,47 @@ def load(path: str | Path) -> IntentSpec:
              f"{where}: 'nets' must be an object of "
              '{"NAME": ["REF.PIN", ...], ...}')
 
-    nets: dict[str, list[PinRef]] = {}
-    for name, members in raw_nets.items():
-        if not str(name).strip():
+    nets: dict[str, NetSpec] = {}
+    for name, value in raw_nets.items():
+        name = str(name)
+        if not name.strip():
             fail("BAD_CONFIG", f"{where}: net names must be non-empty")
-        if not isinstance(members, list) or not members:
+
+        if isinstance(value, list):
+            members_raw = value
+            net_mode = mode
+        elif isinstance(value, dict):
+            extra_keys = set(value) - _NET_OBJECT_KEYS
+            if extra_keys:
+                fail("BAD_CONFIG",
+                     f"{where}: net '{name}': unknown key(s) in object form: "
+                     f"{', '.join(sorted(map(str, extra_keys)))} "
+                     f"(expected {', '.join(sorted(_NET_OBJECT_KEYS))})")
+            members_raw = value.get("members")
+            net_mode = value.get("mode", mode)
+            if net_mode not in MODES:
+                fail("BAD_CONFIG",
+                     f"{where}: net '{name}': mode {net_mode!r} must be one "
+                     f"of {', '.join(MODES)}")
+        else:
+            fail("BAD_CONFIG",
+                 f"{where}: net '{name}': value must be an array of "
+                 '"REF.PIN" strings or an object '
+                 '{"members": [...], "mode": "exact"|"subset"}')
+
+        if not isinstance(members_raw, list) or not members_raw:
             fail("BAD_CONFIG",
                  f"{where}: net '{name}': members must be a non-empty array "
                  'of "REF.PIN" strings')
-        seen: list[PinRef] = []
-        for raw in members:
-            ref = _parse_member(str(name), raw, where)
-            if ref not in seen:  # silently dedupe repeats within one net
-                seen.append(ref)
-        nets[str(name)] = seen
+
+        seen: list[Member] = []
+        seen_tokens: set[str] = set()
+        for raw in members_raw:
+            m = _parse_member(name, raw, where)
+            if m.token not in seen_tokens:  # silently dedupe repeats within one net
+                seen_tokens.add(m.token)
+                seen.append(m)
+        nets[name] = NetSpec(members=seen, mode=net_mode)
 
     return IntentSpec(nets=nets, mode=mode, protocol_version=pv)
 
@@ -171,36 +260,71 @@ def run(sch: Schematic, spec: IntentSpec) -> list[Finding]:
 
     resolved: dict[str, int] = {}  # intent net name -> matched sch.nets index
     for name in sorted(spec.nets):
-        want = spec.nets[name]
+        net_spec = spec.nets[name]
+        members = net_spec.members
 
-        unknown = sorted(p for p in want if p not in known_pins)
+        # Concrete (non-wildcard) members absent from the schematic entirely.
+        # Wildcards are exempt: matching zero pins is a MISSING_MEMBER, not
+        # an unknown-pin error (the pattern never claimed to name a real pin).
+        unknown = sorted(
+            m.token for m in members
+            if not m.is_wildcard and (m.ref, m.pin) not in known_pins
+        )
         if unknown:
             findings.append(Finding(
                 INTENT_PIN_UNKNOWN, Severity.ERROR,
                 f"intent net '{name}': pin(s) not in schematic: "
-                + ", ".join(_refs(unknown)),
-                refs=_refs(unknown),
+                + ", ".join(unknown),
+                refs=unknown,
             ))
+        unknown_set = set(unknown)
 
-        # Best-containing actual net: most listed pins, then (tie-break) a net
-        # already answering to the intent name, then the stable sch.nets order.
-        hits: dict[int, int] = {}
-        for pr in want:
-            idx = pin_to_net.get(pr)
-            if idx is not None:
-                hits[idx] = hits.get(idx, 0) + 1
+        # Every member's set of actual candidate pins: itself for a concrete
+        # member (empty if unknown), or every known pin whose designator
+        # fnmatch-matches the REF pattern and whose pin number equals the
+        # member's literal pin, for a wildcard member.
+        candidates: dict[Member, list[PinRef]] = {}
+        for m in members:
+            if m.is_wildcard:
+                candidates[m] = sorted(
+                    (d, p) for d, p in known_pins
+                    if p == m.pin and fnmatch.fnmatchcase(d, m.ref)
+                )
+            elif m.token in unknown_set:
+                candidates[m] = []
+            else:
+                candidates[m] = [(m.ref, m.pin)]
+
+        # Best-containing actual net. Votes are per MEMBER (a wildcard that
+        # matches many pins on one net still casts a single vote there), and
+        # literal members DOMINATE the ranking — a broad wildcard must never
+        # drag the intent net onto an unrelated net that merely contains many
+        # pattern-matching pins, away from the concrete pins the user named.
+        lit_hits: dict[int, int] = {}
+        wild_hits: dict[int, int] = {}
+        for m, cands in candidates.items():
+            nets_seen = {pin_to_net[pr] for pr in cands if pr in pin_to_net}
+            bucket = wild_hits if m.is_wildcard else lit_hits
+            for idx in nets_seen:
+                bucket[idx] = bucket.get(idx, 0) + 1
+        hits: dict[int, int] = {
+            i: lit_hits.get(i, 0) + wild_hits.get(i, 0)
+            for i in set(lit_hits) | set(wild_hits)
+        }
         if not hits:
+            all_tokens = [m.token for m in members]
             findings.append(Finding(
                 INTENT_NET_NOT_FOUND, Severity.ERROR,
                 f"intent net '{name}': no actual net contains any of its "
-                f"pin(s): {', '.join(_refs(want))}",
-                refs=_refs(want),
+                f"pin(s): {', '.join(all_tokens)}",
+                refs=all_tokens,
             ))
             continue
         best = min(
             hits,
             key=lambda i: (
-                -hits[i],
+                -lit_hits.get(i, 0),      # literal members dominate
+                -wild_hits.get(i, 0),
                 0 if name.strip().upper() in _name_set(sch.nets[i]) else 1,
                 i,
             ),
@@ -210,23 +334,31 @@ def run(sch: Schematic, spec: IntentSpec) -> list[Finding]:
         label = _net_label(actual)
         actual_members = {tuple(m) for m in actual.members}
 
-        missing = sorted(p for p in want if p not in actual_members and p not in unknown)
+        missing = sorted(
+            m.token for m in members
+            if m.token not in unknown_set
+            and not any(pr in actual_members for pr in candidates[m])
+        )
         if missing:
             findings.append(Finding(
                 INTENT_MISSING_MEMBER, Severity.ERROR,
                 f"intent net '{name}' (matched actual net '{label}'): "
-                f"missing member(s): {', '.join(_refs(missing))}",
-                refs=_refs(missing),
+                f"missing member(s): {', '.join(missing)}",
+                refs=missing,
             ))
 
-        if spec.mode == "exact":
-            extra = sorted(actual_members - set(want))
+        if net_spec.mode == "exact":
+            # Wildcards are ignored for EXTRA-member computation: only
+            # literal members are subtracted from the actual net's
+            # membership (see module docstring for the rationale).
+            literal_want = {(m.ref, m.pin) for m in members if not m.is_wildcard}
+            extra = sorted(f"{d}.{p}" for d, p in actual_members - literal_want)
             if extra:
                 findings.append(Finding(
                     INTENT_EXTRA_MEMBER, Severity.ERROR,
                     f"intent net '{name}' (matched actual net '{label}'): "
-                    f"extra member(s) not in intent: {', '.join(_refs(extra))}",
-                    refs=_refs(extra),
+                    f"extra member(s) not in intent: {', '.join(extra)}",
+                    refs=extra,
                 ))
 
     # Two intent nets landing on ONE actual net is a short against intent.

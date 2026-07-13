@@ -44,10 +44,48 @@ def _missing() -> str | None:
     return None
 
 
+DEVICE_SYM = (Path(__file__).parent / "fixtures" / "kicad" / "symbols"
+              / "Device.kicad_sym")
+
+
+def _overlap_target(tmp_path: Path) -> Path:
+    """A real .kicad_sch with two overlapping resistors so /api/findings
+    returns a positioned LAYOUT_SYMBOL_OVERLAP the lint overlay can mark."""
+    from altium_kicad_cli.writers import kicad as kw
+    tgt = tmp_path / "t.kicad_sch"
+    tgt.write_text(
+        '(kicad_sch (version 20231120) (generator "akcli") '
+        '(uuid "11111111-2222-3333-4444-555555555555") (paper "A4"))\n')
+    kw.apply(
+        {"protocol_version": 1, "target_format": "kicad", "ops": [
+            {"op": "place_component", "lib_id": "Device:R", "designator": "R1",
+             "x_mil": 2000, "y_mil": 2000},
+            {"op": "place_component", "lib_id": "Device:R", "designator": "R2",
+             "x_mil": 2050, "y_mil": 2000}]},
+        str(tgt), apply=True, sources=[str(DEVICE_SYM)])
+    return tgt
+
+
+def _stub_bom_network(monkeypatch) -> None:
+    """Make ?check=1 offline: canned lines + a canned datasheet resolver so
+    the BOM datasheet-link overlay renders without touching the network."""
+    from altium_kicad_cli.parts import bom_jlc
+    from altium_kicad_cli.parts import datasheet as ds_mod
+    monkeypatch.setattr(bom_jlc, "check", lambda sch, **k: [
+        bom_jlc.BomLine(refs=["R1", "R2"], value="10k", footprint="0603",
+                        lcsc="C25804", status="ok")])
+    monkeypatch.setattr(bom_jlc, "totals", lambda lines: {
+        "lines": len(lines), "ok": len(lines), "problems": 0,
+        "no_part_id": 0, "est_cost": 0.0})
+    monkeypatch.setattr(ds_mod, "resolve", lambda lcsc, **k: ds_mod.DatasheetRow(
+        lcsc=lcsc, url="https://atta.szlcsc.com/C25804.pdf", status="resolved"))
+
+
 @pytest.mark.skipif(_missing() is not None, reason=str(_missing()))
-def test_browser_ui(tmp_path):
+def test_browser_ui(tmp_path, monkeypatch):
     from altium_kicad_cli.webui.server import Dash, _make_handler
 
+    _stub_bom_network(monkeypatch)
     sdir = tmp_path / "state"
     sdir.mkdir()
     (sdir / "state.json").write_text(json.dumps({
@@ -68,8 +106,7 @@ def test_browser_ui(tmp_path):
     }))
     for name in ("step-1.svg", "step-2.svg", "step-2-2.svg"):
         (sdir / name).write_text(SVG)
-    target = tmp_path / "t.kicad_sch"
-    target.write_text("(kicad_sch)")
+    target = _overlap_target(tmp_path)
 
     srv = ThreadingHTTPServer(("127.0.0.1", 0),
                               _make_handler(Dash(sdir, target)))

@@ -114,10 +114,16 @@ await page.goto(BASE + "/calc#calc=ohm&v=5&i=2&r=3", {waitUntil: "networkidle0"}
 await sleep(500);
 check("calc: server error surfaced", (await page.$eval("#error", el => el.textContent))
       .includes("exactly two"));
+// the initial theme follows prefers-color-scheme, which differs per CI
+// runner (light-mode macOS runners start light) — assert the FLIP, not a
+// hardcoded end state
+const themeBefore = await page.evaluate(() => document.documentElement.dataset.theme);
 await page.click("#themebtn");
-check("calc: theme flips", await page.evaluate(() =>
-      document.documentElement.dataset.theme === "light"));
-await shot("calc-light");
+check("calc: theme flips", await page.evaluate(before =>
+      document.documentElement.dataset.theme !== before &&
+      ["light", "dark"].includes(document.documentElement.dataset.theme),
+      themeBefore));
+await shot("calc-theme-flipped");
 
 /* ================= live watch ================= */
 // networkidle never fires here: the page keeps an SSE connection open
@@ -174,12 +180,42 @@ await sleep(300);
 check("live: jump zooms in", await page.evaluate(() =>
       document.getElementById("zlvl").textContent !== "fit"));
 await page.keyboard.press("f");
+
+/* lint findings overlay: /api/findings runs offline on the real target
+   (a deliberate symbol overlap) -> at least one positioned marker */
+await page.keyboard.press("g");           // lint markers on
+await page.waitForFunction(() => !document.getElementById("fovl").hidden,
+                           {timeout: 8000});
+check("live: lint marker drawn",
+      (await page.$$eval("#fovl .mk", els => els.length)) >= 1);
+// dispatch the click (an animated SVG <g> has no stable puppeteer hit-point)
+await page.evaluate(() => document.querySelector("#fovl .mk")
+      .dispatchEvent(new MouseEvent("click", {bubbles: true})));
+await sleep(300);
+check("live: lint marker click zooms in", await page.evaluate(() =>
+      document.getElementById("zlvl").textContent !== "fit"));
+await page.keyboard.press("g");           // toggle back off
+await page.keyboard.press("f");
 await page.keyboard.press("l");           // back to live
 await sleep(300);
 await page.click("#diff");
 await page.waitForFunction(() => !document.getElementById("ghost").hidden);
 check("live: diff ghost visible", await page.$("#ghost svg") !== null);
 await shot("live-diff");
+
+/* BOM overlay: the purchasability check attaches a datasheet link per line
+   (network + resolver stubbed by tests/test_webui_browser.py) */
+await page.keyboard.press("b");           // open BOM
+await page.waitForSelector("#bomov:not([hidden]) table", {timeout: 5000});
+await page.click("#bomcheck");
+await page.waitForSelector("#bomtable .dslink", {timeout: 6000});
+check("live: BOM datasheet link rendered",
+      (await page.$$eval("#bomtable .dslink", els => els.length)) >= 1);
+check("live: BOM datasheet link points at a URL",
+      (await page.$eval("#bomtable .dslink", el => el.getAttribute("href")))
+        .startsWith("http"));
+await page.keyboard.press("Escape");      // close BOM
+await sleep(200);
 
 /* clear (dialog auto-accepted) */
 await page.click("#clearbtn");

@@ -4,13 +4,15 @@ description: >-
   Source real, orderable parts for a schematic with the `akcli jlc` command family —
   search the JLCPCB/LCSC catalog, check stock/price/Basic-vs-Extended status, convert a
   chosen part into a KiCad symbol/footprint/3D library (in-process, vendored MIT
-  JLC2KiCadLib core), verify it against the datasheet, and close the BOM-hygiene loop with
+  JLC2KiCadLib core), resolve and download the part's datasheet PDF (`jlc datasheet`),
+  verify the design against it, and close the BOM-hygiene loop with
   `akcli check --bom`. Use this skill whenever the task involves: finding a part by MPN,
   value, or package; looking up an LCSC C-number; checking JLCPCB stock or price tiers;
-  choosing between Basic and Extended parts; recording sourced parts on a schematic; or
-  filling in missing BOM values and footprints. Triggers on keywords: JLCPCB, LCSC,
-  C-number, jlcsearch, EasyEDA, BOM, bill of materials, part search, sourcing, stock,
-  price, Basic part, Extended part.
+  choosing between Basic and Extended parts; recording sourced parts on a schematic;
+  fetching or reading a component datasheet / spec sheet ("找規格書", "datasheet",
+  "電氣特性"); or filling in missing BOM values and footprints. Triggers on keywords:
+  JLCPCB, LCSC, C-number, jlcsearch, EasyEDA, BOM, bill of materials, part search,
+  sourcing, stock, price, Basic part, Extended part, datasheet, spec sheet, 規格書.
 ---
 
 # parts-sourcing — driving `akcli jlc` for JLCPCB/LCSC search and BOM hygiene
@@ -32,6 +34,9 @@ sourcing loop.
   has hard minimums (0402/0201, BGA pitch, pin pitch) — see the jlcpcb-capabilities skill.
 - **The schematic is authoritative.** Record every sourcing decision on the schematic
   (an `LCSC` parameter per designator), never only in a side document.
+- **Read the datasheet before committing a part** — electrical characteristics, absolute
+  maximum ratings and the typical application circuit come from the PDF, not from memory
+  (step 4 below).
 
 ## Workflow
 
@@ -99,6 +104,38 @@ akcli component board.kicad_sch U1             # confirm the placed part's pin -
   while findings remain (`--exit-zero` for report mode).
 - After any `--apply`, re-read (`akcli read` / `akcli net`) to confirm the write — never assume.
 
+### (4) Datasheets — resolve, fetch, read, verify
+
+```bash
+akcli jlc datasheet C2984661                  # resolve: PDF URL + MPN + manufacturer
+akcli jlc datasheet C2984661 --fetch          # download -> ~/.cache/akcli/datasheets/
+akcli jlc datasheet board.kicad_sch --fetch   # every BOM line with an LCSC id, one run
+```
+
+- Links come from the part's **EasyEDA record** (szlcsc-hosted PDF; the jlcsearch
+  mirror carries none, and lcsc.com bot-gates plain downloads). `--fetch` verifies
+  the `%PDF` magic — an HTML challenge page is reported as `fetch-failed`, never
+  saved as a broken `.pdf`. Existing files are the cache; `--force` refetches.
+- Only direct `.pdf` links are fetched; a `page-link` row keeps the product/
+  viewer URL — fetch THAT with a browser-grade fetcher (WebFetch) to locate the
+  PDF. `no-link` rows print the LCSC product-page hint. Either way the fastest
+  fallback is the **manufacturer's own site** — original-vendor PDFs
+  (vishay.com, ti.com, onsemi.com, ...) download fine with plain curl.
+- **Read in chunks** (PDF readers cap ~20 pages/request; the tables live early):
+  absolute maximum ratings -> recommended operating conditions -> electrical
+  characteristics -> typical application circuit. Feed table values into
+  `akcli calc` inputs (design-calc skill rule 5) and margin-check the placed
+  circuit against the absolute-max column. Quote the table row (symbol,
+  condition, min/typ/max) in the report so review can retrace it.
+- Batch mode surfaces `no-lcsc` lines — pin C-numbers first with
+  `jlc bom --suggest/--fix`, then re-run.
+- **Live dashboard BOM links:** when `akcli view live <sch>` runs its networked
+  BOM check (`?check=1`), each priced line with an LCSC id gains an inline
+  **datasheet link** (resolved via the same EasyEDA path as `jlc datasheet`;
+  direct PDFs and page-links get distinct glyphs). It is per-line
+  failure-tolerant and absent on the offline BOM — a fast way to eyeball
+  coverage while reviewing the board.
+
 ## When NOT to use this skill
 
 - **Parts with no LCSC listing** (`jlc show` returns a `no part ... found` notice): there is no
@@ -111,5 +148,7 @@ akcli component board.kicad_sch U1             # confirm the placed part's pin -
 
 ## Exit codes (jlc family)
 
-`0` success, including clean no-results (stderr notice) · `2` usage error · `7` network
-error. Full legend and error-line format: see the circuit-design skill.
+`0` success, including clean no-results (stderr notice) · `1` lint-style problems
+(`jlc bom` stock/id problems; `jlc datasheet` not-found/no-link/fetch-failed) ·
+`2` usage error · `7` network error. Full legend and error-line format: see the
+circuit-design skill.

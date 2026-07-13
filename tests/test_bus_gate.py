@@ -12,8 +12,11 @@ was an anchor. These tests pin the stage-1 contract:
 * a wire ending on a ``(bus)`` mid-span is still dangling (KiCad joins wires to
   buses only through entries).
 
-Bus *semantics* (netbuild/reader expansion of bus members) are a later stage
-and deliberately untested here.
+Stage 2 added bus *semantics*: the reader now emits ``(bus)`` / ``(bus_entry)``
+as :class:`model.NetPrimitives` entries (``buses`` / ``bus_entries``) for
+``netbuild`` — the reader-emission half is locked at the bottom of this file;
+the netlist semantics live in ``tests/test_bus_netlist.py`` and the kicad-cli
+parity fixtures in ``tests/test_kicad_parity.py``.
 """
 
 from __future__ import annotations
@@ -172,3 +175,33 @@ def test_bus_entry_missing_size_checked_as_degenerate():
     findings = connectivity.verify(parse(floating))
     bad = [f for f in findings if f.code == connectivity.DANGLING_BUS_ENTRY]
     assert len(bad) == 1
+
+
+# --------------------------------------------------------------------------- #
+# stage 2: the reader emits bus primitives (mil coordinates, both entry ends)
+# --------------------------------------------------------------------------- #
+def test_reader_emits_bus_primitives_from_authored_rip(tmp_path):
+    from altium_kicad_cli.readers import kicad as kreader
+
+    tgt = _seed(tmp_path)
+    results = kw.apply(_oplist(*_RIP_OPS), str(tgt), apply=True)
+    assert all(r.status == "ok" for r in results)
+    prims = kreader.read_primitives(tgt)
+    assert [(b.a, b.b) for b in prims.buses] == [((4000, 3000), (4000, 5000))]
+    assert [(e.a, e.b) for e in prims.bus_entries] == [((4000, 4000), (4100, 4100))]
+    # buses are NOT duplicated into the wire list
+    assert ((4000, 3000), (4000, 5000)) not in [(w.a, w.b) for w in prims.wires]
+
+
+def test_reader_bus_entry_missing_size_is_degenerate(tmp_path):
+    from altium_kicad_cli.readers import kicad as kreader
+
+    p = tmp_path / "deg.kicad_sch"
+    p.write_text(
+        '(kicad_sch (uuid "%s")\n'
+        '(bus (pts (xy 10 0) (xy 10 30)) (uuid "b"))\n'
+        '(bus_entry (at 10 10) (uuid "e")))' % ROOT_UUID
+    )
+    prims = kreader.read_primitives(p)
+    (e,) = prims.bus_entries
+    assert e.a == e.b

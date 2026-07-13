@@ -41,7 +41,7 @@ import re
 
 from ..config import Config
 from ..model import Net, Pin, PinType, Schematic
-from ..report import Finding, Severity
+from ..report import Finding, Severity, anchor
 from ..units import approx_eq, mil_to_nm
 from ._rails import implied_voltage as _implied_voltage, norm as _norm, rail_matches as _rail_matches
 
@@ -292,6 +292,7 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
                 or waivers.waives(ERC_DANGLING_NET, norm_names | {_norm(ref[0])})
             )
             if not suppress:
+                pos = (pin.x_mil, pin.y_mil) if pin is not None else None
                 findings.append(
                     Finding(
                         ERC_DANGLING_NET,
@@ -299,6 +300,8 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
                         f"single-pin net {label}: {ref_str} is the only connection "
                         "(likely dangling / unrouted)",
                         refs=[ref_str],
+                        pos=pos,
+                        anchors=[anchor("pin", ref_str, pos), anchor("net", label)],
                     )
                 )
 
@@ -310,6 +313,12 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
         ]
         if len(strong) >= 2 and not waivers.waives(ERC_DRIVER_CONFLICT, norm_names):
             refs = [f"{d}.{n}" for (d, n), _p in strong]
+            drv_anchors = [
+                anchor("pin", f"{d}.{n}", (p.x_mil, p.y_mil) if p is not None else None)
+                for (d, n), p in strong
+            ]
+            drv_anchors.append(anchor("net", label))
+            first = strong[0][1]
             findings.append(
                 Finding(
                     ERC_DRIVER_CONFLICT,
@@ -317,6 +326,8 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
                     f"net {label} has {len(strong)} push-pull drivers "
                     f"({', '.join(refs)}) — output contention" + _conf_suffix(low_conf, conf),
                     refs=[*refs, label],
+                    pos=(first.x_mil, first.y_mil) if first is not None else None,
+                    anchors=drv_anchors,
                 )
             )
 
@@ -335,6 +346,7 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
                         continue
                     ref_str = f"{ref[0]}.{ref[1]}"
                     pname = f" ({pin.name})" if pin.name else ""
+                    pos = (pin.x_mil, pin.y_mil)
                     findings.append(
                         Finding(
                             ERC_FLOATING_INPUT,
@@ -342,6 +354,8 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
                             f"{ref_str}{pname} is an INPUT on net {label} with no "
                             "driver (floating input)" + _conf_suffix(low_conf, conf),
                             refs=[ref_str],
+                            pos=pos,
+                            anchors=[anchor("pin", ref_str, pos), anchor("net", label)],
                         )
                     )
 
@@ -359,6 +373,7 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
             continue
         touched = nets_of_comp.get(comp.designator, [])
         des_names = {_norm(comp.designator)}
+        comp_pos = (comp.x_mil, comp.y_mil)
         if has_power and not any(id(n) in power_ids for n in touched):
             if not waivers.waives(ERC_NO_POWER, des_names):
                 findings.append(
@@ -368,6 +383,8 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
                         f"IC {comp.designator} has no connection to any detected "
                         "power net",
                         refs=[comp.designator],
+                        pos=comp_pos,
+                        anchors=[anchor("component", comp.designator, comp_pos)],
                     )
                 )
         if has_ground and not any(id(n) in ground_ids for n in touched):
@@ -379,6 +396,8 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
                         f"IC {comp.designator} has no connection to any detected "
                         "ground net",
                         refs=[comp.designator],
+                        pos=comp_pos,
+                        anchors=[anchor("component", comp.designator, comp_pos)],
                     )
                 )
 
@@ -412,6 +431,9 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
                     "or tie them off with the terminate_unused_unit macro "
                     "(akcli ops template terminate_unused_unit)",
                     refs=[comp.designator],
+                    pos=(comp.x_mil, comp.y_mil),
+                    anchors=[anchor("component", comp.designator,
+                                    (comp.x_mil, comp.y_mil))],
                 )
             )
 

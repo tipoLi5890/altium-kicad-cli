@@ -23,7 +23,7 @@ from pathlib import Path
 
 from ..readers import kicad as _krd
 from ..readers import kicad_lib, sexpr
-from ..report import Finding, Severity
+from ..report import Finding, Severity, anchor
 
 LAYOUT_SYMBOL_OVERLAP = "LAYOUT_SYMBOL_OVERLAP"    # two symbol bodies intersect
 LAYOUT_LABEL_OVER_SYMBOL = "LAYOUT_LABEL_OVER_SYMBOL"  # label text crosses a body
@@ -277,6 +277,11 @@ def run(path: str | Path) -> list[Finding]:
                     "renders on top of the pin; move it mid-wire on the net's "
                     "wire instead (see the place_pwr_flag macro)",
                     refs=[sym_boxes[i].name, f"{sym_full_boxes[j].name}.{num}"],
+                    pos=tip,
+                    anchors=[
+                        anchor("component", sym_boxes[i].name, sym_boxes[i].at),
+                        anchor("pin", f"{sym_full_boxes[j].name}.{num}", tip),
+                    ],
                 ))
 
     for i in range(n):
@@ -290,6 +295,9 @@ def run(path: str | Path) -> list[Finding]:
                     f"symbols {a.name} {_fmt(a.at)} and {b.name} {_fmt(b.at)} "
                     "overlap — move one apart (mil coordinates)",
                     refs=[a.name, b.name],
+                    pos=a.at,
+                    anchors=[anchor("component", a.name, a.at),
+                             anchor("component", b.name, b.at)],
                 ))
 
     for k, sb in enumerate(sym_boxes):
@@ -310,6 +318,8 @@ def run(path: str | Path) -> list[Finding]:
                 f"wire {_fmt(a)}-{_fmt(b)} runs through the body of "
                 f"{sb.name} {_fmt(sb.at)} — reroute it around the symbol",
                 refs=[sb.name],
+                pos=sb.at,
+                anchors=[anchor("component", sb.name, sb.at)],
             ))
 
     for box, _tag in label_boxes:
@@ -329,6 +339,9 @@ def run(path: str | Path) -> list[Finding]:
                     "(the writer auto-orients labels anchored on pins) or move it "
                     "to a wire stub",
                     refs=[box.name, sb.name],
+                    pos=box.at,
+                    anchors=[anchor("label", box.name, box.at),
+                             anchor("component", sb.name, sb.at)],
                 ))
 
     # Label text crossing a wire it is NOT anchored on. A label anchored on a
@@ -346,6 +359,8 @@ def run(path: str | Path) -> list[Finding]:
                     f"{_fmt(a)}-{_fmt(b)} it is not attached to — move or "
                     "reorient the label",
                     refs=[box.name],
+                    pos=box.at,
+                    anchors=[anchor("label", box.name, box.at)],
                 ))
                 break
 
@@ -361,6 +376,9 @@ def run(path: str | Path) -> list[Finding]:
                     f"labels '{a.name}' at {_fmt(a.at)} and '{b.name}' at "
                     f"{_fmt(b.at)} overlap — separate them or shorten the text",
                     refs=[a.name, b.name],
+                    pos=a.at,
+                    anchors=[anchor("label", a.name, a.at),
+                             anchor("label", b.name, b.at)],
                 ))
 
     for pt, texts in anchors.items():
@@ -373,6 +391,8 @@ def run(path: str | Path) -> list[Finding]:
                 f"{len(texts)} texts share anchor {_fmt(pt)}: "
                 f"{', '.join(texts)} — they render on top of each other",
                 refs=texts,
+                pos=pt,
+                anchors=[anchor("label", t, pt) for t in texts],
             ))
 
     return findings

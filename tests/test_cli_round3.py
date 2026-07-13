@@ -332,7 +332,8 @@ def test_ops_template_unknown_did_you_mean(capsys):
 def test_jlc_bare_enumerates_subcommands(capsys):
     assert main(["jlc"]) == EXIT["USAGE"]
     err = capsys.readouterr().err
-    for sub in ("jlc search", "jlc show", "jlc bom", "jlc add"):
+    for sub in ("jlc search", "jlc show", "jlc bom", "jlc datasheet",
+                "jlc add"):
         assert sub in err
 
 

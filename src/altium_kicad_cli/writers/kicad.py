@@ -21,6 +21,11 @@ Per-op behaviour (SPEC §2.2):
   :func:`geometry.pin_world`, a raw ``[x,y]`` mil point is snapped to grid.
 * ``add_junction`` / ``add_no_connect`` / ``add_net_label`` / ``add_text`` /
   ``add_bus_entry`` — single-node primitives.
+* ``add_sheet`` — a hierarchical ``(sheet ...)`` node (Sheetname/Sheetfile,
+  stroke/fill, deterministic uuid, sheet pins at computed edge coordinates, the
+  ``(instances)`` page block). The referenced child ``.kicad_sch`` is authored
+  separately; wires attach to a sheet pin by its ``at`` + ``offset_mil``
+  coordinate (a label anchor, so the endpoint does not dangle).
 * ``place_power_port`` (+ sugar ``place_gnd`` / ``place_vcc``) — a power symbol with
   an auto-allocated ``#PWR0<n>`` reference.
 * ``add_net_label`` / ``place_power_port`` ``at`` also accepts
@@ -65,6 +70,11 @@ __all__ = ["OpResult", "apply"]
 
 # Default schematic grid (50 mil) in integer nm — raw [x,y] endpoints snap here.
 _GRID_NM = geometry.DEFAULT_GRID_NM
+
+# How many rotated backups to keep on --apply: <name>.bak (newest) plus
+# .bak2..bak{depth}. Overridable via config [project] backup_depth; `akcli undo`
+# walks this stack. 1 == the historical single-.bak behaviour.
+_DEFAULT_BACKUP_DEPTH = 3
 
 # Sugar power-port presets (SPEC §2.2): documented sugar over place_power_port.
 _SUGAR_POWER = {
@@ -1001,6 +1011,97 @@ def _op_add_text(doc, op, idx, src_libs, path, ctx) -> list[str]:
     return [uid]
 
 
+# --------------------------------------------------------------------------- #
+# hierarchical sheet construction
+# --------------------------------------------------------------------------- #
+# KiCad sheet-pin edge angle: right side = 0 (verified against real files);
+# left/top/bottom follow. Only the (x, y) anchor matters for connectivity — the
+# angle is cosmetic (which way the pin name text renders).
+_SHEET_PIN_ANGLE = {"right": 0, "left": 180, "top": 90, "bottom": 270}
+
+
+def _sheet_pin_pos(
+    origin: tuple[int, int], size: tuple[int, int], side: str, off_nm: int,
+) -> tuple[int, int]:
+    """Edge-anchor (nm) of a sheet pin on ``side`` at ``off_nm`` from the corner."""
+    x0, y0 = origin
+    w, h = size
+    if side == "left":
+        return (x0, y0 + off_nm)
+    if side == "right":
+        return (x0 + w, y0 + off_nm)
+    if side == "top":
+        return (x0 + off_nm, y0)
+    return (x0 + off_nm, y0 + h)             # bottom
+
+
+def _op_add_sheet(doc, op, idx, src_libs, path, ctx) -> list[str]:
+    """Emit a hierarchical ``(sheet ...)`` node (SPEC §2.2, add_sheet).
+
+    Writes Sheetname/Sheetfile properties, stroke/fill defaults, a deterministic
+    uuid, one sheet pin per ``pins`` entry at its computed edge coordinate, and
+    the ``(instances (project ... (path "/<root>" (page N))))`` block KiCad needs
+    to page the sub-sheet. The referenced child ``.kicad_sch`` is NOT created
+    here — author it separately (e.g. ``akcli new``). Wires attach to a sheet pin
+    by its coordinate: ``at`` + ``offset_mil`` along the pin's side, grid-snapped
+    (the connectivity gate already treats sheet pins as label anchors, so a wire
+    ending there does not dangle).
+    """
+    origin = geometry.grid_snap_nm(
+        (geometry.mil_to_nm(float(op["at"][0])), geometry.mil_to_nm(float(op["at"][1]))),
+        _GRID_NM,
+    )
+    size = (geometry.mil_to_nm(float(op["size"][0])),
+            geometry.mil_to_nm(float(op["size"][1])))
+    root = instances.root_uuid(doc)
+    name = str(op["name"])
+    sheet_uuid = instances.deterministic_uuid(root, f"sheet:{name}", idx)
+
+    x0, y0 = origin
+    w, h = size
+    children = [
+        _list(_atom("at"), _mm(x0), _mm(y0)),
+        _list(_atom("size"), _mm(w), _mm(h)),
+        _stroke(),
+        _list(_atom("fill"), _list(_atom("color"), _atom("0"), _atom("0"),
+                                   _atom("0"), _atom("0.0000"))),
+        _uuid_node(sheet_uuid),
+        _list(
+            _atom("property"), _atom(_q("Sheetname")), _atom(_q(name)),
+            _at((x0, y0), 0), _effects(justify="left bottom"),
+        ),
+        _list(
+            _atom("property"), _atom(_q("Sheetfile")), _atom(_q(str(op["file"]))),
+            _at((x0, y0 + h), 0), _effects(justify="left top"),
+        ),
+    ]
+    for pin in op.get("pins") or []:
+        side = pin["side"]
+        off_nm = geometry.mil_to_nm(float(pin["offset_mil"]))
+        pos = geometry.grid_snap_nm(
+            _sheet_pin_pos(origin, size, side, off_nm), _GRID_NM)
+        pname = str(pin["name"])
+        puid = instances.deterministic_uuid(root, f"sheet:{name}.pin.{pname}", idx)
+        children.append(_list(
+            _atom("pin"), _atom(_q(pname)), _atom(str(pin["type"])),
+            _at(pos, _SHEET_PIN_ANGLE.get(side, 0)),
+            _effects(),
+            _uuid_node(puid),
+        ))
+    # (instances): a sub-sheet is paged under the root path; page number is
+    # per-op-index so replaying the same op-list stays byte-identical.
+    proj = instances.project_name(doc)
+    page = _list(_atom("page"), _atom(_q(str(idx + 2))))
+    inst = _list(
+        _atom("instances"),
+        _list(_atom("project"), _atom(_q(proj)),
+              _list(_atom("path"), _atom(_q("/" + root)), page)),
+    )
+    children.append(inst)
+    _append_top_idempotent(doc, _list(_atom("sheet"), *children), sheet_uuid)
+    return [sheet_uuid]
+
+
 def _delete_top_nodes(doc: SNode, keep) -> int:
     """Delete top-level list nodes for which ``keep(node)`` is False; return count."""
     removed = 0
@@ -1292,6 +1393,7 @@ _HANDLERS = {
     "place_vcc": _op_place_power_port,
     "add_bus_entry": _op_add_bus_entry,
     "add_text": _op_add_text,
+    "add_sheet": _op_add_sheet,
     "delete_component": _op_delete_component,
     "delete_object": _op_delete_object,
     "move_component": _op_move_component,
@@ -1309,6 +1411,7 @@ def apply(
     *,
     sources: object = None,
     backup_dir: object = None,
+    backup_depth: int = _DEFAULT_BACKUP_DEPTH,
     tol_nm: int = 0,
     verify_out: list | None = None,
 ) -> list[OpResult]:
@@ -1409,7 +1512,7 @@ def apply(
 
     # --- write (only on --apply AND fully clean) --------------------------- #
     if apply and not any_error and not verify_errors:
-        _atomic_write(p, text_out, snap_sha, snap_mtime, backup_dir)
+        _atomic_write(p, text_out, snap_sha, snap_mtime, backup_dir, backup_depth)
 
     return results
 
@@ -1422,8 +1525,29 @@ def _coerce_source_list(sources: object) -> list:
     return [sources]
 
 
+def backup_name(name: str, level: int) -> str:
+    """Backup filename for ``level`` >= 1: level 1 is ``<name>.bak``, 2 ``.bak2`` …"""
+    return f"{name}.bak" if level <= 1 else f"{name}.bak{level}"
+
+
+def _rotate_backups(bd: Path, name: str, depth: int) -> None:
+    """Shift ``<name>.bak`` -> ``.bak2`` -> … -> ``.bak{depth}`` to free ``.bak``.
+
+    The caller writes a fresh ``<name>.bak`` afterwards, so this makes room while
+    keeping the ``depth`` most-recent snapshots; the oldest (``.bak{depth}``) is
+    overwritten and any deeper stragglers are left untouched. ``depth`` 1 skips
+    rotation entirely (historical single-backup behaviour).
+    """
+    depth = max(1, int(depth))
+    for level in range(depth, 1, -1):
+        src = bd / backup_name(name, level - 1)
+        if src.exists():
+            os.replace(src, bd / backup_name(name, level))
+
+
 def _atomic_write(
-    p: Path, text: str, snap_sha: str, snap_mtime, backup_dir
+    p: Path, text: str, snap_sha: str, snap_mtime, backup_dir,
+    backup_depth: int = _DEFAULT_BACKUP_DEPTH,
 ) -> None:
     """Snapshot-guarded atomic write: temp -> fsync -> re-parse+verify -> replace.
 
@@ -1460,7 +1584,14 @@ def _atomic_write(
         if backup_dir is not None and p.exists():
             bd = Path(backup_dir)
             bd.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(p, bd / (p.name + ".bak"))
+            # Snapshot FIRST, rotate, then promote atomically: a crash
+            # mid-sequence leaves at worst a .bak-pending file next to a
+            # fully usable stack — never a level-1 gap with the newest
+            # snapshot existing only as the (about-to-change) live file.
+            pending = bd / (backup_name(p.name, 1) + ".pending")
+            shutil.copy2(p, pending)
+            _rotate_backups(bd, p.name, backup_depth)
+            os.replace(pending, bd / backup_name(p.name, 1))
         os.replace(tmp, p)
     except BaseException:
         try:

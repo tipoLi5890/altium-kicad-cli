@@ -37,6 +37,7 @@ from ..model import (
     Schematic,
     WireSeg,
 )
+from ..model import BusEntry as MBusEntry
 from ..model import Footprint as MFootprint
 from ..model import Junction as MJunction
 from . import kicad_lib, sexpr
@@ -319,15 +320,34 @@ def _build_file(
 def _collect_wires_labels(
     root: sexpr.SNode, prims: NetPrimitives, sheet: str
 ) -> None:
-    """Emit ``(wire)`` / ``(junction)`` / labels / ``(no_connect)`` primitives."""
-    for w in root.find_all("wire"):
-        pts = w.find("pts")
-        if pts is None:
-            continue
-        xys = pts.find_all("xy")
-        coords = [(_mm_to_mil(_fnum(p, 1)), _mm_to_mil(_fnum(p, 2))) for p in xys]
-        for a, b in zip(coords, coords[1:]):
-            prims.wires.append(WireSeg(a=a, b=b, sheet=sheet))
+    """Emit wire/bus/bus_entry/junction/label/``(no_connect)`` primitives."""
+    for tag, dest in (("wire", prims.wires), ("bus", prims.buses)):
+        for w in root.find_all(tag):
+            pts = w.find("pts")
+            if pts is None:
+                continue
+            xys = pts.find_all("xy")
+            coords = [
+                (_mm_to_mil(_fnum(p, 1)), _mm_to_mil(_fnum(p, 2))) for p in xys
+            ]
+            for a, b in zip(coords, coords[1:]):
+                dest.append(WireSeg(a=a, b=b, sheet=sheet))
+
+    # (bus_entry): end a = (at), end b = (at)+(size); a missing (size) is a
+    # degenerate entry with both ends coincident (mirrors the draw gate).
+    for be in root.find_all("bus_entry"):
+        at = be.find("at")
+        size = be.find("size")
+        ax, ay = _fnum(at, 1), _fnum(at, 2)
+        sx = _fnum(size, 1) if size is not None else 0.0
+        sy = _fnum(size, 2) if size is not None else 0.0
+        prims.bus_entries.append(
+            MBusEntry(
+                a=(_mm_to_mil(ax), _mm_to_mil(ay)),
+                b=(_mm_to_mil(ax + sx), _mm_to_mil(ay + sy)),
+                sheet=sheet,
+            )
+        )
 
     for j in root.find_all("junction"):
         at = j.find("at")

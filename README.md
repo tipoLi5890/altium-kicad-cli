@@ -83,15 +83,20 @@ akcli diff   v1.SchDoc v2.SchDoc                   # net-membership diff, not na
 Power/ground detection is **net-name + power-port based**, not purely electrical-type based, because
 real boards are dominated by `Passive` pins — a naive type-only ERC produces a vacuous pass. Every
 report prints a metadata header (passive-pin ratio, suppressed No-ERC count, unnamed-net count,
-fractional-coordinate presence) so a clean result is never mistaken for an empty one.
+fractional-coordinate presence) so a clean result is never mistaken for an empty one. `--fail-on`
+tunes the exit-severity gate (`never` always exits 0), and a checker-agnostic `[[waiver]]` config
+table drops or demotes findings by code/refs (with the count surfaced in the header). Design-intent
+files support per-net modes and `fnmatch` wildcard members; located findings carry `pos`/`anchors`
+in JSON/SARIF.
 
 ## Write KiCad schematics from an op-list
 
 `akcli` writes KiCad schematics from a versioned JSON **op-list** (place components, wires, junctions,
-labels, power ports, text, rename/delete...; connectivity macros like `connect_and_label` and
-`place_pwr_flag` expand to core ops). Writes are surgical and idempotent (deterministic UUIDv5),
-guarded by a pure-Python connectivity verifier **and a before/after net diff**, and require an
-explicit `--apply` (default is a dry run). `akcli undo` reverts the last write.
+labels, power ports, text, hierarchical `add_sheet`, rename/delete...; connectivity macros like
+`connect_and_label` and `place_pwr_flag` expand to core ops). `akcli new` bootstraps a blank sheet to
+draw into. Writes are surgical and idempotent (deterministic UUIDv5), guarded by a pure-Python
+connectivity verifier **and a before/after net diff**, and require an explicit `--apply` (default is a
+dry run). `akcli undo` reverts the last write from a rotated backup stack (`undo --list`/`--steps N`).
 
 ```bash
 akcli plan board.kicad_sch --ops ops.json         # validate op-list, show changes + net diff
@@ -116,6 +121,7 @@ akcli jlc search "0.1uF 0402 X7R"     # keyword / MPN / category search (needs n
 akcli jlc show   C7593                 # one part by LCSC C-number (--easyeda adds 3D/MPN metadata)
 akcli jlc add    C2040 --3d            # LCSC part -> KiCad symbol + footprint + STEP
 akcli jlc bom board.kicad_sch --qty 10 --csv order.csv   # stock/price check + JLCPCB upload CSV
+akcli jlc datasheet board.kicad_sch --fetch              # datasheet PDFs for the whole BOM
 ```
 
 ## Engineering calculators
@@ -203,7 +209,7 @@ Full details, per-agent setup, and troubleshooting in [INSTALL.md](INSTALL.md).
 
 Shipped today: Altium `.SchDoc`/`.SchLib` and KiCad `.kicad_sch` read (version-tolerant, KiCad
 **hierarchical sheets included**), net inference, ERC/power/BOM/diff/pinmap/intent checks, KiCad
-write/draw (17-op vocabulary + 9 macros incl. delete/move/rename and multi-unit placement, net-diff
+write/draw (18-op vocabulary + 9 macros incl. delete/move/rename, hierarchical add_sheet and multi-unit placement, net-diff
 safety rails, output verified against KiCad's own netlister), embedded-library relink, and
 JLCPCB/LCSC part search with order-CSV export. The full milestone plan (v0.2 → v1.0, with exit
 criteria per milestone) lives in **[ROADMAP.md](ROADMAP.md)**. Headline items still ahead:

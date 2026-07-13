@@ -13,6 +13,7 @@ import http.client
 import json
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -114,6 +115,9 @@ def test_packaged_pages_exist():
     assert "/live/events" in live                       # SSE wiring shipped
     assert 'id="werr"' in live and "watcher_error" in live   # crash banner
     assert "aria-current" in live                       # a11y timeline steps
+    # lint-findings overlay wired to /api/findings (mil -> mm conversion)
+    assert 'id="lintmk"' in live and "/api/findings" in live
+    assert "MIL_TO_MM" in live and 'id="fovl"' in live
     assert '/calc"' in hub and '/live"' in hub and "/api/list" in hub
     # the shared bench chrome (mark + page tabs) ships on every page
     for page_src in (calc, live, hub):
@@ -289,6 +293,138 @@ def test_live_bom_offline_and_checked(env, calc_only_port, monkeypatch):
     assert status == 409
 
 
+# ---------------------------------------------------------- findings API ----
+
+DEVICE_SYM = (Path(__file__).parent / "fixtures" / "kicad" / "symbols"
+              / "Device.kicad_sym")
+
+
+def _overlap_sch(tmp_path: Path) -> Path:
+    """A .kicad_sch with two overlapping resistors — yields a positioned
+    LAYOUT_SYMBOL_OVERLAP finding (pos in mils, root frame)."""
+    from altium_kicad_cli.writers import kicad as kw
+    tgt = tmp_path / "overlap.kicad_sch"
+    tgt.write_text(
+        '(kicad_sch (version 20231120) (generator "akcli") '
+        '(uuid "11111111-2222-3333-4444-555555555555") (paper "A4"))\n')
+    kw.apply(
+        {"protocol_version": 1, "target_format": "kicad", "ops": [
+            {"op": "place_component", "lib_id": "Device:R", "designator": "R1",
+             "x_mil": 2000, "y_mil": 2000},
+            {"op": "place_component", "lib_id": "Device:R", "designator": "R2",
+             "x_mil": 2050, "y_mil": 2000}]},
+        str(tgt), apply=True, sources=[str(DEVICE_SYM)])
+    return tgt
+
+
+def test_api_findings_offline_positions(tmp_path):
+    from altium_kicad_cli.checks import layout
+    tgt = _overlap_sch(tmp_path)
+    sdir = tmp_path / "state"
+    sdir.mkdir()
+    srv = _serve(Dash(sdir, tgt))
+    port = srv.server_address[1]
+    try:
+        status, body, _ = _get(port, "/api/findings?file=overlap.kicad_sch")
+        doc = json.loads(body)
+        assert status == 200
+        codes = {f["code"] for f in doc["findings"]}
+        assert layout.LAYOUT_SYMBOL_OVERLAP in codes
+        overlap = next(f for f in doc["findings"]
+                       if f["code"] == layout.LAYOUT_SYMBOL_OVERLAP)
+        # positions ride along as [x_mil, y_mil]; anchors name the entities
+        assert overlap["pos"][0] == pytest.approx(2000, abs=1)
+        assert overlap["pos"][1] == pytest.approx(2000, abs=1)
+        assert overlap["anchors"] and overlap["anchors"][0]["kind"] == "component"
+        assert doc["count"] == len(doc["findings"])
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_api_findings_cached_per_mtime(tmp_path):
+    import os
+    tgt = _overlap_sch(tmp_path)
+    sdir = tmp_path / "state"
+    sdir.mkdir()
+    dash = Dash(sdir, tgt)
+    a = dash.findings()
+    assert dash.findings() is a                 # same mtime -> memoized object
+    st = tgt.stat()
+    os.utime(tgt, (st.st_atime, st.st_mtime + 5))
+    c = dash.findings()
+    assert c is not a and c["count"] == a["count"]
+
+
+def test_api_findings_not_watching(calc_only_port):
+    status, body, _ = _get(calc_only_port, "/api/findings")
+    assert status == 409 and "not watching" in json.loads(body)["error"]
+
+
+def test_api_findings_error_is_json_not_dropped(tmp_path):
+    tgt = tmp_path / "broken.kicad_sch"
+    tgt.write_text("(kicad_sch")                # unterminated -> parse error
+    sdir = tmp_path / "s"
+    sdir.mkdir()
+    srv = _serve(Dash(sdir, tgt))
+    port = srv.server_address[1]
+    try:
+        status, body, _ = _get(port, "/api/findings")
+        doc = json.loads(body)
+        assert status == 500 and "error" in doc   # answered, never dropped
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_live_bom_datasheet_links(env, monkeypatch):
+    """?check=1 attaches a per-line datasheet link (pdf/page), tolerating
+    per-line resolver failures; the offline path never resolves."""
+    port, *_ = env
+    from altium_kicad_cli.parts import bom_jlc
+    from altium_kicad_cli.parts import datasheet as ds_mod
+
+    def fake_check(sch, **k):
+        return [
+            bom_jlc.BomLine(refs=["U1"], value="MCU", footprint="QFN",
+                            lcsc="C1234", status="ok"),
+            bom_jlc.BomLine(refs=["J1"], value="HDR", footprint="1x4",
+                            lcsc="C9", status="ok"),
+            bom_jlc.BomLine(refs=["D1"], value="LED", footprint="0603",
+                            lcsc="CBAD", status="ok"),   # resolver blows up
+            bom_jlc.BomLine(refs=["R1"], value="10k", footprint="0603"),  # no id
+        ]
+    monkeypatch.setattr(bom_jlc, "check", fake_check)
+    monkeypatch.setattr(bom_jlc, "totals", lambda lines: {"lines": len(lines)})
+
+    def fake_resolve(lcsc, **k):
+        if lcsc == "C1234":
+            return ds_mod.DatasheetRow(lcsc=lcsc, url="https://a/x.pdf",
+                                       status="resolved")
+        if lcsc == "C9":
+            return ds_mod.DatasheetRow(lcsc=lcsc, status="page-link",
+                                       url="https://item.szlcsc.com/9.html")
+        raise RuntimeError("resolver exploded")
+    monkeypatch.setattr(ds_mod, "resolve", fake_resolve)
+
+    status, body, _ = _get(port, "/live/bom?check=1")
+    doc = json.loads(body)
+    assert status == 200 and doc["checked"] is True
+    by_ref = {tuple(ln["refs"]): ln for ln in doc["lines"]}
+    assert by_ref[("U1",)]["datasheet"] == {"url": "https://a/x.pdf", "kind": "pdf"}
+    assert by_ref[("J1",)]["datasheet"] == {
+        "url": "https://item.szlcsc.com/9.html", "kind": "page"}
+    assert "datasheet" not in by_ref[("D1",)]   # resolver error tolerated
+    assert "datasheet" not in by_ref[("R1",)]   # no lcsc -> never resolved
+
+    # the OFFLINE path must never carry datasheet links (no network there)
+    monkeypatch.setattr(bom_jlc, "collect_lines", lambda sch: fake_check(sch))
+    status, body, _ = _get(port, "/live/bom")
+    doc = json.loads(body)
+    assert status == 200 and doc["checked"] is False
+    assert all("datasheet" not in ln for ln in doc["lines"])
+
+
 # ------------------------------------------------------------- security ----
 
 def test_local_host_and_origin_helpers():
@@ -347,23 +483,39 @@ def test_cross_origin_post_rejected(env):
 
 # ----------------------------------------------------- watcher hardening ----
 
-def _stub_kicad(tmp_path: Path) -> Path:
-    """A fake kicad-cli: exports two SVGs / an empty JSON ERC report."""
-    stub = tmp_path / "kicad-cli-stub"
-    stub.write_text(
-        "#!/bin/sh\n"
-        'out=""\n'
-        "while [ $# -gt 0 ]; do\n"
-        '  case "$1" in\n'
-        '    -o) out="$2"; shift 2;;\n'
-        "    --output) printf '{\"sheets\": []}' > \"$2\"; exit 0;;\n"
-        "    *) shift;;\n"
-        "  esac\n"
-        "done\n"
-        f"printf '{SVG}' > \"$out/board.svg\"\n"
-        f"printf '{SVG}' > \"$out/board_child.svg\"\n")
+def _script_wrapper(tmp_path: Path, name: str, py: Path) -> Path:
+    """A launcher the OS can actually exec: Windows CreateProcess cannot run
+    a shebang script (WinError 193) but handles ``.cmd``; POSIX gets the
+    usual ``#!/bin/sh`` wrapper. The logic itself stays in one ``.py``."""
+    if sys.platform == "win32":
+        stub = tmp_path / f"{name}.cmd"
+        stub.write_text(f'@echo off\r\n"{sys.executable}" "{py}" %*\r\n')
+        return stub
+    stub = tmp_path / name
+    stub.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{py}" "$@"\n')
     stub.chmod(0o755)
     return stub
+
+
+def _stub_kicad(tmp_path: Path) -> Path:
+    """A fake kicad-cli: exports two SVGs / an empty JSON ERC report."""
+    py = tmp_path / "kicad-cli-stub.py"
+    py.write_text(
+        "import os, sys\n"
+        f"SVG = {SVG!r}\n"
+        "args = sys.argv[1:]\n"
+        "out = None\n"
+        "i = 0\n"
+        "while i < len(args):\n"
+        "    if args[i] == '-o':\n"
+        "        out = args[i + 1]; i += 2; continue\n"
+        "    if args[i] == '--output':\n"
+        "        open(args[i + 1], 'w').write('{\"sheets\": []}')\n"
+        "        raise SystemExit(0)\n"
+        "    i += 1\n"
+        "open(os.path.join(out, 'board.svg'), 'w').write(SVG)\n"
+        "open(os.path.join(out, 'board_child.svg'), 'w').write(SVG)\n")
+    return _script_wrapper(tmp_path, "kicad-cli-stub", py)
 
 
 def _watch_env(tmp_path: Path) -> tuple[Dash, Path]:
@@ -385,9 +537,9 @@ def test_export_svgs_via_stub(tmp_path, monkeypatch):
 
 def test_export_svgs_failure_and_timeout(tmp_path, monkeypatch):
     # non-zero exit (intermediate broken save): no step, no error state
-    bad = tmp_path / "kicad-cli-bad"
-    bad.write_text("#!/bin/sh\nexit 1\n")
-    bad.chmod(0o755)
+    bad_py = tmp_path / "kicad-cli-bad.py"
+    bad_py.write_text("raise SystemExit(1)\n")
+    bad = _script_wrapper(tmp_path, "kicad-cli-bad", bad_py)
     monkeypatch.setenv("KICAD_CLI", str(bad))
     dash, _ = _watch_env(tmp_path)
     w = _Watcher(dash)

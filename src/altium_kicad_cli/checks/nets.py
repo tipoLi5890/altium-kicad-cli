@@ -31,7 +31,7 @@ from __future__ import annotations
 from .. import units
 from ..config import DEFAULT_GRID_NM, Config
 from ..model import Schematic
-from ..report import Finding, Severity
+from ..report import Finding, Severity, anchor
 
 NET_SINGLE_PIN = "NET_SINGLE_PIN"   # WARNING: 1-member net (floating / undriven)
 NET_OFF_GRID = "NET_OFF_GRID"       # WARNING: pins off the schematic grid
@@ -56,6 +56,8 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
     nc_points = {_pt_nm(x, y) for x, y in (sch.no_erc_points or [])}
     pin_at = {(c.designator, p.number): _pt_nm(p.x_mil, p.y_mil)
               for c in sch.components for p in c.pins}
+    pin_mil = {(c.designator, p.number): (p.x_mil, p.y_mil)
+               for c in sch.components for p in c.pins}
 
     for net in sch.nets:
         if len(net.members) != 1:
@@ -65,10 +67,13 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
             continue
         what = ("power port drives nothing"
                 if d.startswith("#") else "floating or missing connection")
+        pos = pin_mil.get((d, p))
         findings.append(Finding(
             NET_SINGLE_PIN, Severity.WARNING,
             f"net '{net.name}' has a single pin {d}.{p} — {what}",
             refs=[f"{d}.{p}"],
+            pos=pos,
+            anchors=[anchor("pin", f"{d}.{p}", pos), anchor("net", net.name or "")],
         ))
 
     grid_mil = grid_nm / units.NM_PER_MIL
@@ -81,11 +86,16 @@ def run(sch: Schematic, cfg: Config | None = None) -> list[Finding]:
         sample = ", ".join(
             f"{p.number}@({p.x_mil:g},{p.y_mil:g})" for p in off[:4])
         more = f" (+{len(off) - 4} more)" if len(off) > 4 else ""
+        anchors = [anchor("component", comp.designator, (comp.x_mil, comp.y_mil))]
+        anchors += [anchor("pin", f"{comp.designator}.{p.number}", (p.x_mil, p.y_mil))
+                    for p in off[:4]]
         findings.append(Finding(
             NET_OFF_GRID, Severity.WARNING,
             f"{comp.designator}: {len(off)} pin(s) off the {grid_mil:g}-mil "
             f"grid: {sample}{more} — wires may touch without connecting",
             refs=[comp.designator],
+            pos=(off[0].x_mil, off[0].y_mil),
+            anchors=anchors,
         ))
 
     return findings

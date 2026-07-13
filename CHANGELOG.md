@@ -30,6 +30,103 @@ All notable changes to `altium-kicad-cli` are documented here. The format is bas
 
 When in doubt, prefer additive, backwards-compatible changes and leave the version contracts untouched.
 
+## [0.5.0] - 2026-07-13
+
+### Added
+- **`akcli jlc datasheet <C-number|MPN|sch> [--fetch] [--out DIR] [--force]`**
+  — datasheet PDF resolution and download. Targets one C-number, one exact
+  MPN (catalog-matched like `jlc bom`), or a schematic (every BOM line with
+  an `LCSC` parameter, batch). Resolution reads the part's EasyEDA component
+  record — the jlcsearch mirror never carries datasheet links and lcsc.com
+  bot-gates plain fetches, but the record embeds the szlcsc-hosted PDF URL
+  in `head.c_para.link` (symbol *or* footprint side; both checked, which
+  also fixed `jlc show --easyeda` missing footprint-side links). `--fetch`
+  verifies the `%PDF` magic so an HTML challenge page is never saved as a
+  `.pdf`, writes atomically under `--out`/`AKCLI_DATASHEET_DIR`/
+  `~/.cache/akcli/datasheets/` as `C<digits>_<MPN>.pdf`, and treats existing
+  files as a cache (`--force` refetches). Links are **classified**, not
+  trusted: direct `.pdf` → `resolved`; product/viewer pages (JS shells,
+  bot-gated hosts) → `page-link` with the URL surfaced for a browser-grade
+  fetcher; search-engine junk in the EasyEDA data → `no-link` with the LCSC
+  product-page hint. Lint-style exits: `1` while anything short of a PDF
+  remains, `7` on network failure, `no-lcsc` lines are advisory.
+- **skills**: `schematic-authoring` gained a datasheet-driven design loop
+  (fetch → read electrical characteristics → cross-check with `akcli calc`
+  → margin-check against absolute maximum ratings); `design-calc` now points
+  calculator inputs at datasheet values instead of guesses.
+- **`akcli new [path] [--paper SIZE] [--title T] [--force]`** — bootstrap a
+  minimal blank `.kicad_sch` (root uuid + paper + optional title block) that
+  `draw`/`plan` can append to immediately, replacing the hand-seeded skeleton.
+  `--json` = `{created, target, paper, title, status}`.
+- **Multi-level `akcli undo`** — `draw --apply` now rotates up to 3 backups
+  (`<name>.bak` newest, `.bak2`, `.bak3`). `undo --list` prints the stack
+  (level/path/size/mtime, newest first); `undo --steps N` walks back N snapshots
+  leaving one redo available.
+- **`akcli add_sheet` op (18 ops now)** — hierarchical child-sheet reference:
+  emits `(sheet …)` with `Sheetname`/`Sheetfile`, deterministic uuids, and
+  edge-computed sheet pins (`pins:[{name, type, side, offset_mil}]`). `at` =
+  top-left mils; wires attach to a sheet pin BY COORDINATE (no `Sheet.Pin`
+  endpoint). A cross-sheet net is a parent sheet-pin paired with the child's
+  same-name hierarchical label (matches eeschema). KiCad only; the child
+  `.kicad_sch` is authored separately (`akcli new`).
+- **`check --fail-on {info,note,warning,error,never}`** — sets the minimum
+  (post-waiver) finding severity that exits non-zero (default `warning` = prior
+  behavior). `--exit-zero` is now a deprecated alias for `--fail-on never`.
+- **`[[waiver]]` config table** (checker-agnostic, independent of the ERC-only
+  `[[erc_waiver]]`): `{code (fnmatch), refs? (fnmatch glob/list), severity?
+  off|note|info, reason?}` — `off` drops, `note`/`info` demote a finding,
+  applied centrally before rendering and the exit decision. Bad shape →
+  `BAD_CONFIG`. The metadata header always prints `config-waived: N (M demoted)`.
+- **Structured finding positions** — findings may carry `pos` (`[x_mil, y_mil]`,
+  model frame) and `anchors` (`{kind,id[,pos]}`, kind ∈ component|pin|net|label).
+  Text appends ` @ (x,y)`; JSON emits `pos`/`anchors` only when present (positionless
+  findings keep their exact prior shape); SARIF adds `logicalLocations` +
+  `properties.akcli.{pos,anchors}` while `partialFingerprints` stay byte-stable.
+- **Design-intent v2** (`check --intent`, additive; `protocol_version` stays 1):
+  per-net mode override (`{"members":[…], "mode":"exact"|"subset"}` overrides the
+  document mode for one net) and `fnmatch` wildcards on the REF part of a member
+  (`"R*.2"`, `"U?.1"` — pin literal). A wildcard is an existence assertion (≥1
+  matching pin; zero → `INTENT_MISSING_MEMBER` naming the pattern) and is ignored
+  when computing `INTENT_EXTRA_MEMBER` in exact mode.
+- **Live web UI lint overlay** — the `/live` dashboard gained a dashed-square
+  findings overlay (toolbar `lint` / key `G`) drawn from a new
+  `GET /api/findings` (fast offline nets+geom+layout lint, mtime-cached, mils→mm
+  via `MIL_TO_MM = 0.0254`), plus per-line **datasheet links** on the networked
+  BOM `?check=1` view (resolved via `parts.datasheet.resolve`, per-line tolerant).
+- **Real bus netlist semantics (stage 2)** — `netbuild` models buses arbitrated
+  against `kicad-cli`: `(bus_entry)` conduction, labeled-rip member selection
+  (unlabeled rips float), `NAME[a..b]` inclusive vector expansion, and
+  scope-correct cross-sheet bus-name merging. `akcli net`/`diff` on imported
+  KiCad bus designs now report bus-carried nets. `model.NetPrimitives` gained
+  `buses`/`bus_entries` (default-empty; Altium reader untouched).
+
+### Changed
+- **`netbuild` is near-linear** — a shared `O(log n + k)` orthogonal-segment
+  index replaces the O(n²) geometric scans in net building and the connectivity
+  writer; a ~5100-segment sheet now builds in a fraction of a second with
+  byte-identical semantics.
+- **`battery-life` default `derating` 0.7 → 0.8** — now aligned with `battery`,
+  so the two give identical hours for the same capacity/current (override with
+  `derating=`). `capacity=2500 i_avg=10` → 200 h / 8.33 d.
+- **calc input-suffix rule** — a parameter whose declared unit is already
+  milli-denominated (`battery-life`'s `capacity` in mAh, `i_avg` in mA) now
+  takes a bare number and **rejects** a trailing engineering `m`
+  (`capacity=2000m` → `ERROR: capacity is already in mAh`) instead of silently
+  applying a compounding 1000× milli. The generic length unit `m` (meters) is
+  unaffected.
+
+### Fixed
+- **`akcli view` port auto-increment now works on Windows** — the server
+  inherited `allow_reuse_address` (SO_REUSEADDR), which on Windows means
+  "bind even while another socket is LISTENING": a second `akcli view`
+  silently shared/hijacked port 8765 instead of moving to 8766. The flag is
+  now POSIX-only (there it merely skips TIME_WAIT). CI hardening from the
+  same round: the webui test kicad-cli stub runs through a per-OS launcher
+  (Windows CreateProcess cannot exec shebang scripts — WinError 193), and
+  the browser regression asserts the theme *flips* instead of hardcoding
+  the end state (the initial theme follows the runner's
+  `prefers-color-scheme`).
+
 ## [0.4.0] - 2026-07-11
 
 ### Added

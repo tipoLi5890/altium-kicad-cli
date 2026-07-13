@@ -25,7 +25,7 @@ from pathlib import Path
 from .. import netbuild
 from ..model import NetPrimitives
 from ..readers import kicad as _krd
-from ..report import Finding, Severity
+from ..report import Finding, Severity, anchor
 
 NET_PIN_MIDSPAN_TOUCH = "NET_PIN_MIDSPAN_TOUCH"    # pin tip mid-span, no junction
 NET_LABEL_UNATTACHED = "NET_LABEL_UNATTACHED"      # label anchor on no pin, no wire
@@ -98,6 +98,8 @@ def run_prims(prims: NetPrimitives) -> list[Finding]:
                 "end or a junction); add a junction there or end the wire on "
                 "the pin",
                 refs=[f"{des}.{num}"],
+                pos=ph.at,
+                anchors=[anchor("pin", f"{des}.{num}", ph.at)],
             ))
 
     # (b) label anchored on nothing: no pin tip, no wire -> it names nothing.
@@ -121,6 +123,8 @@ def run_prims(prims: NetPrimitives) -> list[Finding]:
             "lies on no wire — it names nothing; anchor it on a pin tip or a "
             "wire",
             refs=[lb.text],
+            pos=lb.at,
+            anchors=[anchor("label", lb.text, lb.at)],
         ))
 
     # (c) wire cornering exactly on a pin tip: this DOES connect (both segment
@@ -146,6 +150,8 @@ def run_prims(prims: NetPrimitives) -> list[Finding]:
                 f"{_fmt(ph.at)} — the pin joins BOTH legs of the corner; if "
                 "that is unintended, move the corner off the pin",
                 refs=[f"{des}.{num}"],
+                pos=ph.at,
+                anchors=[anchor("pin", f"{des}.{num}", ph.at)],
             ))
 
     return findings

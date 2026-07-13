@@ -216,6 +216,32 @@
         },
         {
           "properties": {
+            "op": { "const": "add_sheet" },
+            "name": { "type": "string", "description": "Sheetname property value." },
+            "file": { "type": "string", "description": "Sheetfile property value; the referenced child .kicad_sch is NOT created by this op." },
+            "at": { "$ref": "#/$defs/point", "description": "Top-left corner [x, y] mil of the sheet box." },
+            "size": { "$ref": "#/$defs/point", "description": "[width, height] mil of the sheet box." },
+            "pins": {
+              "type": "array",
+              "description": "Sheet pins on the box edges; each pin's edge coordinate is at + offset_mil along its side, wire endpoints attach to that coordinate.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "type": { "enum": ["input", "output", "bidirectional", "tri_state", "passive"] },
+                  "side": { "enum": ["left", "right", "top", "bottom"] },
+                  "offset_mil": { "type": "number" }
+                },
+                "required": ["name", "type", "side", "offset_mil"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["op", "name", "file", "at", "size"],
+          "description": "Emit a hierarchical (sheet ...) node with Sheetname/Sheetfile, sheet pins at computed edge coordinates and the (instances) block; the child file is authored separately."
+        },
+        {
+          "properties": {
             "op": { "const": "place_divider" },
             "x_mil": { "type": "number" },
             "y_mil": { "type": "number" },

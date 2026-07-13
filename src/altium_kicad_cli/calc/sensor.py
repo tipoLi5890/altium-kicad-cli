@@ -8,8 +8,9 @@ References:
 
 * Battery life: ANSI C18.1M (portable primary cells) rates capacity at low
   drain; manufacturer alkaline datasheets (Energizer/Duracell) show the
-  usable fraction dropping with load and temperature — the default 0.7
-  derating is that manufacturer-typical figure (advisory, not a standard).
+  usable fraction dropping with load and temperature. The default 0.8
+  derating matches the `battery` calculator (advisory, not a standard);
+  override with `derating=` for a chemistry/load-specific figure.
 * Comparator thresholds: Texas Instruments SLVA954, *Analog Engineer's
   Circuit: Inverting comparator with hysteresis* — node equation
   V+ = (VCC·G1 + VOUT·Gf)/(G1+G2+Gf). An open-drain output with pull-up
@@ -34,10 +35,12 @@ from .registry import CalcError, Param, Result, register
     "fraction under load (Energizer/Duracell alkaline datasheets) — advisory",
     (Param("capacity", "mAh", "datasheet capacity"),
      Param("i_avg", "mA", "average load current"),
-     Param("derating", "", "usable-capacity factor", default=0.7)),
+     Param("derating", "", "usable-capacity factor", default=0.8)),
     notes="Same estimate as `battery` but in the mAh/mA a datasheet quotes; "
-          "duty-cycle the load into i_avg first. Never promise runtime "
-          "without margin — capacity falls further with cold and pulse loads.",
+          "duty-cycle the load into i_avg first. Default derating (0.8) "
+          "matches the `battery` calculator; override with derating= for "
+          "a chemistry/load-specific figure. Never promise runtime without "
+          "margin — capacity falls further with cold and pulse loads.",
 )
 def _calc_battery_life(capacity, i_avg, derating) -> list[Result]:
     if capacity <= 0 or i_avg <= 0 or not 0 < derating <= 1:

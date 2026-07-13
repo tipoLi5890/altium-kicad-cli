@@ -261,7 +261,7 @@ class NetPrimitives:
   of two exactly axis-aligned pins, snapped to grid along the wire axis (misaligned pins fail
   with `NON_ORTHOGONAL_WIRE`).
 
-### 2.2 Op vocabulary (13 LOCKED ops + 3 additive v0.2 ops + 1 additive v0.4 op)
+### 2.2 Op vocabulary (13 LOCKED ops + 3 additive v0.2 ops + 1 additive v0.4 op + 1 additive hierarchical op)
 
 | op | purpose | KiCad writer | Altium live |
 |---|---|---|---|
@@ -280,6 +280,7 @@ class NetPrimitives:
 | `delete_object` | remove ONE top-level object by uuid, or via `match: {kind, name?, at?}` selector (exactly-one semantics) | ✅ | ⚠️ `OP_UNSUPPORTED` v1 |
 | `move_component` | move one instance (designator + optional `unit`); its properties travel along, wires are NOT stretched | ✅ | ⚠️ `OP_UNSUPPORTED` v1 |
 | `rename_net` (v0.4) | rewrite matching label texts + power-port net Values (`scope` restricts kind; 0 matches = replay-safe note) | ✅ | ⚠️ `OP_UNSUPPORTED` v1 |
+| `add_sheet` | hierarchical child-sheet reference: `(sheet …)` with `Sheetname`/`Sheetfile`, deterministic uuids, edge-computed sheet pins (`pins:[{name, type, side, offset_mil}]`); `at`=top-left mils; wires attach to a sheet pin BY COORDINATE (no `Sheet.Pin` endpoint); cross-sheet net = parent sheet-pin ↔ child same-name hierarchical label. Additive, `protocol_version` unchanged | ✅ | ⚠️ `OP_UNSUPPORTED` v1 |
 
 `place_component` additionally takes an optional `"unit": N` (multi-unit parts: each unit is
 its own placed instance sharing the designator; `"REF.PIN"` resolves against the instance whose
@@ -288,6 +289,16 @@ unit owns the pin, and a pin on an unplaced unit fails loudly).
 A per-executor **capability matrix** ships as `schemas/ops.capabilities.json`; an executor returns
 `ERROR: OP_UNSUPPORTED` for any op it cannot map. `place_gnd`/`place_vcc` are documented sugar over
 `place_power_port` with a preset `lib_id`.
+
+**Bus netlist semantics (stage 2, kicad-cli-arbitrated).** The `netbuild` engine models buses as a
+real layer, verified against `kicad-cli` netlist exports: a `(bus_entry)` conducts between its two
+ends; an entry end attaches to a *wire* only at a wire endpoint or junction (a bare mid-span touch
+floats, like a pin) but to a *bus* anywhere along a segment; the bus member a rip joins is selected
+by the **wire-side label** (an unlabeled rip stays unconnected, a plain label placed on the bus
+selects nothing); `NAME[a..b]` vector expansion is inclusive at both ends in either order; bus
+clusters merge by name under label-scope rules (local = sheet-scoped, global merges member nets
+across sheets, sheet-pin↔hierarchical-label ports stitch parent/child). `model.NetPrimitives`
+gained `buses` and `bus_entries` (both default-empty, so the Altium reader is untouched).
 
 ### 2.3 op-list document shape
 

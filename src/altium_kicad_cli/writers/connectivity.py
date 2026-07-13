@@ -48,6 +48,7 @@ from collections import Counter
 from .. import model, units
 from ..errors import AkcliError
 from ..model import Component
+from ..netbuild import SegmentIndex
 from ..readers import kicad_lib
 from ..readers.sexpr import SNode
 from ..report import Finding, Severity
@@ -110,26 +111,6 @@ def _root_uuid(doc: SNode) -> str | None:
 # --------------------------------------------------------------------------- #
 # geometry helpers (exact integer-nm)
 # --------------------------------------------------------------------------- #
-def _on_segment_interior(p: Point, a: Point, b: Point) -> bool:
-    """True when ``p`` lies strictly between ``a`` and ``b`` (exclusive endpoints)."""
-    if p == a or p == b:
-        return False
-    ax, ay = a
-    bx, by = b
-    px, py = p
-    # collinearity via exact integer cross product
-    if (bx - ax) * (py - ay) - (by - ay) * (px - ax) != 0:
-        return False
-    # within the segment span (exclusive of endpoints, already handled above)
-    dot = (px - ax) * (bx - ax) + (py - ay) * (by - ay)
-    if dot < 0:
-        return False
-    sqlen = (bx - ax) ** 2 + (by - ay) ** 2
-    if dot > sqlen:
-        return False
-    return sqlen != 0  # zero-length segment has no interior
-
-
 def _hit(p: Point, pts: set[Point], tol: int) -> bool:
     """True when ``p`` coincides with a member of ``pts`` (exact when ``tol==0``)."""
     if tol <= 0:
@@ -389,6 +370,12 @@ def verify(doc: SNode, *, tol_nm: int = 0) -> list[Finding]:
     junction_points = _junction_points(doc)
     nc_points = _no_connect_points(doc)
 
+    # Orthogonal-segment indexes replace the per-point linear scans (the O(n^2)
+    # dangling / bus / no-connect passes). Integer-nm coords keep every hit an
+    # exact coincidence, so findings are identical to the linear scan.
+    seg_index = SegmentIndex(segs)
+    bus_index = SegmentIndex(bus_segs)
+
     end_counts: Counter[Point] = Counter()
     for a, b in segs:
         end_counts[a] += 1
@@ -399,10 +386,7 @@ def verify(doc: SNode, *, tol_nm: int = 0) -> list[Finding]:
         """``p`` connects to a wire other than (just) terminating itself."""
         if end_counts.get(p, 0) >= 2:
             return True  # another wire endpoint also lands here
-        for a, b in segs:
-            if _on_segment_interior(p, a, b):
-                return True  # T-junction into a wire's mid-span
-        return False
+        return seg_index.has_interior_hit(p)  # T-junction into a wire's mid-span
 
     # --- dangling wire endpoints ------------------------------------------- #
     reported: set[Point] = set()
@@ -430,11 +414,11 @@ def verify(doc: SNode, *, tol_nm: int = 0) -> list[Finding]:
             )
 
     # --- dangling bus entries (reciprocal of the anchor above) -------------- #
-    def _touches(p: Point, seg_list: list[tuple[Point, Point]], ends: set[Point]) -> bool:
-        """``p`` lands on a segment of ``seg_list`` (endpoint or mid-span)."""
+    def _touches(p: Point, index: SegmentIndex, ends: set[Point]) -> bool:
+        """``p`` lands on an indexed segment (endpoint or mid-span)."""
         if _hit(p, ends, tol_nm):
             return True
-        return any(_on_segment_interior(p, a, b) for a, b in seg_list)
+        return index.has_interior_hit(p)
 
     wire_end_points = set(end_counts)
     entry_reported: set[Point] = set()
@@ -442,8 +426,8 @@ def verify(doc: SNode, *, tol_nm: int = 0) -> list[Finding]:
         for p in pair:
             if p in entry_reported:
                 continue
-            if _touches(p, bus_segs, bus_end_points) or _touches(
-                p, segs, wire_end_points
+            if _touches(p, bus_index, bus_end_points) or _touches(
+                p, seg_index, wire_end_points
             ):
                 continue
             entry_reported.add(p)
@@ -458,9 +442,7 @@ def verify(doc: SNode, *, tol_nm: int = 0) -> list[Finding]:
 
     # --- no-connect honoring (conflict: NC on a wired pin) ----------------- #
     for p in nc_points:
-        wired = end_counts.get(p, 0) >= 1 or any(
-            _on_segment_interior(p, a, b) for a, b in segs
-        )
+        wired = end_counts.get(p, 0) >= 1 or seg_index.has_interior_hit(p)
         if wired and _hit(p, pin_points, tol_nm):
             ref, num = pin_owner.get(p, ("?", "?"))
             findings.append(
@@ -517,6 +499,7 @@ def auto_junctions(doc: SNode, *, tol_nm: int = 0) -> None:
 
     pin_points, _owner, _lf = _pin_points(doc, _library(doc))
     existing = _junction_points(doc)
+    seg_index = SegmentIndex(segs)
 
     end_counts: Counter[Point] = Counter()
     for a, b in segs:
@@ -531,7 +514,7 @@ def auto_junctions(doc: SNode, *, tol_nm: int = 0) -> None:
     # by akcli but dangled in KiCad).
     cand_set = set(end_counts.keys())
     for p in pin_points:
-        if p not in cand_set and any(_on_segment_interior(p, a, b) for a, b in segs):
+        if p not in cand_set and seg_index.has_interior_hit(p):
             cand_set.add(p)
     candidates = sorted(cand_set)
     root_uuid = _root_uuid(doc)
@@ -540,7 +523,7 @@ def auto_junctions(doc: SNode, *, tol_nm: int = 0) -> None:
         if _hit(p, existing, tol_nm):
             continue
         ends = end_counts.get(p, 0)
-        through = sum(1 for a, b in segs if _on_segment_interior(p, a, b))
+        through = seg_index.interior_count(p)
         pins = 1 if _hit(p, pin_points, tol_nm) else 0
         if not _needs_junction(ends, through, pins):
             continue

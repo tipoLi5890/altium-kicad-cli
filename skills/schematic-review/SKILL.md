@@ -32,8 +32,19 @@ A review is **strictly read-only**. Never modify the schematic under review, and
 - **"0 findings" is not "clean".** Read the metadata header `check` prints (passive-pin
   ratio, No-ERC suppressed count, unnamed-net count, frac coords) before concluding anything.
 - **The schematic is authoritative; expected tables and datasheet notes are advisory.**
-- Run `check`/`diff`/`pinmap` with `--exit-zero` in review mode: exit `1` means "findings
-  exist", not "tool failed", and report mode keeps scripted pipelines flowing.
+- Run `check`/`diff`/`pinmap` with `--fail-on never` (or the deprecated
+  `--exit-zero` alias) in review mode: exit `1` means "findings exist", not "tool
+  failed", and report mode keeps scripted pipelines flowing. Tune the gate for CI
+  with `--fail-on {info,note,warning,error,never}`, never by hiding findings.
+- **Waiver discipline — never waive without a reason.** The checker-agnostic
+  `[[waiver]]` config table drops (`severity = "off"`) or demotes
+  (`note`/`info`) a finding by `code`/`refs`, but a review may only rely on a
+  waiver that carries an explicit `reason` string justifying it — an
+  unexplained waiver is itself a Minor finding. Read the header's
+  `config-waived: N (M demoted)` line every run: a waiver-cleaned pass is NOT an
+  intrinsically clean pass, and each waived code must be re-justified against the
+  current schematic (waivers are `[[waiver]]`, distinct from the ERC-only
+  `[[erc_waiver]]`).
 
 ## Review pipeline
 

@@ -307,15 +307,13 @@ def test_fuzz_valid_docs_dry_run_contained(seed, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# genuine defects found by fuzzing, pinned until fixed (non-strict xfail)
+# regression: unhashable values in enum-checked slots (formerly xfail)
 # --------------------------------------------------------------------------- #
-@pytest.mark.xfail(
-    strict=False,
-    reason="known defect: unhashable (list/dict) values in enum-checked slots "
-    "(op / target_format / rotation / mirror / scope) hit `x in frozenset` "
-    "and raise TypeError instead of returning OpErrors",
-)
-def test_unhashable_enum_slot_values_known_defect():
+def test_unhashable_enum_slot_values_return_operrors():
+    """An UNHASHABLE (list/dict) value in an enum-checked slot (op /
+    target_format / rotation / mirror / scope) must yield OpErrors, never a
+    TypeError from ``x in frozenset``. Contained by ``ops._in`` — the validator
+    and ``expand_macros`` stay total over any JSON-shaped input."""
     place = {"op": "place_component", "lib_id": "a", "designator": "b",
              "x_mil": 0, "y_mil": 0}
     docs = [

@@ -612,3 +612,355 @@ def test_metric_grid_pin_off_default_but_on_metric_grid(tmp_path):
 
 def test_default_grid_pin_on_50mil_grid_is_clean():
     assert not netcheck.run(_one_pin_sch(1050, 2500), None)
+
+
+# --------------------------------------------------------------------------- #
+# (d) hierarchical sheet authoring (add_sheet) — cross-sheet membership parity
+# --------------------------------------------------------------------------- #
+_CHILD_LIB = """\
+ (lib_symbols
+  (symbol "RR" (pin_numbers (hide yes)) (pin_names (offset 0))
+    (exclude_from_sim no) (in_bom yes) (on_board yes)
+    (property "Reference" "R" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (property "Value" "RR" (at 0 0 0) (effects (font (size 1.27 1.27))))
+    (symbol "RR_1_1"
+      (pin passive line (at 0 3.81 270) (length 1.27)
+        (name "~" (effects (font (size 1.27 1.27))))
+        (number "1" (effects (font (size 1.27 1.27)))))
+      (pin passive line (at 0 -3.81 90) (length 1.27)
+        (name "~" (effects (font (size 1.27 1.27))))
+        (number "2" (effects (font (size 1.27 1.27))))))))"""
+
+
+def _write_child(d: Path, root_uuid: str, sheet_uuid: str) -> None:
+    """Child sheet: R2 wired to a hierarchical_label 'NET1' (parent-facing)."""
+    child_path = f"/{root_uuid}/{sheet_uuid}"
+    (d / "child.kicad_sch").write_text(
+        '(kicad_sch (version 20231120) (generator "akcli")\n'
+        f' (uuid "{_uuid.uuid4()}") (paper "A4")\n'
+        + _CHILD_LIB + "\n"
+        ' (symbol (lib_id "RR") (at 50.8 50.8 0) (unit 1)\n'
+        f'   (uuid "{_uuid.uuid4()}")\n'
+        '   (property "Reference" "R2" (at 53 49 0) (effects (font (size 1.27 1.27))))\n'
+        '   (property "Value" "RR" (at 53 51 0) (effects (font (size 1.27 1.27))))\n'
+        f'   (pin "1" (uuid "{_uuid.uuid4()}"))\n'
+        f'   (pin "2" (uuid "{_uuid.uuid4()}"))\n'
+        f'   (instances (project "noname" (path "{child_path}" (reference "R2") (unit 1)))))\n'
+        ' (wire (pts (xy 50.8 46.99) (xy 50.8 40.64)) (stroke (width 0) (type default))\n'
+        f'   (uuid "{_uuid.uuid4()}"))\n'
+        ' (hierarchical_label "NET1" (shape bidirectional) (at 50.8 40.64 90)\n'
+        '   (effects (font (size 1.27 1.27)))\n'
+        f'   (uuid "{_uuid.uuid4()}"))\n'
+        ')\n'
+    )
+
+
+@pytest.fixture(scope="module")
+def sheet_parity(tmp_path_factory):
+    """A root authored with add_sheet + a hand-written child; R1.1 crosses the
+    sheet-pin<->hierarchical-label boundary to reach the child's R2.1."""
+    d = tmp_path_factory.mktemp("parity_sheet")
+    tgt = _draw(
+        d, "root.kicad_sch",
+        {"op": "place_component", "lib_id": "RR", "designator": "R1",
+         "x_mil": 1000, "y_mil": 1200},
+        {"op": "add_sheet", "name": "child", "file": "child.kicad_sch",
+         "at": [2000, 1000], "size": [1000, 800],
+         "pins": [{"name": "NET1", "type": "bidirectional", "side": "left",
+                   "offset_mil": 200}]},
+        {"op": "add_wire", "vertices": ["R1.1", [2000, 1200]]},
+    )
+    doc = sexpr.parse(tgt.read_text())
+    root_uuid = doc.find("uuid").children[1].value
+    sheet_uuid = doc.find("sheet").find("uuid").children[1].value
+    _write_child(d, root_uuid, sheet_uuid)
+    return tgt
+
+
+@needs_kicad
+def test_add_sheet_partition_parity(sheet_parity):
+    """The full (ref, pin) partition matches eeschema across the sheet boundary."""
+    assert _ee_partition(_export_nets(sheet_parity)) == _akcli_partition(
+        kreader.read_sch(sheet_parity))
+
+
+@needs_kicad
+def test_add_sheet_crosses_sheet_pin_to_hier_label(sheet_parity):
+    """R1.1 (root) and R2.1 (child) share one net through the sheet pin."""
+    ee = _export_nets(sheet_parity)
+    crossing = next(nodes for nodes in ee.values()
+                    if ("R1", "1") in nodes)
+    assert ("R2", "1") in crossing
+    sch = kreader.read_sch(sheet_parity)
+    net = next(n for n in sch.nets if ("R1", "1") in n.members)
+    assert ("R2", "1") in net.members
+
+
+# --------------------------------------------------------------------------- #
+# (e) bus semantics, single sheet — writer-authored, kicad-cli-arbitrated.
+# Verdicts locked (KiCad 10.x): a labeled rip joins the member named by the
+# WIRE's label; an unlabeled rip floats; a plain label ON the bus selects
+# nothing; a (bus_entry) conducts between its two ends when wires END there,
+# but an entry end on a wire's MID-SPAN does not attach (no junction).
+# --------------------------------------------------------------------------- #
+def _bus_rip(ops, bus_x, y, ref, label=None):
+    """entry at (bus_x, y) -> wire right -> RR pin 1 at the far end."""
+    fx, fy = bus_x + 100, y + 100
+    ops.append({"op": "add_bus_entry", "at": [bus_x, y]})
+    ops.append({"op": "add_wire", "vertices": [[fx, fy], [fx + 600, fy]]})
+    ops.append({"op": "place_component", "lib_id": "RR", "designator": ref,
+                "x_mil": fx + 600, "y_mil": fy + 150})
+    if label:
+        ops.append({"op": "add_net_label", "name": label, "at": [fx + 300, fy]})
+
+
+@pytest.fixture(scope="module")
+def bus_parity(tmp_path_factory):
+    d = tmp_path_factory.mktemp("parity_bus")
+    ops = []
+    # labeled bus D[0..7]: rips D3 (R1), D3 (R2), unlabeled (R3), D5 (R4)
+    ops.append({"op": "add_bus", "vertices": [[4000, 2000], [4000, 5000]]})
+    ops.append({"op": "add_net_label", "name": "D[0..7]", "at": [4000, 2200]})
+    _bus_rip(ops, 4000, 2500, "R1", "D3")
+    _bus_rip(ops, 4000, 3000, "R2", "D3")
+    _bus_rip(ops, 4000, 3500, "R3", None)
+    _bus_rip(ops, 4000, 4000, "R4", "D5")
+    # detached wire labeled D5 (R5) — merges with the D5 rip by name
+    ops.append({"op": "add_wire", "vertices": [[6000, 4100], [6600, 4100]]})
+    ops.append({"op": "add_net_label", "name": "D5", "at": [6000, 4100]})
+    ops.append({"op": "place_component", "lib_id": "RR", "designator": "R5",
+                "x_mil": 6600, "y_mil": 4250})
+    # entry between two wires, NO bus: conducts end<->end
+    ops.append({"op": "place_component", "lib_id": "RR", "designator": "R11",
+                "x_mil": 16000, "y_mil": 2750})
+    ops.append({"op": "add_wire", "vertices": [[16000, 2600], [16500, 2600]]})
+    ops.append({"op": "add_bus_entry", "at": [16500, 2600]})
+    ops.append({"op": "add_wire", "vertices": [[16600, 2700], [17100, 2700]]})
+    ops.append({"op": "place_component", "lib_id": "RR", "designator": "R12",
+                "x_mil": 17100, "y_mil": 2850})
+    # entry end on a wire's MID-SPAN (no junction): the rip floats
+    ops.append({"op": "place_component", "lib_id": "RR", "designator": "R21",
+                "x_mil": 18000, "y_mil": 2750})
+    ops.append({"op": "add_wire", "vertices": [[18000, 2600], [19000, 2600]]})
+    ops.append({"op": "place_component", "lib_id": "RR", "designator": "R23",
+                "x_mil": 19000, "y_mil": 2750})
+    ops.append({"op": "add_bus_entry", "at": [18500, 2600]})
+    ops.append({"op": "add_wire", "vertices": [[18600, 2700], [19100, 2700]]})
+    ops.append({"op": "place_component", "lib_id": "RR", "designator": "R22",
+                "x_mil": 19100, "y_mil": 2850})
+    tgt = _draw(d, "bus.kicad_sch", *ops)
+    # the mid-span verdict depends on NO junction at (18500, 2600)
+    assert "18500" not in "".join(
+        str(j) for j in sexpr.parse(tgt.read_text()).find_all("junction"))
+    return tgt
+
+
+@needs_kicad
+def test_bus_partition_parity(bus_parity):
+    assert _ee_partition(_export_nets(bus_parity)) == _akcli_partition(
+        kreader.read_sch(bus_parity))
+
+
+@needs_kicad
+def test_bus_labeled_rips_share_member_net(bus_parity):
+    ee = _export_nets(bus_parity)
+    assert ee["/D3"] == {("R1", "1"), ("R2", "1")}
+    assert ee["/D5"] == {("R4", "1"), ("R5", "1")}
+    named = _akcli_named(kreader.read_sch(bus_parity))
+    assert named["D3"] == ee["/D3"] and named["D5"] == ee["/D5"]
+
+
+@needs_kicad
+def test_bus_unlabeled_rip_floats(bus_parity):
+    part = _ee_partition(_export_nets(bus_parity))
+    assert frozenset({("R3", "1")}) in part
+    assert frozenset({("R3", "1")}) in _akcli_partition(kreader.read_sch(bus_parity))
+
+
+@needs_kicad
+def test_bus_entry_conducts_wire_to_wire(bus_parity):
+    expected = frozenset({("R11", "1"), ("R12", "1")})
+    assert expected in _ee_partition(_export_nets(bus_parity))
+    assert expected in _akcli_partition(kreader.read_sch(bus_parity))
+
+
+@needs_kicad
+def test_bus_entry_end_on_wire_midspan_floats(bus_parity):
+    for part in (_ee_partition(_export_nets(bus_parity)),
+                 _akcli_partition(kreader.read_sch(bus_parity))):
+        assert frozenset({("R21", "1"), ("R23", "1")}) in part
+        assert frozenset({("R22", "1")}) in part
+
+
+# --------------------------------------------------------------------------- #
+# (f) bus semantics across sheets — raw-text hierarchy (the writer cannot put
+# labels/buses on a child sheet). Verdicts locked (KiCad 10.x): a GLOBAL bus
+# label merges same-member rips across sheets (D3), a LOCAL bus label never
+# does (E1), a sheet-pin<->hierarchical-label bus port stitches parent and
+# child (P1), and vector expansion is inclusive in either order (K[3..0]:
+# both K3 and K0 resolve). Continuation: the root's labeled bus reaches the
+# rip through a second, endpoint-joined segment.
+# --------------------------------------------------------------------------- #
+_BUS_ROOT_UUID = "cd000000-0000-4000-8000-000000000000"
+_BUS_SHEET_UUID = "cd000000-0000-4000-8000-000000000999"
+
+
+def _bus_uuid_counter():
+    n = [0]
+
+    def nxt():
+        n[0] += 1
+        return f"cd000000-0000-4000-8000-{n[0]:012d}"
+
+    return nxt
+
+
+def _bus_hier_fixture(d: Path) -> Path:
+    U = _bus_uuid_counter()
+
+    def wire(a, b, tag="wire"):
+        return (f'({tag} (pts (xy {_mm(a[0])} {_mm(a[1])}) '
+                f'(xy {_mm(b[0])} {_mm(b[1])}))'
+                f' (stroke (width 0) (type default)) (uuid "{U()}"))')
+
+    def label(text, x, y, tag="label", extra=""):
+        return (f'({tag} "{text}" {extra}(at {_mm(x)} {_mm(y)} 0)'
+                f' (effects (font (size 1.27 1.27))) (uuid "{U()}"))')
+
+    def entry(x, y):
+        return (f'(bus_entry (at {_mm(x)} {_mm(y)}) (size 2.54 2.54)'
+                f' (stroke (width 0) (type default)) (uuid "{U()}"))')
+
+    def sym(ref, x, y, path):
+        return (
+            f'(symbol (lib_id "RR") (at {_mm(x)} {_mm(y)} 0) (unit 1)\n'
+            f'  (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)\n'
+            f'  (uuid "{U()}")\n'
+            f'  (property "Reference" "{ref}" (at 0 0 0)'
+            f' (effects (font (size 1.27 1.27))))\n'
+            f'  (property "Value" "RR" (at 0 0 0)'
+            f' (effects (font (size 1.27 1.27))))\n'
+            f'  (pin "1" (uuid "{U()}"))\n  (pin "2" (uuid "{U()}"))\n'
+            f'  (instances (project "busparity"'
+            f' (path "{path}" (reference "{ref}") (unit 1)))))'
+        )
+
+    def rip(body, bus_x, y, ref, lbl, path):
+        fx, fy = bus_x + 100, y + 100
+        body.append(entry(bus_x, y))
+        body.append(wire((fx, fy), (fx + 600, fy)))
+        if lbl:
+            body.append(label(lbl, fx + 300, fy))
+        body.append(sym(ref, fx + 600, fy + 150, path))
+
+    libblock = "(lib_symbols\n" + "\n".join(_LIB.splitlines()[1:-1]) + ")"
+    rootpath = f"/{_BUS_ROOT_UUID}"
+    childpath = f"/{_BUS_ROOT_UUID}/{_BUS_SHEET_UUID}"
+
+    rb: list[str] = []
+    # continuation: two endpoint-joined bus segments; global label on the
+    # FIRST, rip D3 off the SECOND
+    rb.append(wire((4000, 2000), (4000, 3000), tag="bus"))
+    rb.append(wire((4000, 3000), (4000, 5000), tag="bus"))
+    rb.append(label("D[0..7]", 4000, 2200, tag="global_label",
+                    extra="(shape input) "))
+    rip(rb, 4000, 3500, "R1", "D3", rootpath)
+    rb.append(wire((8000, 2000), (8000, 4000), tag="bus"))
+    rb.append(label("E[0..3]", 8000, 2200))
+    rip(rb, 8000, 2500, "R5", "E1", rootpath)
+    rb.append(wire((11000, 2200), (11000, 3200), tag="bus"))
+    rb.append(wire((11000, 2200), (12000, 2200), tag="bus"))
+    rip(rb, 11000, 2700, "R3", "P1", rootpath)
+    rb.append(
+        f'(sheet (at {_mm(12000)} {_mm(2000)}) (size {_mm(1000)} {_mm(800)})\n'
+        f'  (stroke (width 0.1524) (type solid)) (fill (color 0 0 0 0))\n'
+        f'  (uuid "{_BUS_SHEET_UUID}")\n'
+        f'  (property "Sheetname" "child" (at 0 0 0)'
+        f' (effects (font (size 1.27 1.27))))\n'
+        f'  (property "Sheetfile" "child.kicad_sch" (at 0 0 0)'
+        f' (effects (font (size 1.27 1.27))))\n'
+        f'  (pin "P[0..3]" bidirectional (at {_mm(12000)} {_mm(2200)} 180)\n'
+        f'    (effects (font (size 1.27 1.27))) (uuid "{U()}"))\n'
+        f'  (instances (project "busparity"'
+        f' (path "/{_BUS_ROOT_UUID}" (page "2")))))'
+    )
+    rb.append(wire((20000, 2000), (20000, 4000), tag="bus"))
+    rb.append(label("K[3..0]", 20000, 2200, tag="global_label",
+                    extra="(shape input) "))
+    rip(rb, 20000, 2500, "R7", "K3", rootpath)
+    rip(rb, 20000, 3200, "R9", "K0", rootpath)
+    root = (f'(kicad_sch (version 20231120) (generator "eeschema")'
+            f' (uuid "{_BUS_ROOT_UUID}") (paper "A4")\n{libblock}\n'
+            + "\n".join(rb) + "\n)\n")
+    (d / "bus_root.kicad_sch").write_text(root)
+
+    cb: list[str] = []
+    cb.append(wire((4000, 2000), (4000, 4000), tag="bus"))
+    cb.append(label("D[0..7]", 4000, 2200, tag="global_label",
+                    extra="(shape input) "))
+    rip(cb, 4000, 2500, "R2", "D3", childpath)
+    cb.append(wire((8000, 2000), (8000, 4000), tag="bus"))
+    cb.append(label("E[0..3]", 8000, 2200))
+    rip(cb, 8000, 2500, "R6", "E1", childpath)
+    cb.append(wire((11000, 2200), (11000, 3200), tag="bus"))
+    cb.append(label("P[0..3]", 11000, 2200, tag="hierarchical_label",
+                    extra="(shape bidirectional) "))
+    rip(cb, 11000, 2700, "R4", "P1", childpath)
+    cb.append(wire((20000, 2000), (20000, 4000), tag="bus"))
+    cb.append(label("K[3..0]", 20000, 2200, tag="global_label",
+                    extra="(shape input) "))
+    rip(cb, 20000, 2500, "R8", "K3", childpath)
+    rip(cb, 20000, 3200, "R10", "K0", childpath)
+    child = (f'(kicad_sch (version 20231120) (generator "eeschema")'
+             f' (uuid "{U()}") (paper "A4")\n{libblock}\n'
+             + "\n".join(cb) + "\n)\n")
+    (d / "child.kicad_sch").write_text(child)
+    return d / "bus_root.kicad_sch"
+
+
+@pytest.fixture(scope="module")
+def bus_hier_parity(tmp_path_factory):
+    d = tmp_path_factory.mktemp("parity_bus_hier")
+    return _bus_hier_fixture(d)
+
+
+@needs_kicad
+def test_bus_hier_partition_parity(bus_hier_parity):
+    assert _ee_partition(_export_nets(bus_hier_parity)) == _akcli_partition(
+        kreader.read_sch(bus_hier_parity))
+
+
+@needs_kicad
+def test_global_bus_label_merges_members_across_sheets(bus_hier_parity):
+    ee = _export_nets(bus_hier_parity)
+    assert ee["D3"] == {("R1", "1"), ("R2", "1")}
+    named = _akcli_named(kreader.read_sch(bus_hier_parity))
+    assert named["D3"] == ee["D3"]
+
+
+@needs_kicad
+def test_local_bus_label_never_crosses_sheets(bus_hier_parity):
+    ee = _export_nets(bus_hier_parity)
+    assert ee["/E1"] == {("R5", "1")}
+    assert ee["/child/E1"] == {("R6", "1")}
+    part = _akcli_partition(kreader.read_sch(bus_hier_parity))
+    assert frozenset({("R5", "1")}) in part
+    assert frozenset({("R6", "1")}) in part
+
+
+@needs_kicad
+def test_sheet_pin_bus_port_stitches_parent_child(bus_hier_parity):
+    ee = _export_nets(bus_hier_parity)
+    assert ee["/child/P1"] == {("R3", "1"), ("R4", "1")}
+    net = next(n for n in kreader.read_sch(bus_hier_parity).nets
+               if ("R3", "1") in n.members)
+    assert sorted(net.members) == [("R3", "1"), ("R4", "1")]
+
+
+@needs_kicad
+def test_reversed_vector_range_inclusive_both_ends(bus_hier_parity):
+    ee = _export_nets(bus_hier_parity)
+    assert ee["K3"] == {("R7", "1"), ("R8", "1")}
+    assert ee["K0"] == {("R9", "1"), ("R10", "1")}
+    named = _akcli_named(kreader.read_sch(bus_hier_parity))
+    assert named["K3"] == ee["K3"] and named["K0"] == ee["K0"]

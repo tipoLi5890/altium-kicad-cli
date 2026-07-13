@@ -55,22 +55,54 @@ network (`vdivider-design`, `regulator-design`, `led`, `i2c-pullup`,
 `crystal-caps`, ...) and place the returned `*_standard` E-series value; quote
 the printed reference in the report (design-calc skill has the full catalog).
 
+### Datasheet-driven design — `jlc datasheet` before committing values
+
+Never design an IC's surrounding circuit from remembered specs. Pull the PDF
+and read it:
+
+```bash
+akcli jlc datasheet C2984661 --fetch          # one part -> ~/.cache/akcli/datasheets/
+akcli jlc datasheet board.kicad_sch --fetch   # every BOM line with an LCSC id, one run
+```
+
+- **Where the links come from:** the part's EasyEDA record (szlcsc-hosted
+  PDF). A `no-link` row prints the LCSC product-page URL — fetch that page
+  with a browser-grade fetcher (WebFetch) to locate the PDF, or search the
+  **manufacturer's** site: original-vendor PDFs (vishay.com, ti.com, ...)
+  download fine with plain `curl`, while `lcsc.com` itself bot-gates direct
+  downloads. `--fetch` verifies the `%PDF` magic, so a challenge page can
+  never masquerade as a datasheet on disk.
+- **Reading order** (PDF readers cap ~20 pages per request — read in chunks;
+  the tables live early): absolute maximum ratings → recommended operating
+  conditions → electrical characteristics → typical application circuit.
+  The typical-application schematic is the op-list's starting skeleton.
+- **Feed the tables into `akcli calc`, then margin-check the op-list:**
+  series-resistor current vs the emitter's I_F(max), dissipation at
+  V_IN(max), comparator inputs vs the common-mode limit (e.g. LM339:
+  V_CM ≤ V_CC − 1.5 V), logic thresholds vs the actual rail. Table values
+  beat curve read-offs; quote the row you used (symbol, condition, min/typ/
+  max) in the report so review can retrace it.
+- Record the C-number as an `LCSC` parameter when placing — that is what
+  makes the whole-BOM batch mode (and `jlc bom`) work later.
+
 ## (3) Seed the target file (new schematics only)
 
 `plan`/`draw` require an existing target with a root `(uuid ...)`. For a brand-new
-schematic, seed a minimal skeleton once:
+schematic, bootstrap one with `akcli new`:
 
 ```bash
-python3 -c 'import uuid,pathlib; pathlib.Path("board.kicad_sch").write_text(
-    f"(kicad_sch (version 20231120) (generator \"akcli\") (uuid \"{uuid.uuid4()}\") (paper \"A4\"))\n")'
+akcli new board.kicad_sch                       # blank A4 sheet, root uuid + paper
+akcli new board.kicad_sch --paper A3 --title "Power board"   # size + title block
+akcli new board.kicad_sch --force               # overwrite an existing file
 ```
 
 Keep this file for the whole session: the root uuid is the namespace for every
-deterministic op UUID, so regenerating it breaks idempotent re-runs.
+deterministic op UUID, so regenerating it breaks idempotent re-runs. (`--json`
+returns `{created, target, paper, title, status}`.)
 
 ## (4) Op-list authoring patterns
 
-Document shape and the op vocabulary (17 ops + 9 macros) are defined in `schemas/ops.schema.json`
+Document shape and the op vocabulary (18 ops + 9 macros) are defined in `schemas/ops.schema.json`
 (see also `docs/op-list-authoring.md` and `akcli ops list`/`ops template <op>`); per-executor support is in
 `schemas/ops.capabilities.json`. Envelope: `{"protocol_version": 1,
 "target_format": "kicad", "ops": [...]}`. The validator is strict: unknown
@@ -161,6 +193,26 @@ validator and executor enforce:
   no-op). Deleting an absent target is a replay-safe no-op. CAREFUL: deleting
   a label can silently SPLIT a net whose fragments it held together — watch
   the `! SPLIT` lines in the Net changes block.
+- **Hierarchical sheets — `add_sheet`**: place a child-sheet reference on the
+  parent with `{"op":"add_sheet","name":"power","file":"child.kicad_sch",
+  "at":[2000,1000],"size":[1000,800],"pins":[{"name":"VBUS","type":"input",
+  "side":"left","offset_mil":200}]}` (`at` = TOP-LEFT corner, mils; `type` ∈
+  input|output|bidirectional|tri_state|passive, `side` ∈ left|right|top|bottom).
+  Full flow: `akcli new` both root and child files → `add_sheet` on the root →
+  drop a same-name **hierarchical label** in the child (`add_net_label …
+  "scope":"hierarchical"`) → `akcli nets root.kicad_sch` to confirm the parent
+  sheet-pin and the child label merged into ONE cross-sheet net (parity-verified
+  against eeschema). Wires attach to a sheet pin **by coordinate** (`at` +
+  `offset_mil` along the side, grid-snapped) — there is NO `Sheet.Pin` endpoint.
+  The child `.kicad_sch` must already exist; `add_sheet` never creates it.
+  KiCad only (`altium: false`).
+- **Bus rips — label the WIRE, not the bus**: draw the bus (`add_bus`), name it
+  with a vector label (`add_net_label "K[3..0]"` on the bus — inclusive both
+  ends, either order), add the diagonal `add_bus_entry`, then label the
+  individual ripped **wire** (`K2`) — that wire-side label selects the bus
+  member. An unlabeled rip FLOATS (stays unconnected); a plain label placed on
+  the bus itself selects nothing. A `(bus_entry)` conducts end-to-end, and each
+  end must land on a bus or a wire or `DANGLING_BUS_ENTRY` gates the write.
 
 ### Example A — LDO regulator block (new sheet)
 

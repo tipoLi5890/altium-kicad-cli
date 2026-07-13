@@ -22,18 +22,29 @@ def res(name, **kw):
 # battery-life
 # --------------------------------------------------------------------------- #
 def test_battery_life_aa_alkaline():
-    # 2500 mAh AA at 10 mA avg, default 0.7 derating: 175 h ~= 7.29 d
+    # 2500 mAh AA at 10 mA avg, default 0.8 derating (matches `battery`):
+    # 200 h ~= 8.33 d
     r = res("battery-life", capacity=2500, i_avg=10)
-    assert r["capacity_usable"] == pytest.approx(1750.0)
-    assert r["hours"] == pytest.approx(175.0)
-    assert r["days"] == pytest.approx(175.0 / 24)
+    assert r["capacity_usable"] == pytest.approx(2000.0)
+    assert r["hours"] == pytest.approx(200.0)
+    assert r["days"] == pytest.approx(200.0 / 24)
 
 
 def test_battery_life_matches_battery_calc():
-    # same rule of thumb as `battery` once units and derating line up
-    new = res("battery-life", capacity=2500, i_avg=10, derating=0.8)
-    old = res("battery", capacity=2.5, i_avg="10m", derating=0.8)
+    # same rule of thumb as `battery` once units line up — default derating
+    # is shared (0.8) so no override is needed here
+    new = res("battery-life", capacity=2500, i_avg=10)
+    old = res("battery", capacity=2.5, i_avg="10m")
     assert new["hours"] == pytest.approx(old["hours"], rel=1e-12)
+
+
+def test_battery_life_rejects_milli_suffix_footgun():
+    # capacity is already in mAh; "2000m" would silently mean 2 mAh
+    # (1000x error) rather than the 2000 mAh almost certainly intended
+    with pytest.raises(CalcError, match="already in mAh"):
+        res("battery-life", capacity="2000m", i_avg=10)
+    with pytest.raises(CalcError, match="already in mA"):
+        res("battery-life", capacity=2500, i_avg="10m")
 
 
 def test_battery_life_rejects_bad_inputs():

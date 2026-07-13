@@ -85,6 +85,45 @@ Statuses: `ok` · `low-stock` (below `--min-stock` or the needed quantity) · `o
 present (`no-part-id` never fails the run; `--exit-zero` forces `0`); exit
 `7` on a network error.
 
+### `akcli jlc datasheet <C-number|MPN|sch> [--fetch] [--out DIR] [--force] [--json]`
+
+Resolve — and with `--fetch`, download — **datasheet PDFs**. The target is one
+LCSC C-number, one exact MPN (catalog-matched like `jlc bom`), or a schematic:
+then every BOM line carrying an `LCSC` parameter is resolved in one run.
+
+```bash
+akcli jlc datasheet C2984661                     # print the PDF URL + MPN/manufacturer
+akcli jlc datasheet TCRT5000 --fetch             # exact-MPN match, download the PDF
+akcli jlc datasheet board.kicad_sch --fetch      # whole BOM -> ~/.cache/akcli/datasheets/
+```
+
+Resolution goes through the part's **EasyEDA component record** — the
+jlcsearch mirror never carries datasheet links, and `lcsc.com` bot-gates
+plain-HTTP downloads. The EasyEDA record embeds the szlcsc-hosted PDF link in
+a `head.c_para.link` field (symbol *or* footprint side; both are checked),
+and those `atta.szlcsc.com` files download cleanly.
+
+`--fetch` verifies the **`%PDF` magic** before keeping anything: a
+challenge/viewer HTML page answered with status 200 is rejected as
+`fetch-failed` instead of being saved as a broken `.pdf`. Files land in
+`--out DIR` (default `AKCLI_DATASHEET_DIR`, else `~/.cache/akcli/datasheets/`)
+named `C<digits>_<MPN>.pdf`, and an existing file is never re-downloaded
+unless `--force` — the directory doubles as the cache.
+
+Not every EasyEDA link is a document, so `resolve` **classifies** instead of
+pretending: a direct `.pdf` is `resolved` (fetchable); a product/viewer page
+(`item.szlcsc.com` JS shell, bot-gated mouser paths, ...) is `page-link` — the
+URL is printed for a browser-grade fetcher (WebFetch) to take over; a bare
+search-engine query (real-world EasyEDA data contains these, occasionally for
+the *wrong* part) is `no-link` with the LCSC product-page hint.
+
+Statuses: `resolved` · `fetched` · `cached` · `page-link` · `no-link` ·
+`not-found` · `no-lcsc` (BOM line without an `LCSC` parameter; pin one via
+`jlc bom --suggest/--fix` first) · `fetch-failed`. Exit `1` when anything
+short of a PDF remains (`page-link`, `no-link`, `not-found`, `fetch-failed`;
+`no-lcsc` never fails the run; `--exit-zero` forces `0`); exit `7` on a
+network error.
+
 ### `akcli jlc show <C-number> [--easyeda] [--json]`
 
 Fetch one part by its LCSC C-number (e.g. `C7593` or bare `7593`).

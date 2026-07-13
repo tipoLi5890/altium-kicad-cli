@@ -1,13 +1,11 @@
-# Release pipeline — builds the package and publishes a GitHub Release with the
-# sdist + wheel attached. PyPI publishing is intentionally NOT included yet.
+# Release pipeline — builds the package, publishes a GitHub Release with the
+# sdist + wheel attached, and (only if configured) publishes to PyPI via
+# trusted publishing. See docs/releasing.md for the operator runbook.
 #
-# To cut a release:
-#   1. Bump `version` in pyproject.toml (run `python tools/sync_version.py` if the
-#      plugin manifests carry a version), and commit.
-#   2. Move CHANGELOG's "## [Unreleased]" heading to "## [X.Y.Z]" — that section
-#      becomes the GitHub Release body.
-#   3. git tag vX.Y.Z && git push origin vX.Y.Z
-# The tag (minus the leading "v") must equal the pyproject version or the run fails.
+# PyPI publishing (job `publish-pypi`) is gated on the repository/environment
+# variable `PYPI_TRUSTED_PUBLISHING` being set to "true" on the `pypi`
+# GitHub Environment. Repos that haven't set that up are skipped gracefully —
+# the release job's success never depends on PyPI being configured.
 name: Release
 
 on:
@@ -27,6 +25,8 @@ jobs:
   release:
     name: build + GitHub Release
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
     steps:
       - name: Guard — must run on a tag
         if: ${{ github.ref_type != 'tag' }}
@@ -83,3 +83,37 @@ jobs:
           files: |
             dist/*.whl
             dist/*.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # PyPI publish via trusted publishing (OIDC, no long-lived token). Skipped
+  # gracefully when the repo hasn't opted in — set the `PYPI_TRUSTED_PUBLISHING`
+  # variable to "true" on the `pypi` GitHub Environment (Settings > Environments
+  # > pypi > Variables) once PyPI trusted publishing is configured for this repo.
+  # ---------------------------------------------------------------------------
+  publish-pypi:
+    name: publish to PyPI
+    needs: release
+    if: ${{ vars.PYPI_TRUSTED_PUBLISHING == 'true' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/altium-kicad-cli/${{ needs.release.outputs.version }}/
+    permissions:
+      id-token: write # OIDC token for trusted publishing; no API token/secret needed
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          skip-existing: true

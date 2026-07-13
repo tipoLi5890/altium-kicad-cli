@@ -219,11 +219,27 @@ class PinHandle:
 
 
 @dataclass
+class BusEntry:
+    """A ``(bus_entry)``: two ends, ``a`` = ``(at)``, ``b`` = ``(at)+(size)``.
+
+    Which end lands on the bus is a geometric question netbuild answers; the
+    entry itself conducts between its two ends (kicad-cli-verified)."""
+
+    a: tuple[float, float]
+    b: tuple[float, float]
+    sheet: str = ""
+
+
+@dataclass
 class NetPrimitives:
     wires: list[WireSeg] = field(default_factory=list)
     junctions: list[Junction] = field(default_factory=list)
     labels: list[NetLabel] = field(default_factory=list)
     pins: list[PinHandle] = field(default_factory=list)
+    # Bus layer (KiCad reader; empty for Altium). Bus SEGMENTS reuse WireSeg;
+    # bus labels are ordinary NetLabels whose anchor netbuild finds on a bus.
+    buses: list[WireSeg] = field(default_factory=list)
+    bus_entries: list[BusEntry] = field(default_factory=list)
     no_erc: list[tuple[float, float]] = field(default_factory=list)
     power_priority: bool = False        # PrjPcb PowerPortNamesTakePriority
     emit_single_pin_nets: bool = True   # PrjPcb NetlistSinglePinNets

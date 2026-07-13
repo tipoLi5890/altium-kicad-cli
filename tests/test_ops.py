@@ -18,10 +18,11 @@ def test_protocol_version_and_op_names():
     assert ops.PROTOCOL_VERSION == 1
     assert "place_component" in ops.OP_NAMES
     assert "place_gnd" in ops.OP_NAMES and "place_vcc" in ops.OP_NAMES
-    # 13 original + delete_component / delete_object / move_component + rename_net
-    assert len(ops.OP_NAMES) == 17
+    # 13 original + delete_component / delete_object / move_component +
+    # rename_net + add_sheet (hierarchical sheet authoring)
+    assert len(ops.OP_NAMES) == 18
     assert {"delete_component", "delete_object", "move_component",
-            "rename_net"} <= ops.OP_NAMES
+            "rename_net", "add_sheet"} <= ops.OP_NAMES
 
 
 def test_valid_oplist_has_no_errors():
@@ -113,6 +114,11 @@ def test_capabilities_loadable():
     cap = ops.load_capabilities()
     assert cap["ops"]["add_bus"]["altium"] is False
     assert cap["ops"]["place_component"]["kicad"] is True
+    # add_sheet is kicad-only (hierarchical authoring)
+    assert cap["ops"]["add_sheet"] == {
+        "kicad": True, "altium": False,
+        "notes": "hierarchical (sheet ...) node + sheet pins; child file "
+                 "authored separately. OP_UNSUPPORTED on Altium live v1"}
     assert cap["ops"]["rename_net"] == {
         "kicad": True, "altium": False,
         "notes": "rewrites label texts + power-port net Values; "

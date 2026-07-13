@@ -6,7 +6,7 @@ a KiCad schematic. This guide is the practical companion to the formal schema
 (`schemas/ops.capabilities.json`). Scaffolding helpers:
 
 ```bash
-akcli ops list                    # the 17-op vocabulary + 9 macros + required fields + support
+akcli ops list                    # the 18-op vocabulary + 9 macros + required fields + support
 akcli ops template place_component        # fill-in JSON skeleton (all fields)
 akcli ops template add_wire --required-only
 akcli pins Device:R --at 2000 1000        # every pin's WORLD (x,y) for that placement
@@ -76,6 +76,7 @@ optional. Run `akcli ops template <op>` for a full skeleton.
 | `delete_component` | `designator` | removes ALL instances; attached wires are left for the connectivity gate to flag — delete them explicitly, or set `"cascade": true` to also delete wires ending on any deleted pin's coordinate plus labels/no-connects anchored there; an anchored junction is removed only when fewer than two surviving wires still pass through it (a pure-X crossing of untouched wires keeps its junction — deleting it would silently split their net). Cascaded uuids are reported; absent target = replay-safe no-op |
 | `delete_object` | `uuid` **or** `match` | remove ONE top-level object (wire/label/junction/text/...). `match: {kind, name?, at?}` addresses it without a uuid — exactly-one semantics (0 matches = replay-safe note, >1 = error listing the candidate uuids); `match.at` is exact mils, NOT grid-snapped |
 | `move_component` | `designator, x_mil, y_mil` | one instance (optional `unit`); its properties travel along; wires do NOT stretch |
+| `add_sheet` | `name, file, at, size` | hierarchical sheet: `(sheet …)` with `Sheetname`/`Sheetfile`, deterministic uuids, and edge-computed sheet pins from optional `pins:[{name, type, side, offset_mil}]` (`type: input\|output\|bidirectional\|tri_state\|passive`, `side: left\|right\|top\|bottom`). `at`=TOP-LEFT corner, mils. Wires attach to a sheet pin **by coordinate** (`at`+`offset_mil` along the side, grid-snapped) — there is NO `Sheet.Pin` endpoint. KiCad only (`altium: false`); the child `.kicad_sch` is authored separately (`akcli new`) |
 
 ### Macro ops (expanded before validation)
 
@@ -117,6 +118,10 @@ silently place nothing:
 - **Duplicate placements are a lint error**: two `place_component` ops with
   the same `(designator, unit)` in one document is a real double-place
   (`delete_component` earlier in the list releases the designator).
+- **Enum slots are TypeError-safe**: a list/dict where an enum belongs
+  (`op` name, `target_format`, rotation/orientation, mirror, `scope`, a
+  sheet-pin `type`/`side`, …) yields a clean `OpError` naming the field, never
+  an internal `TypeError` from an unhashable value.
 - A crashing op handler surfaces as a per-op result with error code
   `INTERNAL` — never a traceback, and never a partial write.
 
@@ -220,6 +225,62 @@ wrong silently changes netlists:
   back as disconnected (`check --nets` flags `NET_PIN_MIDSPAN_TOUCH`).
   (Altium's dialect DOES connect bare T-touches; the Altium reader honors
   that.)
+
+## Hierarchical sheets (`add_sheet`)
+
+`add_sheet` places a child-sheet reference on the parent. The authoring flow,
+parity-verified against eeschema's own netlister (kicad-cli 10):
+
+1. **Create both files.** `akcli new root.kicad_sch` and
+   `akcli new child.kicad_sch` — each gets a root uuid (the namespace for
+   deterministic op uuids). `add_sheet`'s `file` must point at an EXISTING child
+   (`read_sch` requires it), though the writer's own `verify()` is single-doc
+   and does not recurse, so `draw --apply` succeeds before the child is fully
+   authored.
+2. **Place the sheet on the parent.**
+   `{"op":"add_sheet", "name":"power", "file":"child.kicad_sch",
+   "at":[2000,1000], "size":[1000,800],
+   "pins":[{"name":"VBUS","type":"input","side":"left","offset_mil":200}]}`.
+   `at` is the TOP-LEFT corner (mils, +Y down); each sheet pin's anchor is
+   `at`+`offset_mil` along its side, grid-snapped to 50 mil
+   (left=`(x0, y0+off)`, right=`(x0+w, y0+off)`, top=`(x0+off, y0)`,
+   bottom=`(x0+off, y0+h)`). Wire to that literal coordinate — there is **no**
+   `SheetName.PinName` endpoint (a REF-anchor would collide with component refs).
+3. **Pair it with a hierarchical label in the child.** A parent sheet pin and a
+   child `hierarchical_label` of the **same name** are one cross-sheet net
+   (reader's `_hier_key` pairing). In the child, drop the matching hierarchical
+   label (`add_net_label … "scope":"hierarchical"`) on the corresponding pin.
+4. **Verify the parity.** `akcli nets root.kicad_sch` recurses into the child and
+   reports the merged cross-sheet net (root `VBUS` pin + child `VBUS` pin as ONE
+   net) — confirm it matches your block plan, exactly as `kicad-cli` exports it.
+
+Sheet uuids are deterministic (`sheet:<name>` / `sheet:<name>.pin.<pinname>`
+keyed on the root + op index), so replay is byte-identical; the instances page
+number is `op_index + 2` (root is page 1) and may be non-contiguous when
+non-sheet ops interleave (KiCad tolerates it).
+
+## Bus authoring (stage 2 semantics — labeled rips)
+
+`add_bus` draws the bus polyline; `add_bus_entry` the diagonal rip. The netlist
+semantics were arbitrated against real `kicad-cli` netlist exports, so author to
+them exactly:
+
+- **A rip's member is chosen by the WIRE-side label.** The bus carries a vector
+  (`add_net_label` `NAME[a..b]` on the bus, e.g. `K[3..0]`); the individual wire
+  ripped off the bus must carry its own plain label (`K2`) — THAT label selects
+  which bus member the rip joins. **An unlabeled rip floats** (stays
+  unconnected); a plain label placed directly on the bus selects nothing.
+- **Vector expansion `NAME[a..b]` is inclusive at both ends, either order** —
+  `K[3..0]` resolves K3, K2, K1, K0. A non-vector label on a bus contributes no
+  members.
+- **A `(bus_entry)` conducts between its two ends** — two wires ending on its two
+  ends are one net even with no bus present. An entry end attaches to a **wire**
+  only at a wire endpoint or a junction (a bare mid-span touch floats, same as a
+  pin), but to a **bus** anywhere along a segment. Each end must land on a bus or
+  a wire or the `DANGLING_BUS_ENTRY` gate refuses the write.
+- **Scope:** local bus labels are sheet-scoped; a **global** bus label merges
+  member nets across sheets, and a sheet-pin↔hierarchical-label bus port stitches
+  parent/child — same rules as plain labels.
 
 ## Robust connectivity patterns (distilled from real sessions)
 

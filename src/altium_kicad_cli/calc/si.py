@@ -25,8 +25,16 @@ _MULT = {
 _RX = re.compile(r"^([0-9]*\.?[0-9]+)\s*([pnuµmkKMGRr])([0-9]*)$")
 
 
-def parse_value(text: str | float | int, name: str = "value") -> float:
-    """Parse ``text`` into a float, accepting engineering notation."""
+def parse_value(text: str | float | int, name: str = "value",
+                unit: str = "") -> float:
+    """Parse ``text`` into a float, accepting engineering notation.
+
+    ``unit`` is the calculator's *declared* unit for this field (e.g.
+    ``"mAh"``, ``"mA"``). When that unit is itself milli-denominated, a bare
+    ``m`` suffix is rejected rather than silently applying a second,
+    compounding milli — ``capacity=2000m`` on a field already in mAh would
+    otherwise mean 2 mAh, a 1000x error from what was almost certainly meant.
+    """
     if isinstance(text, (int, float)):
         return float(text)
     s = str(text).strip()
@@ -40,6 +48,12 @@ def parse_value(text: str | float | int, name: str = "value") -> float:
         raise CalcError(f"{name}: cannot parse {text!r} "
                         "(try 4700, 4.7k, 4k7, 100n, 1e-7)")
     head, letter, tail = m.groups()
+    if letter == "m" and unit.startswith("m") and unit not in ("", "m"):
+        from .registry import CalcError
+        base_unit = unit[1:]  # e.g. "mAh" -> "Ah"
+        raise CalcError(
+            f"{name} is already in {unit} — write {name}={head}{tail}, "
+            f"or {base_unit}-style values are not supported")
     val = float(head + ("." + tail if tail else ""))
     return val * _MULT[letter]
 

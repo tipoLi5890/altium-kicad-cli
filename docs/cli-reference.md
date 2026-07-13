@@ -51,6 +51,20 @@ Extract the netlist (net → pin membership) using the shared `netbuild` engine.
 - With `NAME`, print just that net; a miss prints a notice to **stderr** and still exits `0`.
 - Output: nets with members, aliases, and source names; `--json` validates against
   `schemas/netlist.schema.json`.
+- **Buses (imported KiCad designs):** the engine models real bus semantics
+  arbitrated against `kicad-cli`. A `(bus_entry)` conducts between its two ends
+  (two wires ending on its two ends are one net even with no bus); an entry end
+  attaches to a wire only at a wire endpoint or junction (a bare mid-span touch
+  floats, same as a pin) but to a bus anywhere along a segment; the bus member a
+  rip joins is chosen by the **wire-side label** (an unlabeled rip stays
+  unconnected); `NAME[a..b]` vector expansion is inclusive at both ends in either
+  order (`K[3..0]` → K3…K0); local bus labels are sheet-scoped while **global**
+  bus labels merge member nets across sheets. So `akcli net`/`diff` on a
+  bus-carried KiCad design reports the bus-carried nets correctly.
+- **Performance:** `netbuild` uses an `O(log n + k)` orthogonal-segment index, so
+  connectivity on large ladder/bus sheets is near-linear (a ~5100-segment sheet
+  builds in a fraction of a second); the semantics are byte-identical to the
+  prior brute-force scan.
 
 ### `akcli nets <file> [--intent-snapshot OUT.json] [--include-unnamed]`
 Print **every net → sorted members**, one line per net (`MID: C1.1, R1.2, R2.1`); unnamed nets
@@ -87,7 +101,8 @@ unresolvable `lib_id` is `SYMBOL_NOT_FOUND` (exit `6`). `--json` emits the table
 
 ### `akcli check <file>`
 Run the design checks (ERC-lite + power + BOM hygiene + nets + layout) and print findings.
-- `-C/--config` supplies rails, MCU designator, the schematic grid, and `[[erc_waiver]]` entries.
+- `-C/--config` supplies rails, MCU designator, the schematic grid, `[[erc_waiver]]`
+  entries, and the checker-agnostic `[[waiver]]` table (below).
 - `--erc` / `--power` / `--bom` / `--nets` / `--layout` / `--intent` / `--libsync` select check
   families (default: `erc`+`power`+`bom`+`nets`+`layout`; `layout` only runs on `.kicad_sch`;
   `intent` and `libsync` are **opt-in only** — they never run by default).
@@ -120,7 +135,8 @@ Run the design checks (ERC-lite + power + BOM hygiene + nets + layout) and print
   ```json
   {"protocol_version": 1,
    "mode": "exact",
-   "nets": {"SWCLK": ["U1.4", "J2.2"], "SWDIO": ["U1.5", "J2.4"]}}
+   "nets": {"SWCLK": ["U1.4", "J2.2"],
+            "GND": {"members": ["R*.2", "U?.1"], "mode": "subset"}}}
   ```
 
   `mode` is `"exact"` (the matched net must contain exactly the listed pins)
@@ -132,6 +148,19 @@ Run the design checks (ERC-lite + power + BOM hygiene + nets + layout) and print
   (exact mode only), `INTENT_NETS_SHORTED` (two intent nets landed on ONE
   actual net). A malformed file is `BAD_CONFIG` (exit `2`); a wrong
   `protocol_version` is `PROTOCOL_MISMATCH` (exit `6`); a missing file exits `4`.
+  - **Per-net mode override** (additive; `protocol_version` stays `1`): a net
+    value may be an object `{"members": [...], "mode": "exact"|"subset"}` that
+    overrides the document `mode` for that one net; the classic plain-list form
+    keeps using the document mode. An unknown key or a bad `mode` in the object
+    form is `BAD_CONFIG`.
+  - **Wildcard members**: the REF part of a member may be an `fnmatch` pattern
+    (`"R*.2"`, `"U?.1"`, `"[UJ]1.3"`) — the pin part stays literal. A wildcard
+    is satisfied when **at least one** actual pin matches both the REF pattern
+    and the pin; zero matches raise `INTENT_MISSING_MEMBER` naming the pattern
+    (never `INTENT_PIN_UNKNOWN`, which is literal-member-only). In `exact` mode
+    wildcards are **ignored when computing `INTENT_EXTRA_MEMBER`** — only
+    literal members are subtracted, so a pin present solely via a wildcard match
+    still surfaces as extra (a wildcard asserts existence, not a closed set).
 - `--libsync [--symbols DIR ...]` checks the freshness of the embedded
   `lib_symbols` cache (`.kicad_sch` only). With `--symbols` sources it
   compares **pin signatures** (number/name/type/position/unit) against the
@@ -139,12 +168,35 @@ Run the design checks (ERC-lite + power + BOM hygiene + nets + layout) and print
   is deliberately silent); without sources it falls back to an old-format
   heuristic and notes `LIB_EMBED_OLD_FORMAT` (pre-20231120 document version
   or symbols missing `exclude_from_sim`), pointing at `akcli relink-symbols`.
-- **Lint-style exit:** non-zero (`1`) when findings are present.
-- `--exit-zero` forces exit `0` even with findings (report mode).
+- **Lint-style exit:** `--fail-on {info,note,warning,error,never}` sets the
+  minimum (post-waiver) finding severity that exits non-zero. Default `warning`
+  reproduces the historical behavior (exit `1` iff any finding ≥ WARNING);
+  `never` always exits `0`. `--exit-zero` is a **deprecated alias for
+  `--fail-on never`** (still works).
+- **`[[waiver]]` config** (checker-agnostic, applied centrally before both
+  rendering and the exit decision — independent of the ERC-only
+  `[[erc_waiver]]`). Each entry: `code` (required; `fnmatch` glob like `"ERC_*"`
+  or `"BOM_*"`), optional `refs` (string or list of `fnmatch` globs matched
+  any-vs-any against a finding's refs; omit → all findings of that code),
+  optional `severity` (`off`|`note`|`info`, default `off`: `off` drops the
+  finding, `note`/`info` demote it), optional `reason` (free text — always
+  supply one). An unknown key, missing `code`, or bad `severity` is
+  `BAD_CONFIG` (exit `2`). The metadata header always prints
+  `config-waived: N (M demoted)` (json/sarif metadata key `config_waived`), so a
+  waiver-cleaned run is never mistaken for intrinsically clean.
 - `--format text|json|sarif|junit` — `sarif` emits SARIF 2.1.0 for GitHub code
   scanning (stable `partialFingerprints`, schematic path as the artifact URI);
   `junit` emits JUnit XML for CI test reporters (WARNING+ findings become
   failed testcases). Exit semantics are unchanged by the format.
+- **Structured finding positions** (present only when the checker located the
+  finding — positionless findings keep their exact prior shape): text output
+  appends a trailing ` @ (x,y)` clause (mils, model frame — top-left origin,
+  +Y down; ints render without `.0`). JSON adds `"pos": [x_mil, y_mil]` and
+  `"anchors": [{"kind","id"[,"pos"]}]` (`kind` ∈ component|pin|net|label; e.g.
+  an overlap carries two component anchors). SARIF adds
+  `logicalLocations` + `properties.akcli.{pos,anchors}` onto the result;
+  `partialFingerprints` deliberately **exclude** pos/anchors so alert identity
+  never churns when a part moves.
 
 ### `akcli diff <file_a> <file_b>`
 Diff two schematic revisions. Nets are matched by **membership** (not display name); components by
@@ -169,11 +221,28 @@ nets). Component value/footprint drift is reported as a note — `--strict`
 turns it into a failure. `--json` carries the verdict plus the full diff
 report. Works across formats: `akcli verify board.SchDoc board.kicad_sch`.
 
-### `akcli undo <target.kicad_sch> [--apply]`
-Swap the target with the `<name>.bak` that `akcli draw --apply` writes beside
-it. Dry-run by default (prints the part/net delta that restoring would cause);
-`--apply` swaps the two files, so **undo twice is a redo**. Exit `4` when no
-backup exists.
+### `akcli new [<path>] [--paper SIZE] [--title T] [--force]`
+Bootstrap a minimal blank `.kicad_sch` (root `(uuid ...)`, `(paper ...)`, and an
+optional title block) that `akcli draw`/`plan` can immediately append to — the
+first-class replacement for hand-seeding a skeleton file. `--paper` sets the
+sheet size (`A4`|`A3`|…, default `A4`); `--title` fills the title-block title;
+`--force` overwrites an existing file (otherwise a present target is refused).
+`--json` = `{created, target, paper, title, status}`. Keep the created file for
+the whole session — its root uuid is the namespace for every deterministic op
+UUID, so regenerating it breaks idempotent re-runs.
+
+### `akcli undo <target.kicad_sch> [--apply] [--steps N] [--list]`
+Restore the target from the **rotated draw backups** that `akcli draw --apply`
+writes beside it (`<name>.bak` newest, then `.bak2`, `.bak3` — up to 3).
+Dry-run by default (prints the part/net delta that restoring would cause);
+`--apply` swaps, so **undo twice is a redo**.
+- `--list` prints the backup stack (level, path, size, mtime — newest first,
+  contiguous from `.bak`) and exits; `--json` = `{target, depth, backups:[…]}`.
+- `--steps N` walks back N snapshots at once (default 1), leaving the stack so a
+  single subsequent `undo` redoes the last step; N clamps to the available
+  stack. `--steps 0` is a usage error (exit `2`); `--steps` with no backup exits
+  `4`.
+- Exit `4` when no backup exists.
 
 ### `akcli pinmap <file>`
 Emit the MCU pin → net table (MCU chosen by `mcu_designator` in config, or `--mcu REF`).
@@ -215,6 +284,17 @@ color/SMD/EIA-96 markings (IEC 60062:2016), galvanic compatibility
   prints its formal reference**. `--json` returns
   `{calc, inputs, results{value,unit,note}, reference}`; `--md` renders a
   markdown table.
+- **Input-suffix rule (already-milli units):** a parameter whose declared unit
+  is itself milli-denominated (`battery-life`'s `capacity` in **mAh**, `i_avg`
+  in **mA**) takes a **bare number** in that unit — `capacity=2500` means
+  2500 mAh. A trailing engineering `m` there is **rejected** (`ERROR: capacity
+  is already in mAh — write capacity=2500`) rather than silently applying a
+  compounding 1000× milli. The generic length unit `m` (meters) is unaffected —
+  `width=5m` still means 5 mm via the milli prefix.
+- `battery-life`'s default `derating` is **0.8** (aligned with `battery`, so the
+  two give identical hours for the same capacity/current); override with
+  `derating=` for a chemistry/load-specific figure. `capacity=2500 i_avg=10`
+  → 200 h / 8.33 d.
 - `--ops FILE` (design-type calculators: `vdivider-design`,
   `regulator-design`, `led`, `i2c-pullup`, `crystal-caps`,
   `hysteresis-design`, `sallen-key`, `attenuator`) additionally emits a
@@ -249,10 +329,10 @@ print what *would* change. Never writes. Includes the **Net changes** block (bel
 `--no-net-diff` skips it.
 
 ### `akcli draw <target.kicad_sch> --ops FILE [--symbols PATH ...] [--apply] [--no-net-diff] [--strict-nets]`
-Execute an op-list against a KiCad `.kicad_sch`. The vocabulary is 17 ops + 9 macros (see
+Execute an op-list against a KiCad `.kicad_sch`. The vocabulary is 18 ops + 9 macros (see
 `schemas/ops.schema.json`), including `delete_component` (with `cascade`) / `delete_object` /
-`move_component` / `rename_net` and multi-unit placement via `place_component`'s optional
-`"unit"` field.
+`move_component` / `rename_net`, hierarchical `add_sheet` (below), and multi-unit placement via
+`place_component`'s optional `"unit"` field.
 - **Default is a dry run** (no file written): prints per-op results and the connectivity
   verification. (`--dry-run` is accepted but inert — omitting `--apply` already is the dry run.)
 - `--apply` performs the write via the atomic snapshot → temp → verify-on-temp → `os.replace`
@@ -289,6 +369,16 @@ Execute an op-list against a KiCad `.kicad_sch`. The vocabulary is 17 ops + 9 ma
   `REFUSED: --strict-nets: net split/merge touches a named net; nothing written`.
 - `--json` payloads carry `"status"` and
   `"net_diff": {"equivalent", "risk", "lines"}` (or `null` when unavailable).
+- **`add_sheet` (hierarchical authoring, KiCad only — `altium: false`):** emits a
+  `(sheet …)` node with `Sheetname`/`Sheetfile`, deterministic uuids, and
+  edge-computed sheet pins. Op shape:
+  `{op:"add_sheet", name, file, at:[x,y], size:[w,h], pins?:[{name, type, side, offset_mil}]}`
+  (mils; `at` = top-left corner). `type` ∈ input|output|bidirectional|tri_state|passive;
+  `side` ∈ left|right|top|bottom. **Wires attach to a sheet pin by coordinate**
+  (`at` + `offset_mil` along the side, grid-snapped) — there is no
+  `Sheet.Pin` wire endpoint. A cross-sheet net is a parent sheet-pin paired with
+  the child's same-name hierarchical label. The referenced child `.kicad_sch` is
+  **not** created by `add_sheet` — author it separately (e.g. `akcli new`).
 
 ### `akcli relink-symbols <target.kicad_sch> [--libs DIR ...] [--only NICKS] [--apply]`
 Re-embed **stale `lib_symbols` cache entries** from fresh `.kicad_sym` libraries — the fix for
@@ -314,7 +404,7 @@ status: dry-run — 2 replacement(s) pending; re-run with --apply
   unavailable nicks); `--json` lists the actions (minus the raw symbol text).
 
 ### `akcli ops <list|template OP> [--required-only]`
-Op-list authoring kit: `list` prints the 17-op vocabulary with required fields
+Op-list authoring kit: `list` prints the 18-op vocabulary with required fields
 and per-executor support, plus the **9 macro ops** (`connect_and_label`,
 `place_pwr_flag`, `terminate_unused_unit`, `place_divider`, `place_decoupling`,
 `place_pullup`, `place_led_indicator`, `place_rc_filter`, `place_crystal`)
@@ -351,18 +441,31 @@ serves `/calc` alone.
   diff mode (previous step ghosted in red), timeline replay, PNG export,
   parts-trend sparkline, a note box that annotates the next step
   (`POST /live/note`, the UI twin of `note.txt`), and a clear-timeline
-  action. Steps live in a per-run temp dir; `--state-dir DIR` persists the
+  action. A **live offline-lint overlay** (toolbar `lint` button / key `G`)
+  draws dashed-square markers at each finding's position from
+  `GET /api/findings` — a fast, offline nets+geom+layout lint of the watched
+  sheet (never `kicad-cli`/network, mtime-cached), converting the finding's
+  mil position into the SVG's mm frame (`MIL_TO_MM = 0.0254`); markers are
+  click-to-zoom and suppressed on multi-sheet views (positions are root-frame
+  only). When the BOM panel runs its networked `?check=1` pass, each priced
+  line with an LCSC id gains a **datasheet link** (resolved via
+  `parts.datasheet.resolve`; direct PDFs vs page-links get distinct glyphs) —
+  per-line failure-tolerant and absent on the offline BOM.
+  Steps live in a per-run temp dir; `--state-dir DIR` persists the
   timeline across runs and `--max-steps N` bounds it (default 500 — oldest
   SVGs are deleted; `0` = unlimited). Needs `kicad-cli` (KiCad 8+) on
   `PATH`, in the macOS app bundle, or via `KICAD_CLI=`. `AUTO_REVERT=1` asks
   an open KiCad editor to File→Revert after each step (macOS only).
 
-### `akcli jlc <search|show|bom|add> ...`
+### `akcli jlc <search|show|bom|datasheet|add> ...`
 JLCPCB/LCSC part search, BOM purchasability check (`jlc bom <sch>` — stock/tier-price/est-cost
 per BOM line via LCSC/MPN parameters; `--qty N` evaluates at build quantity; `--suggest`/`--fix`
 find and write catalog replacements for missing/dead part ids — `--fix` writes only
 high-confidence matches, `--fix-all` also writes low-confidence ones; `--csv OUT.csv` exports a
-JLCPCB upload BOM CSV, `'-'` = stdout), and library conversion — the only **networked**
+JLCPCB upload BOM CSV, `'-'` = stdout), **datasheet resolution/download**
+(`jlc datasheet <C-number|MPN|sch> [--fetch] [--out DIR]` — resolves szlcsc PDF links via the
+EasyEDA record, `%PDF`-magic-verified downloads, whole-BOM batch mode; files cache under
+`~/.cache/akcli/datasheets/`), and library conversion — the only **networked**
 subcommand family. Network failures exit `7` (`ERROR: NETWORK: ...`); transient errors are
 retried with backoff, and a stale cached response is served with a warning when retries are
 exhausted. See [docs/jlc.md](jlc.md) for the full reference.
@@ -372,7 +475,7 @@ exhausted. See [docs/jlc.md](jlc.md) for the full reference.
 | Code | Meaning |
 |---|---|
 | `0` | Success / no findings. |
-| `1` | Check findings present (lint-style; suppress with `--exit-zero`). |
+| `1` | Check findings present (lint-style; tune with `check --fail-on`, `never` always exits `0`). |
 | `2` | Usage / argument / config error (incl. `BAD_CONFIG`, `PATH_OUTSIDE_ROOT`). |
 | `3` | Parse error (corrupt OLE2 or S-expression). |
 | `4` | File not found. |

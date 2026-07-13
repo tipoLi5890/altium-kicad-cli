@@ -43,6 +43,7 @@ _CORE_OPS: frozenset[str] = frozenset(
         "add_bus",
         "add_bus_entry",
         "add_text",
+        "add_sheet",
         "delete_component",
         "delete_object",
         "move_component",
@@ -50,7 +51,7 @@ _CORE_OPS: frozenset[str] = frozenset(
     }
 )
 _SUGAR_OPS: frozenset[str] = frozenset({"place_gnd", "place_vcc"})
-OP_NAMES: frozenset[str] = _CORE_OPS | _SUGAR_OPS  # 17 ops total
+OP_NAMES: frozenset[str] = _CORE_OPS | _SUGAR_OPS  # 18 ops total
 
 
 # --------------------------------------------------------------------------- #
@@ -90,6 +91,8 @@ _OP_OPTIONAL: dict[str, dict] = {
     "place_vcc": {"lib_id": "power:VCC", "net_name": "VCC", "rotation": 0},
     "add_bus_entry": {"size": [100, 100]},
     "add_text": {"angle": 0},
+    "add_sheet": {"pins": [{"name": "<pin>", "type": "input",
+                            "side": "left", "offset_mil": 0}]},
     "delete_component": {"cascade": False},
     # delete_object takes EXACTLY ONE of uuid | match; the template shows uuid.
     "delete_object": {"uuid": "<object-uuid>"},
@@ -121,6 +124,8 @@ _TEMPLATE_OVERRIDES: dict[str, dict[str, object]] = {
     "rename_net": {"from": "<OLD_NET>", "to": "<NEW_NET>"},
     "connect_and_label": {"from": "<REF.PIN>", "to": "<REF.PIN>"},
     "place_pwr_flag": {"at": "mid(<REF.PIN>,<REF.PIN>)"},
+    "add_sheet": {"name": "<sheet-name>", "file": "<child.kicad_sch>",
+                  "size": [1000, 800]},
     "terminate_unused_unit": {"unit": 2, "in_plus": "<PIN>",
                               "in_minus": "<PIN>", "out": "<PIN>"},
 }
@@ -534,11 +539,11 @@ def expand_macros(doc: dict) -> dict:
     """
     ops = doc.get("ops")
     if not isinstance(ops, list) or not any(
-            isinstance(o, dict) and o.get("op") in MACRO_OPS for o in ops):
+            isinstance(o, dict) and _in(o.get("op"), MACRO_OPS) for o in ops):
         return doc
     out: list = []
     for idx, op in enumerate(ops):
-        if isinstance(op, dict) and op.get("op") in MACRO_OPS:
+        if isinstance(op, dict) and _in(op.get("op"), MACRO_OPS):
             for f in MACRO_REQUIRED[op["op"]]:
                 if f not in op:
                     _macro_fail(idx, op["op"], f"missing required field {f!r}")
@@ -576,6 +581,7 @@ _OP_REQUIRED: dict[str, list[str]] = {
     "add_bus": ["vertices"],
     "add_bus_entry": ["at"],
     "add_text": ["text", "at"],
+    "add_sheet": ["name", "file", "at", "size"],
     "place_gnd": ["at"],
     "place_vcc": ["at"],
     "delete_component": ["designator"],
@@ -612,6 +618,8 @@ _OP_FIELDS: dict[str, dict[str, str]] = {
                   "rotation": "rotation"},
     "add_bus_entry": {"at": "point", "size": "point"},
     "add_text": {"text": "str", "at": "point", "angle": "num"},
+    "add_sheet": {"name": "str", "file": "str", "at": "point", "size": "point",
+                  "pins": "sheetpins"},
     "delete_component": {"designator": "str", "cascade": "bool"},
     "delete_object": {"uuid": "str", "match": "match"},
     "move_component": {"designator": "str", "x_mil": "num", "y_mil": "num",
@@ -624,6 +632,26 @@ _MATCH_KINDS: frozenset[str] = frozenset({
     "wire", "bus", "label", "global_label", "hierarchical_label",
     "junction", "no_connect", "text", "bus_entry",
 })
+
+# add_sheet pin electrical types + edge sides (mirror the KiCad tokens).
+_SHEET_PIN_TYPES: frozenset[str] = frozenset({
+    "input", "output", "bidirectional", "tri_state", "passive",
+})
+_SHEET_PIN_SIDES: frozenset[str] = frozenset({"left", "right", "top", "bottom"})
+
+
+def _in(value: object, choices: frozenset) -> bool:
+    """Membership test that treats an UNHASHABLE value as 'not a member'.
+
+    Enum-checked slots (op / target_format / rotation / mirror / scope / sheet
+    pin type|side) reach ``value in <frozenset>``; a list/dict there raises
+    ``TypeError``. The validator must NEVER raise for a structural problem — it
+    returns OpErrors — so this contains the crash into a clean 'not a member'.
+    """
+    try:
+        return value in choices
+    except TypeError:
+        return False
 
 
 @dataclass
@@ -684,7 +712,7 @@ def _is_anchor(v: object) -> bool:
 
 
 def _check_rotation(idx: int, name: str, op: dict, key: str, out: list[OpError]) -> None:
-    if key in op and op[key] not in _VALID_ROTATIONS:
+    if key in op and not _in(op[key], _VALID_ROTATIONS):
         out.append(OpError(idx, name, "BAD_ANGLE", f"{key} {op[key]!r} not in {{0,90,180,270}}"))
 
 
@@ -737,13 +765,51 @@ def _check_match(idx: int, name: str, m: object, out: list[OpError]) -> None:
                                f"{name}: unknown field 'match.{k}'{suggestion}"))
 
 
+def _check_sheet_pins(idx: int, name: str, pins: object, out: list[OpError]) -> None:
+    """Validate an add_sheet ``pins`` array of {name, type, side, offset_mil}."""
+    if not isinstance(pins, list):
+        out.append(OpError(idx, name, "OP_UNSUPPORTED",
+                           f"{name}.pins must be an array of pin objects"))
+        return
+    for i, pin in enumerate(pins):
+        if not isinstance(pin, dict):
+            out.append(OpError(idx, name, "OP_UNSUPPORTED",
+                               f"{name}.pins[{i}] must be an object "
+                               "{name, type, side, offset_mil}"))
+            continue
+        for req in ("name", "type", "side", "offset_mil"):
+            if req not in pin:
+                out.append(OpError(idx, name, "OP_UNSUPPORTED",
+                                   f"{name}.pins[{i}] missing required field {req!r}"))
+        if "name" in pin and not isinstance(pin["name"], str):
+            out.append(OpError(idx, name, "OP_UNSUPPORTED",
+                               f"{name}.pins[{i}].name must be a string"))
+        if "type" in pin and not _in(pin["type"], _SHEET_PIN_TYPES):
+            out.append(OpError(idx, name, "OP_UNSUPPORTED",
+                               f"{name}.pins[{i}].type {pin['type']!r} not in "
+                               f"{{{', '.join(sorted(_SHEET_PIN_TYPES))}}}"))
+        if "side" in pin and not _in(pin["side"], _SHEET_PIN_SIDES):
+            out.append(OpError(idx, name, "OP_UNSUPPORTED",
+                               f"{name}.pins[{i}].side {pin['side']!r} not in "
+                               f"{{left, right, top, bottom}}"))
+        off = pin.get("offset_mil")
+        if "offset_mil" in pin and (not isinstance(off, (int, float))
+                                    or isinstance(off, bool)):
+            out.append(OpError(idx, name, "OP_UNSUPPORTED",
+                               f"{name}.pins[{i}].offset_mil must be a number"))
+        for k in pin:
+            if k not in ("name", "type", "side", "offset_mil") and not k.startswith("_"):
+                _unknown_field(idx, name, f"pins[{i}].{k}",
+                               ["name", "type", "side", "offset_mil"], out)
+
+
 def _validate_op(idx: int, op: object) -> list[OpError]:
     out: list[OpError] = []
     if not isinstance(op, dict):
         out.append(OpError(idx, None, "OP_UNSUPPORTED", "op must be a JSON object"))
         return out
     name = op.get("op")
-    if name in MACRO_OPS:
+    if _in(name, MACRO_OPS):
         # macros are part of the document vocabulary: a not-yet-expanded
         # op-list must validate; plan/draw expand them before execution
         for req in MACRO_REQUIRED.get(name, []):
@@ -755,7 +821,7 @@ def _validate_op(idx: int, op: object) -> list[OpError]:
             if field != "op" and field not in known and not field.startswith("_"):
                 _unknown_field(idx, name, field, known, out)
         return out
-    if name not in OP_NAMES:
+    if not _in(name, OP_NAMES):
         hint = difflib.get_close_matches(
             str(name), list(OP_NAMES | MACRO_OPS), n=1) if isinstance(name, str) else []
         suggestion = f" (did you mean {hint[0]!r}?)" if hint else ""
@@ -784,15 +850,17 @@ def _validate_op(idx: int, op: object) -> list[OpError]:
         elif kind == "rotation":
             _check_rotation(idx, name, op, field, out)
         elif kind == "mirror":
-            if value not in _VALID_MIRRORS:
+            if not _in(value, _VALID_MIRRORS):
                 out.append(OpError(idx, name, "OP_UNSUPPORTED",
                                    f"mirror {value!r} not in {{none,x,y}}"))
         elif kind == "scope":
-            if value not in _VALID_SCOPES:
+            if not _in(value, _VALID_SCOPES):
                 out.append(OpError(idx, name, "OP_UNSUPPORTED",
                                    f"scope {value!r} not in {{local,global,hierarchical}}"))
         elif kind == "match":
             _check_match(idx, name, value, out)
+        elif kind == "sheetpins":
+            _check_sheet_pins(idx, name, value, out)
         elif kind != "vertices":                    # wire block below
             check, desc = _KIND_CHECKS[kind]
             if not check(value):
@@ -830,7 +898,7 @@ def validate_oplist(doc: dict) -> list[OpError]:
                             f"protocol_version {pv!r} != {PROTOCOL_VERSION}"))
 
     tf = doc.get("target_format")
-    if tf not in _VALID_TARGETS:
+    if not _in(tf, _VALID_TARGETS):
         errs.append(OpError(-1, None, "OP_UNSUPPORTED",
                             f"target_format {tf!r} not in {{kicad,altium}}"))
 

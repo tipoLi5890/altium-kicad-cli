@@ -43,6 +43,20 @@ def test_parse_engineering_notation():
         parse_value("abc")
 
 
+def test_parse_value_rejects_milli_suffix_on_milli_denominated_unit():
+    # a field already denominated in mAh/mA must reject a bare 'm' suffix —
+    # it would silently apply a second, compounding milli (1000x error)
+    with pytest.raises(CalcError, match="already in mAh"):
+        parse_value("2000m", "capacity", "mAh")
+    with pytest.raises(CalcError, match="already in mA"):
+        parse_value("5m", "i_avg", "mA")
+    # unaffected: unprefixed base units still take 'm' as milli
+    assert parse_value("10m", "i_avg", "A") == pytest.approx(0.01)
+    assert parse_value("5m", "diameter", "m") == pytest.approx(5e-3)
+    # unaffected: no declared unit (e.g. dimensionless code parsing)
+    assert parse_value("1m", "code") == pytest.approx(1e-3)
+
+
 def test_fmt_eng():
     assert fmt_eng(4700, "Ω") == "4.7 kΩ"
     assert fmt_eng(1e-7, "F") == "100 nF"

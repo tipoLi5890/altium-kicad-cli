@@ -9,10 +9,15 @@ Routes
 - ``/live/state.json``             the step timeline
 - ``/live/step-*.svg``             immutable per-step sheet exports
 - ``/live/events``                 Server-Sent Events: pushed on every state change
+- ``/api/findings``                FAST offline lint (nets + geom + layout) of
+                                   the watched sheet; findings carry ``pos``
+                                   (mil) + ``anchors`` for the SVG markers.
+                                   Cached per file mtime; never networked.
 - ``/live/bom``                    BOM lines of the watched sheet (offline);
-                                   ``?check=1`` adds JLCPCB stock/price — the
-                                   ONE endpoint that touches the network, and
-                                   only when the user explicitly clicks
+                                   ``?check=1`` adds JLCPCB stock/price AND a
+                                   best-effort datasheet URL per LCSC line —
+                                   the ONE endpoint that touches the network,
+                                   and only when the user explicitly clicks
 - ``POST /live/note``              annotate the next step (writes ``note.txt``)
 - ``POST /live/clear``             wipe the timeline (steps + SVGs)
 
@@ -109,6 +114,12 @@ class _Server(ThreadingHTTPServer):
     """ThreadingHTTPServer minus the traceback spam when a browser drops
     a connection mid-response (tab closed during an SVG fetch)."""
 
+    # On Windows SO_REUSEADDR means "bind even while another socket is
+    # LISTENING on the port" — with the inherited default, a second
+    # `akcli view` silently shares/hijacks 8765 and the port auto-increment
+    # never fires. POSIX keeps the flag (there it only skips TIME_WAIT).
+    allow_reuse_address = os.name != "nt"
+
     def handle_error(self, request, client_address):
         exc = sys.exc_info()[1]
         if isinstance(exc, (BrokenPipeError, ConnectionResetError)):
@@ -160,6 +171,60 @@ def _registry_payload(dash: "Dash") -> dict:
                      "watching": dash.target.name if dash.target else None}}
 
 
+def _compute_findings(target: Path) -> dict:
+    """Run the FAST offline lint (nets + geom + layout) on ``target``.
+
+    Never touches the network or kicad-cli. Emits the render-agnostic finding
+    dicts (``report._finding_json`` shape: code/severity/message/refs, plus
+    ``pos`` [x_mil, y_mil] and ``anchors`` when the checker located it). Any
+    read/parse/check failure becomes ``{"error": ...}`` so the caller answers
+    with JSON rather than dropping the connection.
+    """
+    from .. import config as _config
+    from ..checks import geom, layout, nets
+    from ..readers import kicad as kreader
+    from ..report import _finding_json
+    try:
+        sch = kreader.read_sch(str(target))
+    except Exception as exc:
+        return {"error": f"read failed: {exc}"}
+    try:
+        found = _config.find_config(target)
+        cfg = _config.load_config(found) if found else _config.Config()
+    except Exception:
+        cfg = _config.Config()          # a bad config file must not blank the lint
+    try:
+        findings = list(nets.run(sch, cfg))
+        # geom + layout read the raw s-expression, so they are KiCad-only.
+        if str(target).lower().endswith(".kicad_sch"):
+            findings.extend(geom.run(target))
+            findings.extend(layout.run(target))
+    except Exception as exc:
+        return {"error": f"{type(exc).__name__}: {exc}"}
+    return {"findings": [_finding_json(f) for f in findings],
+            "count": len(findings)}
+
+
+def _resolve_datasheet(ds_mod, lcsc: str, cache_dir) -> dict | None:
+    """Best-effort datasheet link for one BOM line (networked, per-line tolerant).
+
+    Returns ``{"url", "kind": "pdf"|"page"}`` or ``None``. Every failure
+    (network down, no EasyEDA record, search-junk link) yields ``None`` so a
+    single unresolvable part never breaks the whole purchasability check.
+    """
+    try:
+        row = ds_mod.resolve(lcsc, cache_dir=cache_dir)
+    except Exception:
+        return None
+    if not row.url:
+        return None
+    if row.status == "resolved":
+        return {"url": row.url, "kind": "pdf"}      # direct, fetchable PDF
+    if row.status == "page-link":
+        return {"url": row.url, "kind": "page"}     # product/viewer page
+    return None
+
+
 class _Bus:
     """Fan-out of state-change events to the SSE subscribers."""
 
@@ -198,6 +263,8 @@ class Dash:
         self.max_steps = max_steps
         self.bus = _Bus()
         self.lock = threading.RLock()
+        # (mtime, payload) memo for /api/findings so repeated polls are free
+        self._findings_cache: tuple[float, dict] | None = None
         self.state = self._load()
 
     def _load(self) -> dict:
@@ -237,6 +304,35 @@ class Dash:
         (state.json on disk exists only to persist it across runs)."""
         with self.lock:
             return json.dumps(self.state, ensure_ascii=False).encode("utf-8")
+
+    def findings(self) -> dict:
+        """FAST offline lint of the watched target, memoized per file identity.
+
+        Returns a ``{"findings": [...], "count": N}`` dict (each finding in the
+        :func:`report._finding_json` shape, positions included) or, on any
+        read/parse error, ``{"error": ...}`` — the endpoint always answers.
+        Errors are not cached so a fixed file resolves on the next poll.
+        The cache key is ``(st_mtime_ns, st_size)`` — plain mtime alone goes
+        stale on coarse-timestamp filesystems (FAT/SMB) when two writes land
+        inside one tick; adding the size catches virtually all of those.
+        """
+        tgt = self.target
+        if tgt is None or not tgt.exists():
+            return {"error": "not watching a schematic"}
+        try:
+            st = tgt.stat()
+            key = (st.st_mtime_ns, st.st_size)
+        except OSError as exc:
+            return {"error": f"stat failed: {exc}"}
+        with self.lock:
+            cache = self._findings_cache
+        if cache is not None and cache[0] == key:
+            return cache[1]
+        payload = _compute_findings(tgt)
+        if "error" not in payload:
+            with self.lock:
+                self._findings_cache = (key, payload)
+        return payload
 
     def clear(self) -> None:
         """Drop every step and its exported SVGs; version AND step numbers
@@ -527,6 +623,8 @@ def _make_handler(dash: Dash):
             elif path == "/live/state.json":
                 self._send(200, dash.state_json(),
                            "application/json; charset=utf-8")
+            elif path == "/api/findings":
+                self._live_findings()
             elif path == "/live/bom":
                 self._live_bom(parse_qs(url.query))
             elif path == "/live/events":
@@ -564,6 +662,15 @@ def _make_handler(dash: Dash):
             except Exception as exc:  # keep the page alive on any math error
                 self._json(400, {"error": f"{type(exc).__name__}: {exc}"})
 
+        def _live_findings(self) -> None:
+            """FAST offline lint of the watched sheet (nets + geom + layout);
+            findings carry ``pos`` (mil) for the SVG markers. Cached per mtime."""
+            if dash.target is None or not dash.target.exists():
+                self._json(409, {"error": "not watching a schematic"})
+                return
+            payload = dash.findings()
+            self._json(500 if "error" in payload else 200, payload)
+
         def _live_bom(self, q: dict) -> None:
             """BOM of the watched sheet; ``check=1`` adds catalog data."""
             if dash.target is None or not dash.target.exists():
@@ -577,12 +684,22 @@ def _make_handler(dash: Dash):
                 self._json(400, {"error": f"read failed: {exc}"})
                 return
             if (q.get("check") or ["0"])[0] == "1":
+                from ..parts import datasheet as ds_mod
                 from ..parts import search as parts_search
+                cache_dir = parts_search.default_cache_dir()
                 try:
-                    lines = bom_jlc.check(
-                        sch, cache_dir=parts_search.default_cache_dir())
-                    self._json(200, {"checked": True,
-                                     "lines": [ln.to_dict() for ln in lines],
+                    lines = bom_jlc.check(sch, cache_dir=cache_dir)
+                    # Datasheet resolution is networked and per-line tolerant,
+                    # so it lives on the ?check=1 path only (never offline).
+                    out = []
+                    for ln in lines:
+                        d = ln.to_dict()
+                        if ln.lcsc:
+                            ds = _resolve_datasheet(ds_mod, ln.lcsc, cache_dir)
+                            if ds:
+                                d["datasheet"] = ds
+                        out.append(d)
+                    self._json(200, {"checked": True, "lines": out,
                                      "totals": bom_jlc.totals(lines)})
                 except parts_search.JlcNetworkError as exc:
                     self._json(502, {"error": f"network: {exc.message}"})

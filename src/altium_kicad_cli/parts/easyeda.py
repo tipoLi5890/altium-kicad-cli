@@ -38,8 +38,12 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+# Injectable delay hook (defaults to time.sleep); tests pass a recording stub.
+SleepFn = Callable[[float], None]
 
 # --- service + transport constants ------------------------------------------
 # Unofficial EasyEDA *Std* editor backend (the same source easyeda2kicad reads).
@@ -189,9 +193,15 @@ def _build_info(lcsc: str, result: dict) -> EasyEdaInfo:
     pkg_head = _as_dict(pkg_data.get("head"))
     pkg_para = _as_dict(pkg_head.get("c_para"))
 
-    manufacturer = _first_str(sym_para.get("Manufacturer"))
-    mpn = _first_str(sym_para.get("Manufacturer Part"), sym_para.get("Manufacturer Part Number"))
-    datasheet = _first_str(sym_para.get("link"), sym_para.get("Datasheet"), result.get("datasheet"))
+    manufacturer = _first_str(sym_para.get("Manufacturer"),
+                              pkg_para.get("Manufacturer"))
+    mpn = _first_str(sym_para.get("Manufacturer Part"), sym_para.get("Manufacturer Part Number"),
+                     pkg_para.get("Manufacturer Part"))
+    # the szlcsc datasheet link lives in EITHER head's c_para depending on how
+    # the part was authored (TCRT5000 carries it only on the footprint side)
+    datasheet = _first_str(sym_para.get("link"), sym_para.get("Datasheet"),
+                           pkg_para.get("link"), pkg_para.get("Datasheet"),
+                           result.get("datasheet"))
     package = _first_str(pkg_para.get("package"), sym_para.get("package"), result.get("package"))
     title = _first_str(result.get("title"), result.get("description"))
 
@@ -357,7 +367,7 @@ def _fetch_json_once(url: str, *, opener: urllib.request.OpenerDirector,
 
 
 def _fetch_json(url: str, *, opener: urllib.request.OpenerDirector, timeout: float,
-                sleep=None, attempts: int = MAX_ATTEMPTS) -> object:
+                sleep: SleepFn | None = None, attempts: int = MAX_ATTEMPTS) -> object:
     """GET ``url`` and decode JSON, retrying transient failures.
 
     Only ``retryable`` errors (unreachable host, timeout, HTTP 429/5xx) are
@@ -388,7 +398,7 @@ def lookup(
     timeout: float = DEFAULT_TIMEOUT,
     cache_dir: str | Path | None = None,
     cache_ttl: float | None = CACHE_TTL_SECONDS,
-    sleep=None,
+    sleep: SleepFn | None = None,
 ) -> EasyEdaInfo | None:
     """Return :class:`EasyEdaInfo` for ``lcsc_id``, or ``None`` when the part is absent.
 

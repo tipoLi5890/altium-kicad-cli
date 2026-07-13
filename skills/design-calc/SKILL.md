@@ -31,6 +31,16 @@ akcli calc <name> k=v ... [--json]
 Inputs accept engineering notation: `4k7`, `100n`, `35u`, `2M2`, `1e-7`.
 `--json` returns `{calc, inputs, results{value,unit,note}, reference}`.
 
+**Input-suffix rule — already-milli units take a bare number.** When a
+parameter's declared unit is itself milli-denominated (`battery-life`'s
+`capacity` in **mAh**, `i_avg` in **mA**), pass the plain datasheet number:
+`battery-life capacity=2500 i_avg=10` means 2500 mAh @ 10 mA. A trailing
+engineering `m` there is **rejected** (`ERROR: capacity is already in mAh —
+write capacity=2500`) rather than silently applying a compounding 1000× milli.
+The generic length unit `m` (meters) is unaffected — `width=5m` still means
+5 mm via the milli prefix. (`battery-life`'s default `derating` is 0.8, aligned
+with `battery`; override with `derating=`.)
+
 ## When to reach for which calculator
 
 | Design moment | Calculator | Source of the formula |
@@ -109,6 +119,12 @@ Say so when a user asks, and use the conservative IPC-2221 fit
    in the report.
 4. **Cite the source** in any human-facing recommendation — the `reference`
    field is part of the answer, copy it.
+5. **Calculator inputs come from the datasheet, not folklore.** Pull the PDF
+   first (`akcli jlc datasheet <C-number> --fetch`, then read it): LED V_F
+   from the electrical-characteristics table (not "2.0 V"), LDO V_DO into
+   `ldo-headroom`, comparator thresholds vs the input common-mode limit,
+   battery capacity at the actual load current. Prefer table values; read
+   curves for trends only, and say which table row you used.
 
 ## Honesty rules
 

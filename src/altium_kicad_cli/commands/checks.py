@@ -1,0 +1,454 @@
+"""`akcli` verification commands: ``check diff verify pinmap expected relink-symbols``.
+
+Lint-style checks and net-equivalence proofs over one or two schematics, the
+``expected`` pin-table extractor that feeds ``pinmap --expected``, and the
+``relink-symbols`` lib_symbols re-embedder. Heavy imports stay LAZY per handler.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from .. import config as _config
+from .. import report as _report
+from ..errors import EXIT
+from ._shared import (
+    _dumps,
+    _emit,
+    _ExitWith,
+    _findings_exit,
+    _load_cfg,
+    _load_schematic,
+    _require_path,
+    _schematic_meta,
+)
+
+
+def _run_check(name: str, sch, cfg, args: argparse.Namespace) -> list:
+    """Run one check by name, importing lazily; missing ERC degrades gracefully."""
+    if name == "erc":
+        try:
+            from ..checks import erc  # lazy; may not exist yet
+        except ImportError:
+            sys.stderr.write("note: ERC check unavailable in this build; skipped\n")
+            return []
+        return erc.run(sch, cfg)
+    if name == "power":
+        from ..checks import power
+        return power.run(sch, cfg)
+    if name == "bom":
+        from ..checks import bom
+        return bom.run(sch)
+    if name == "layout":
+        from ..checks import layout
+        return layout.run(args.path)
+    if name == "nets":
+        from ..checks import nets
+        out = nets.run(sch, cfg)
+        # geom near-miss lint reads the raw s-expression primitives, so it is
+        # KiCad-only; the suffix gate keeps default Altium runs quiet.
+        if str(args.path).lower().endswith(".kicad_sch"):
+            from ..checks import geom
+            out.extend(geom.run(args.path))
+        return out
+    if name == "libsync":
+        from ..checks import libsync
+        return libsync.run(args.path, lib_dirs=getattr(args, "symbols", None))
+    return []
+
+
+def _cmd_check(args: argparse.Namespace) -> int:
+    path = _require_path(args.path)
+    sch = _load_schematic(path)
+    cfg = _load_cfg(args, path)
+
+    which: list[str] = []
+    if args.erc:
+        which.append("erc")
+    if args.power:
+        which.append("power")
+    if args.bom:
+        which.append("bom")
+    if getattr(args, "layout", False):
+        which.append("layout")
+    if getattr(args, "nets", False):
+        which.append("nets")
+    if getattr(args, "libsync", False):
+        which.append("libsync")
+    intent_file = getattr(args, "intent", None)
+    if not which and not intent_file:
+        # --intent alone is a pure intent assertion, like any other selector.
+        which = ["erc", "power", "bom", "nets"]
+        if str(path).lower().endswith(".kicad_sch"):
+            which.append("layout")
+
+    findings: list = []
+    for name in which:
+        findings.extend(_run_check(name, sch, cfg, args))
+    if intent_file:
+        from ..checks import intent as intent_mod
+        spec = intent_mod.load(intent_file)   # BAD_CONFIG/PROTOCOL_MISMATCH via main
+        findings.extend(intent_mod.run(sch, spec))
+
+    findings, waived, demoted = _report.apply_waivers(findings, cfg.waivers)
+
+    meta = _schematic_meta(sch)
+    # Always surface waiver activity so a run cleaned only by waivers is never
+    # mistaken for an intrinsically clean board.
+    meta["config_waived"] = f"{waived} ({demoted} demoted)"
+    fmt = getattr(args, "format", None) or ("json" if args.json else "text")
+    _emit(_report.render(findings, fmt, meta, source=str(path)))
+    return _check_exit(findings, args)
+
+
+# --fail-on token -> the least-severe Severity that trips a non-zero exit.
+_FAIL_ON_SEVERITY = {
+    "info": _report.Severity.INFO,
+    "note": _report.Severity.NOTE,
+    "warning": _report.Severity.WARNING,
+    "error": _report.Severity.ERROR,
+}
+
+
+def _check_exit(findings: list, args: argparse.Namespace) -> int:
+    """Exit code for ``check``: non-zero when any finding meets ``--fail-on``.
+
+    ``--fail-on never`` (and the deprecated ``--exit-zero`` alias) always exit 0;
+    the default ``warning`` reproduces the historical lint-style behaviour.
+    """
+    if getattr(args, "exit_zero", False):
+        return EXIT["OK"]
+    fail_on = getattr(args, "fail_on", None) or "warning"
+    if fail_on == "never":
+        return EXIT["OK"]
+    threshold = _report._SEV_RANK[_FAIL_ON_SEVERITY[fail_on]]
+    if any(_report._SEV_RANK.get(f.severity, 0) >= threshold for f in findings):
+        return EXIT["FINDINGS"]
+    return EXIT["OK"]
+
+
+def _cmd_diff(args: argparse.Namespace) -> int:
+    a = _load_schematic(_require_path(args.path, "first schematic"))
+    b = _load_schematic(_require_path(args.other, "second schematic"))
+    from ..checks import diff as diffmod
+    rep = diffmod.run(a, b)
+    findings = rep.findings()
+    if args.json:
+        _emit(_dumps(rep.export()))
+    else:
+        _emit(_report.render(findings, "text", {}))
+    return _findings_exit(findings, args)
+
+
+def _cmd_verify(args: argparse.Namespace) -> int:
+    """`verify <a> <b>` — net-equivalence proof between two schematics.
+
+    PASS means: same component set, and every net's pin membership is
+    identical (net *names* may differ — conversions rename unnamed nets).
+    With --strict, changed component values/footprints also fail.
+    """
+    a = _load_schematic(_require_path(args.path, "first schematic"))
+    b = _load_schematic(_require_path(args.other, "second schematic"))
+    from ..checks import diff as diffmod
+    rep = diffmod.run(a, b)
+
+    comp_ok = not rep.added_components and not rep.removed_components
+    nets_ok = (not rep.added_nets and not rep.removed_nets
+               and not rep.member_changed_nets)
+    strict_ok = not (getattr(args, "strict", False) and rep.changed_components)
+    equivalent = comp_ok and nets_ok and strict_ok
+
+    if args.json:
+        _emit(_dumps({
+            "equivalent": equivalent,
+            "strict": bool(getattr(args, "strict", False)),
+            "components": {"a": len(a.components), "b": len(b.components)},
+            "nets": {"a": len(a.nets), "b": len(b.nets)},
+            "renamed_nets": [[n.name_a, n.name_b] for n in rep.renamed_nets],
+            "summary": rep.summary(),
+            "detail": rep.export(),
+        }))
+    else:
+        lines = [f"CONVERSION PROOF: {'PASS' if equivalent else 'FAIL'}",
+                 f"  components: {len(a.components)} vs {len(b.components)}"
+                 f"  (+{len(rep.added_components)} −{len(rep.removed_components)}"
+                 f" ~{len(rep.changed_components)})",
+                 f"  nets:       {len(a.nets)} vs {len(b.nets)}"
+                 f"  (+{len(rep.added_nets)} −{len(rep.removed_nets)}"
+                 f" membership-changed {len(rep.member_changed_nets)})"]
+        if rep.renamed_nets:
+            names = ", ".join(f"{n.name_a}→{n.name_b}"
+                              for n in rep.renamed_nets[:8])
+            lines.append(f"  renamed (connectivity identical): "
+                         f"{len(rep.renamed_nets)}  [{names}]")
+        if not equivalent:
+            for c in rep.added_components[:10]:
+                lines.append(f"  + component only in B: {c.designator_b}")
+            for c in rep.removed_components[:10]:
+                lines.append(f"  − component only in A: {c.designator_a}")
+            for n in rep.added_nets[:10]:
+                lines.append(f"  + net only in B: {n.name_b}")
+            for n in rep.removed_nets[:10]:
+                lines.append(f"  − net only in A: {n.name_a}")
+            for n in rep.member_changed_nets[:10]:
+                lines.append(
+                    f"  ~ net {n.name_a or n.name_b}: "
+                    f"+{[f'{d}.{p}' for d, p in n.added_members]} "
+                    f"−{[f'{d}.{p}' for d, p in n.removed_members]}")
+        if rep.changed_components and not getattr(args, "strict", False):
+            lines.append(f"  note: {len(rep.changed_components)} component(s) "
+                         "differ in value/footprint (connectivity unaffected; "
+                         "--strict makes this fail)")
+        if rep.low_confidence:
+            lines.append("  note: low-confidence net matching — inspect "
+                         "`akcli diff` output")
+        _emit("\n".join(lines))
+    if equivalent or getattr(args, "exit_zero", False):
+        return EXIT["OK"]
+    return EXIT["FINDINGS"]
+
+
+def _load_expected(path_str: str) -> dict:
+    """Load an external pin->signal table from CSV or JSON."""
+    p = Path(path_str)
+    data = p.read_text(encoding="utf-8")  # FileNotFound -> exit 4 via main
+    if p.suffix.lower() == ".json":
+        obj = json.loads(data)
+        if isinstance(obj, dict):
+            return {str(k): str(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            out: dict = {}
+            for row in obj:
+                if not isinstance(row, dict):
+                    continue
+                key = row.get("pin") or row.get("Pin") or row.get("number")
+                val = row.get("signal") or row.get("net") or row.get("name")
+                if key is not None and val is not None:
+                    out[str(key)] = str(val)
+            return out
+        raise _ExitWith(EXIT["USAGE"], "ERROR: expected JSON must be an object or array")
+    # CSV
+    import csv as _csv
+    rows = list(_csv.reader(data.splitlines()))
+    out = {}
+    start = 0
+    if rows and rows[0] and rows[0][0].strip().lower() in ("pin", "number", "#"):
+        start = 1
+    for r in rows[start:]:
+        if len(r) >= 2 and r[0].strip():
+            out[r[0].strip()] = r[1].strip()
+    return out
+
+
+def _cmd_pinmap(args: argparse.Namespace) -> int:
+    path = _require_path(args.path)
+    sch = _load_schematic(path)
+    cfg = _load_cfg(args, path)
+
+    if getattr(args, "mcu", None):
+        cfg = _config.Config(
+            mcu_designator=args.mcu,
+            rails=cfg.rails,
+            paths=cfg.paths,
+            erc_waivers=cfg.erc_waivers,
+            waivers=cfg.waivers,
+            source_path=cfg.source_path,
+            grid_nm=cfg.grid_nm,
+        )
+
+    expected = _load_expected(args.expected) if getattr(args, "expected", None) else None
+
+    from ..checks import pinmap
+    findings = pinmap.run(sch, cfg, expected)
+    fmt = "json" if args.json else "text"
+    _emit(_report.render(findings, fmt, _schematic_meta(sch)))
+    return _findings_exit(findings, args)
+
+
+def _cmd_expected(args: argparse.Namespace) -> int:
+    """Extract an expected pin->signal table from a .dts/.overlay or pinout .md.
+
+    Bridges the adapters into the ``pinmap --expected`` pipeline: the emitted
+    JSON object ({pin: signal}) is exactly what ``--expected`` consumes. The
+    schematic stays authoritative; this table is advisory input.
+    """
+    src = getattr(args, "input", None)
+    if not src:
+        raise _ExitWith(EXIT["USAGE"], "ERROR: missing input file (.dts/.overlay or .md)")
+    path = Path(src)
+    if not path.is_file():
+        raise _ExitWith(EXIT["NOT_FOUND"], f"ERROR: file not found: {src}")
+
+    suffix = path.suffix.lower()
+    if suffix in (".dts", ".dtsi", ".overlay"):
+        from ..adapters import dts as dts_adapter  # lazy
+        table = dts_adapter.to_expected_table(dts_adapter.parse_dts(path))
+    elif suffix in (".md", ".markdown"):
+        from ..adapters import pinout_md  # lazy
+        table = pinout_md.parse_pinout_md(
+            path,
+            key_header=getattr(args, "key_header", None),
+            value_header=getattr(args, "value_header", None),
+        )
+    else:
+        raise _ExitWith(
+            EXIT["USAGE"],
+            f"ERROR: unsupported input {suffix!r} (want .dts/.dtsi/.overlay or .md)",
+        )
+
+    payload = _dumps({k: table[k] for k in sorted(table)})
+    out = getattr(args, "output", None)
+    if out:
+        Path(out).write_text(payload + "\n", encoding="utf-8")
+        sys.stderr.write(f"wrote {len(table)} pin assignment(s) to {out}\n")
+    else:
+        _emit(payload)
+
+    if not table:
+        # An empty table would make `pinmap --expected` vacuously pass — treat
+        # "nothing extracted" as a finding, not a success.
+        sys.stderr.write(f"WARNING: no pin assignments found in {src}\n")
+        return EXIT["FINDINGS"]
+    return EXIT["OK"]
+
+
+def _cmd_relink(args: argparse.Namespace) -> int:
+    """`relink-symbols <sch>` — re-embed stale lib_symbols cache entries.
+
+    Dry-run by default; ``--apply`` splices the fresh blocks in behind the
+    net-membership equivalence gate (``VERIFY_FAILED`` -> exit 6, file
+    untouched) and leaves ``<name>.bak``. ``missing-lib`` entries exit 6 like
+    a failed op — scope with ``--only`` to silence intentionally-unavailable
+    nicknames.
+    """
+    target = _require_path(args.target, "target .kicad_sch")
+    if not str(target).lower().endswith(".kicad_sch"):
+        raise _ExitWith(EXIT["USAGE"], "ERROR: relink-symbols works on a .kicad_sch")
+    from .. import relink
+    actions = relink.plan(target, lib_dirs=getattr(args, "libs", None),
+                          only=getattr(args, "only", None))
+    do_apply = bool(getattr(args, "apply", False))
+    res = None
+    if do_apply:
+        # VERIFY_FAILED (gate refusal) / SYMBOL_NOT_FOUND -> exit 6 via main
+        res = relink.apply(str(target), actions)
+
+    replaces = [a for a in actions if a["status"] == "replace"]
+    missing = [a for a in actions if a["status"] == "missing-lib"]
+    if args.json:
+        # new_sexpr is a full symbol block; strip it for readability
+        slim = [{k: v for k, v in a.items() if k != "new_sexpr"} for a in actions]
+        _emit(_dumps({
+            "actions": slim,
+            "applied": bool(res and res["written"]),
+            "replaced": (res or {}).get("replaced", []),
+            "backup": (res or {}).get("backup"),
+        }))
+    else:
+        lines = []
+        for a in actions:
+            detail = f" — {a['detail']}" if a.get("detail") else ""
+            lines.append(f"  {a['status']:<11} {a['lib_id']}  "
+                         f"[{a['source'] or 'no source'}]{detail}")
+        if not lines:
+            lines.append("  (no embedded lib_symbols entries matched)")
+        if res is not None and res["written"]:
+            bak = Path(res["backup"]).name if res.get("backup") else None
+            lines.append(f"status: APPLIED — re-embedded {len(res['replaced'])} "
+                         f"symbol(s) into {target.name}"
+                         + (f" (backup {bak}; `akcli undo` reverts)" if bak else ""))
+        elif do_apply:
+            lines.append("status: nothing to replace — file untouched")
+        elif replaces:
+            lines.append(f"status: dry-run — {len(replaces)} replacement(s) "
+                         "pending; re-run with --apply")
+        else:
+            lines.append("status: dry-run — nothing to replace")
+        _emit("\n".join(lines))
+    return EXIT["OPLIST"] if missing else EXIT["OK"]
+
+
+def register(sub, common) -> None:
+    p = sub.add_parser("check", parents=[common], help="run ERC/power/BOM/layout checks")
+    p.add_argument("path", nargs="?", help="input schematic")
+    p.add_argument("--erc", action="store_true", help="run ERC checks")
+    p.add_argument("--power", action="store_true", help="run power-rail checks")
+    p.add_argument("--bom", action="store_true", help="run BOM-hygiene checks")
+    p.add_argument("--layout", action="store_true",
+                   help="run geometric-overlap lint (.kicad_sch only)")
+    p.add_argument("--nets", action="store_true",
+                   help="run connectivity-hygiene checks (single-pin nets, "
+                        "off-grid pins, wire/pin/label attachment near-misses)")
+    p.add_argument("--intent", metavar="FILE",
+                   help="assert a JSON design-intent file (see `akcli nets "
+                        "--intent-snapshot`) against the built netlist")
+    p.add_argument("--libsync", action="store_true",
+                   help="check embedded lib_symbols freshness (pin-signature "
+                        "drift vs --symbols sources; old-format heuristic "
+                        "without them)")
+    p.add_argument("--symbols", metavar="PATH", action="append",
+                   help="symbol source dir or .kicad_sym for --libsync "
+                        "(repeatable)")
+    p.add_argument("--fail-on", choices=["info", "note", "warning", "error", "never"],
+                   default="warning",
+                   help="minimum finding severity that exits non-zero "
+                        "(default: warning; 'never' always exits 0)")
+    p.add_argument("--exit-zero", action="store_true",
+                   help="deprecated alias for --fail-on never (always exit 0)")
+    p.add_argument("--format", choices=["text", "json", "sarif", "junit"],
+                   help="output format (sarif: GitHub code scanning; junit: CI test reporters)")
+    p.set_defaults(handler=_cmd_check)
+
+    p = sub.add_parser("diff", parents=[common], help="net-level diff of two schematics")
+    p.add_argument("path", nargs="?", help="schematic A")
+    p.add_argument("other", nargs="?", help="schematic B")
+    p.add_argument("--exit-zero", action="store_true", help="always exit 0")
+    p.set_defaults(handler=_cmd_diff)
+
+    p = sub.add_parser("verify", parents=[common],
+                       help="net-equivalence proof between two schematics "
+                            "(e.g. Altium original vs converted KiCad)")
+    p.add_argument("path", nargs="?", help="schematic A (the reference)")
+    p.add_argument("other", nargs="?", help="schematic B (the candidate)")
+    p.add_argument("--strict", action="store_true",
+                   help="also fail on component value/footprint differences")
+    p.add_argument("--exit-zero", action="store_true", help="always exit 0")
+    p.set_defaults(handler=_cmd_verify)
+
+    p = sub.add_parser("pinmap", parents=[common], help="MCU pin->net map + cross-check")
+    p.add_argument("path", nargs="?", help="input schematic")
+    p.add_argument("--mcu", metavar="REF", help="MCU designator (overrides config)")
+    p.add_argument("--expected", metavar="FILE",
+                   help="expected pin->signal table (.csv or .json)")
+    p.add_argument("--exit-zero", action="store_true", help="always exit 0")
+    p.set_defaults(handler=_cmd_pinmap)
+
+    p = sub.add_parser("expected", parents=[common],
+                       help="extract an expected pin->signal table from .dts/.overlay or pinout .md")
+    p.add_argument("input", nargs="?", help="input file (.dts, .dtsi, .overlay, .md)")
+    p.add_argument("-o", "--output", metavar="FILE",
+                   help="write JSON here instead of stdout (feed to pinmap --expected)")
+    p.add_argument("--key-header", metavar="NAME",
+                   help="markdown: explicit pin/GPIO column header")
+    p.add_argument("--value-header", metavar="NAME",
+                   help="markdown: explicit signal/net column header")
+    p.set_defaults(handler=_cmd_expected)
+
+    p = sub.add_parser("relink-symbols", parents=[common],
+                       help="re-embed stale lib_symbols cache entries from "
+                            "fresh .kicad_sym libraries (dry-run unless --apply)")
+    p.add_argument("target", nargs="?", help="the .kicad_sch to relink")
+    p.add_argument("--libs", metavar="DIR", action="append",
+                   help="symbol library dir or .kicad_sym file (repeatable); "
+                        "default: the KiCad.app SharedSupport symbols dir "
+                        "if it exists")
+    p.add_argument("--only", metavar="NICKS",
+                   help="comma-separated library nicknames (or full lib_ids) "
+                        "to consider")
+    p.add_argument("--apply", action="store_true",
+                   help="write the replacements (default: preview only; "
+                        "net-membership equivalence gated, leaves <name>.bak)")
+    p.set_defaults(handler=_cmd_relink)

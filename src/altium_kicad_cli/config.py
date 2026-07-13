@@ -25,27 +25,37 @@ CONFIG_FILENAME = "altium-kicad-cli.toml"
 DEFAULT_GRID_NM: int = 50 * units.NM_PER_MIL
 
 # Allowed top-level tables/keys and their allowed sub-keys.
-_TOP_KEYS: frozenset[str] = frozenset({"project", "rail", "paths", "erc_waiver"})
-_PROJECT_KEYS: frozenset[str] = frozenset({"mcu_designator", "grid"})
+_TOP_KEYS: frozenset[str] = frozenset(
+    {"project", "rail", "paths", "erc_waiver", "waiver"}
+)
+_PROJECT_KEYS: frozenset[str] = frozenset({"mcu_designator", "grid", "backup_depth"})
 _RAIL_KEYS: frozenset[str] = frozenset({"name", "voltage", "tolerance_pct"})
 _WAIVER_KEYS: frozenset[str] = frozenset({"net", "rule", "reason"})
+# Generic, checker-agnostic waiver (applied centrally, see report.apply_waivers).
+_NEW_WAIVER_KEYS: frozenset[str] = frozenset({"code", "refs", "severity", "reason"})
+_WAIVE_SEVERITIES: frozenset[str] = frozenset({"note", "info", "off"})
 
 
 @dataclass
 class Config:
     """Parsed project configuration.
 
-    ``rails`` and ``erc_waivers`` are lists of plain dicts; ``paths`` maps a name
-    (``schematic``/``dts``/``pinout_md``/...) to an absolute path string.
-    ``grid_nm`` is the schematic pin grid in integer nanometres.
+    ``rails``, ``erc_waivers`` and ``waivers`` are lists of plain dicts; ``paths``
+    maps a name (``schematic``/``dts``/``pinout_md``/...) to an absolute path
+    string. ``grid_nm`` is the schematic pin grid in integer nanometres.
+    ``waivers`` are the generic ``[[waiver]]`` entries applied centrally to every
+    checker's findings (:func:`report.apply_waivers`); ``erc_waivers`` is the
+    older ERC-only mechanism, kept as a back-compat alias.
     """
 
     mcu_designator: str | None = None
     rails: list[dict] = field(default_factory=list)
     paths: dict[str, str] = field(default_factory=dict)
     erc_waivers: list[dict] = field(default_factory=list)
+    waivers: list[dict] = field(default_factory=list)
     source_path: str | None = None
     grid_nm: int = DEFAULT_GRID_NM
+    backup_depth: int | None = None    # [project] backup_depth; None = writer default
 
 
 def _parse_grid(value: object) -> int:
@@ -124,6 +134,25 @@ def load_config(path: Path | str) -> Config:
         _reject_unknown(w, _WAIVER_KEYS, "[[erc_waiver]]")
         waivers.append(dict(w))
 
+    gen_waivers: list[dict] = []
+    for w in data.get("waiver", []) or []:
+        if not isinstance(w, dict):
+            fail("BAD_CONFIG", "[[waiver]] entries must be tables")
+        _reject_unknown(w, _NEW_WAIVER_KEYS, "[[waiver]]")
+        code = w.get("code")
+        if not code or not isinstance(code, str):
+            fail("BAD_CONFIG", "[[waiver]].code is required (a finding code or fnmatch glob)")
+        refs = w.get("refs")
+        if refs is not None and not (
+            isinstance(refs, str)
+            or (isinstance(refs, list) and all(isinstance(r, str) for r in refs))
+        ):
+            fail("BAD_CONFIG", "[[waiver]].refs must be a string or list of strings")
+        sev = w.get("severity", "off")
+        if not isinstance(sev, str) or sev.lower() not in _WAIVE_SEVERITIES:
+            fail("BAD_CONFIG", "[[waiver]].severity must be one of note/info/off")
+        gen_waivers.append({**w, "severity": sev.lower()})
+
     raw_paths = data.get("paths", {})
     if not isinstance(raw_paths, dict):
         fail("BAD_CONFIG", "[paths] must be a table")
@@ -138,11 +167,22 @@ def load_config(path: Path | str) -> Config:
     if "grid" in project:
         grid_nm = _parse_grid(project["grid"])
 
+    backup_depth = None
+    if "backup_depth" in project:
+        raw_depth = project["backup_depth"]
+        if not isinstance(raw_depth, int) or isinstance(raw_depth, bool) \
+                or not (1 <= raw_depth <= 99):
+            fail("BAD_CONFIG",
+                 "[project] backup_depth must be an integer 1..99")
+        backup_depth = raw_depth
+
     return Config(
         mcu_designator=project.get("mcu_designator"),
         rails=rails,
         paths=paths,
         erc_waivers=waivers,
+        waivers=gen_waivers,
         source_path=str(p.resolve()),
         grid_nm=grid_nm,
+        backup_depth=backup_depth,
     )

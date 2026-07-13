@@ -112,12 +112,14 @@ button.ui:disabled{opacity:.4; cursor:default}
        filter:brightness(0) saturate(100%) invert(32%) sepia(84%) saturate(2600%)
               hue-rotate(345deg) brightness(1.1)}
 #ghost svg{display:block}
-#ovl{position:absolute; inset:10px 10px auto 10px; pointer-events:none; overflow:visible}
-#ovl .mk{pointer-events:all; cursor:help}
-#ovl .ring{fill:none; stroke-width:1.6; vector-effect:non-scaling-stroke;
+#ovl,#fovl{position:absolute; inset:10px 10px auto 10px; pointer-events:none; overflow:visible}
+#ovl .mk,#fovl .mk{pointer-events:all; cursor:help}
+#ovl .ring,#fovl .ring{fill:none; stroke-width:1.6; vector-effect:non-scaling-stroke;
            animation:ping 2.2s ease-out infinite; transform-box:fill-box; transform-origin:center}
 @keyframes ping{0%{transform:scale(.55); opacity:1} 80%{transform:scale(1.5); opacity:0} 100%{opacity:0}}
-#ovl .mk.flash .ring{animation-duration:.55s}
+#ovl .mk.flash .ring,#fovl .mk.flash .ring{animation-duration:.55s}
+/* lint markers use a square outline + the data hue so they never read as ERC */
+#fovl .ring{stroke-dasharray:2.4 1.8}
 .empty{position:absolute; inset:0; display:flex; flex-direction:column; gap:8px;
        align-items:center; justify-content:center; color:var(--muted); text-align:center;
        font-size:12.5px; padding:20px}
@@ -204,6 +206,8 @@ aside h2{font-family:var(--disp); font-size:11px; color:var(--muted); text-trans
 #bomtable th{background:var(--panel2); color:var(--muted); font-family:var(--disp);
              font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
              position:sticky; top:0}
+#bomtable .dslink{text-decoration:none; margin-left:5px; opacity:.85}
+#bomtable .dslink:hover{opacity:1}
 #bomtable .st-ok{color:var(--live)} #bomtable .st-bad{color:var(--err)}
 #bomtable .st-warn{color:var(--warn)} #bomtable .st-mute{color:var(--faint)}
 #bomfoot{display:flex; gap:10px; align-items:center; margin-top:12px}
@@ -246,6 +250,7 @@ aside h2{font-family:var(--disp); font-size:11px; color:var(--muted); text-trans
       <button class="ui on" id="crop" title="crop to drawn content (C)">crop</button>
       <button class="ui" id="diff" title="ghost the previous step under this one (D)">diff</button>
       <button class="ui" id="ercmk" title="overlay ERC violation markers (E)">erc</button>
+      <button class="ui" id="lintmk" title="overlay akcli lint findings — nets/geom/layout (G)">lint</button>
       <button class="ui" id="ink" title="dark drafting paper (I)">ink</button>
       <span class="sep"></span>
       <button class="ui" id="prev" title="previous step (←)">←</button>
@@ -262,6 +267,7 @@ aside h2{font-family:var(--disp); font-size:11px; color:var(--muted); text-trans
         <div id="ghost" hidden></div>
         <div id="art"></div>
         <svg id="ovl" hidden></svg>
+        <svg id="fovl" hidden></svg>
       </div>
       <div class="empty" id="empty">
         <div><b>Waiting for the first draw…</b></div>
@@ -317,6 +323,7 @@ aside h2{font-family:var(--disp); font-size:11px; color:var(--muted); text-trans
       <tr><td><span class="kbd">C</span></td><td>crop to drawn content</td></tr>
       <tr><td><span class="kbd">D</span></td><td>diff — previous step ghosted in red</td></tr>
       <tr><td><span class="kbd">E</span></td><td>ERC markers on the schematic</td></tr>
+      <tr><td><span class="kbd">G</span></td><td>akcli lint markers (nets / geom / layout)</td></tr>
       <tr><td><span class="kbd">I</span></td><td>ink — dark drafting paper</td></tr>
       <tr><td><span class="kbd">B</span></td><td>BOM panel (purchasability check on demand)</td></tr>
       <tr><td><span class="kbd">+</span> <span class="kbd">−</span> <span class="kbd">0</span></td><td>zoom in / out / fit</td></tr>
@@ -335,6 +342,7 @@ const $ = id => document.getElementById(id);
 const BASE_W = 900, PAD = 10;      // frame layout width at scale 1, frame padding
 let steps = [], version = -1, viewing = -1, following = true, lastOk = 0;
 let cropped = true, diffOn = false, ercOn = false, sheetIdx = 0;
+let lintOn = false, lintFindings = null, lintErr = null;
 let pageVB = null, cropVB = null, svgEl = null;
 let playT = null;
 const svgCache = new Map();        // svg url -> text (for sheets + diff ghosts)
@@ -367,15 +375,17 @@ async function tick(){
     if (s.watcher_error) $("werrmsg").textContent = s.watcher_error;
     if (s.version !== version){
       version = s.version; steps = s.steps;
+      lintFindings = null;              // the file changed: re-lint on demand
+      if (lintOn) loadFindings().then(renderLint);
       renderList(); renderSpark();
       if (!steps.length){          // timeline cleared
         viewing = -1; $("frame").hidden = true; $("empty").hidden = false;
         $("counts").hidden = true; $("ercchip").hidden = true;
-        $("sheettabs").hidden = true; renderErc();
+        $("sheettabs").hidden = true; renderErc(); renderLint();
       } else if (following) view(steps.length - 1);
       else {
         if (viewing >= steps.length) viewing = steps.length - 1;
-        highlight(); renderErc();
+        highlight(); renderErc(); renderLint();
       }
     }
   } catch (e) { /* transient — dot goes stale below */ }
@@ -522,6 +532,7 @@ async function view(i){
     await refreshGhost();
     applyVB();
     renderErc();
+    renderLint();
   } catch (e) { /* keep the previous frame */ }
 }
 function vbParts(){
@@ -541,9 +552,10 @@ function applyVB(){
     el.removeAttribute("width"); el.removeAttribute("height");
     el.style.width = w + "px"; el.style.height = h + "px";
   }
-  const ovl = $("ovl");
-  if (vb) ovl.setAttribute("viewBox", vb);
-  ovl.style.width = w + "px"; ovl.style.height = h + "px";
+  for (const ov of [$("ovl"), $("fovl")]){   // ERC + lint overlays track the frame
+    if (vb) ov.setAttribute("viewBox", vb);
+    ov.style.width = w + "px"; ov.style.height = h + "px";
+  }
   $("crop").classList.toggle("on", cropped);
   applyT();
 }
@@ -630,6 +642,63 @@ function jumpToViolation(k){
   if (mk){ mk.classList.remove("flash"); void mk.getBBox; mk.classList.add("flash");
            setTimeout(() => mk.classList.remove("flash"), 1800); }
 }
+/* ---------------- akcli lint findings (offline nets/geom/layout) ------- */
+/* akcli finding.pos is in MILS; the KiCad SVG viewBox is in MM (verified:
+   viewBox width == page width in mm). 1 mil = 0.0254 mm, so ONE linear factor
+   maps every finding into the SVG's own frame — no per-run scale guessing
+   like ERC (whose kicad-cli JSON coords are in an ambiguous mm/100 unit). */
+const MIL_TO_MM = 0.0254;
+async function loadFindings(){
+  try {
+    const doc = await (await fetch("/api/findings", {cache: "no-store"})).json();
+    if (doc.error){ lintFindings = []; lintErr = doc.error; }
+    else { lintFindings = doc.findings || []; lintErr = null; }
+  } catch (e){ lintFindings = []; lintErr = "server unavailable"; }
+}
+function positionedFindings(){ return (lintFindings || []).filter(f => Array.isArray(f.pos)); }
+function renderLint(){
+  const fovl = $("fovl");
+  const st = steps[viewing] || {};
+  // pos is root-frame only, so markers are trustworthy on single-sheet views
+  const multi = sheetsOf(st).length > 1;
+  const found = positionedFindings();
+  if (!lintOn || multi || !found.length){ fovl.hidden = true; fovl.innerHTML = ""; return; }
+  fovl.hidden = false;
+  fovl.innerHTML = found.map((f, k) => {
+    const x = f.pos[0] * MIL_TO_MM, y = f.pos[1] * MIL_TO_MM, col = "var(--data)";
+    return `<g class="mk" id="fmk-${k}">
+      <rect class="ring" x="${x - 3.2}" y="${y - 3.2}" width="6.4" height="6.4" rx="1" stroke="${col}"/>
+      <circle cx="${x}" cy="${y}" r="1.1" fill="${col}"/>
+      <title>${esc(f.severity)} [${esc(f.code)}]: ${esc(f.message)}</title></g>`;
+  }).join("");
+  found.forEach((f, k) => {
+    const g = document.getElementById("fmk-" + k);
+    if (g) g.onclick = () => jumpToFinding(k);
+  });
+  applyVB();
+}
+function jumpToFinding(k){
+  const st = steps[viewing] || {};
+  const f = positionedFindings()[k];
+  if (!f || sheetsOf(st).length > 1){ toast("no locatable position for this finding"); return; }
+  if (!lintOn){ lintOn = true; $("lintmk").classList.add("on"); renderLint(); }
+  centerOn(f.pos[0] * MIL_TO_MM, f.pos[1] * MIL_TO_MM);
+  const mk = document.getElementById("fmk-" + k);
+  if (mk){ mk.classList.remove("flash"); void mk.getBBox; mk.classList.add("flash");
+           setTimeout(() => mk.classList.remove("flash"), 1800); }
+}
+async function toggleLint(){
+  lintOn = !lintOn; $("lintmk").classList.toggle("on", lintOn);
+  if (lintOn && lintFindings === null) await loadFindings();
+  renderLint();
+  if (lintOn){
+    if (lintErr) toast("lint: " + lintErr);
+    else toast(`${(lintFindings || []).length} lint finding(s) · ` +
+               `${positionedFindings().length} locatable`);
+  }
+}
+$("lintmk").onclick = toggleLint;
+
 function centerOn(mx, my){
   const [x, y, w, h] = vbParts();
   const {w: aw, h: ah} = artSize();
@@ -730,7 +799,16 @@ async function openBom(check){
       `<td>${esc(ln.value || "—")}</td>`;
     if (doc.checked){
       const p = ln.part || {};
-      h += `<td>${esc(part)}</td>` +
+      // datasheet icon-link when the ?check=1 resolver found one; a page-link
+      // (JS-rendered product page) is flagged with an external-page glyph
+      let ds = "";
+      if (ln.datasheet && ln.datasheet.url){
+        const page = ln.datasheet.kind === "page";
+        ds = ` <a class="dslink" href="${esc(ln.datasheet.url)}" target="_blank"` +
+             ` rel="noopener" title="${page ? "product page (open in browser)" : "datasheet PDF"}">` +
+             `${page ? "⧉" : "▤"}</a>`;
+      }
+      h += `<td>${esc(part)}${ds}</td>` +
         `<td class="${stCls(ln.status)}">${esc(ln.status)}</td>` +
         `<td>${p.stock ?? "—"}</td>` +
         `<td>${ln.unit_price != null ? "$" + ln.unit_price.toFixed(4) : "—"}</td>` +
@@ -818,6 +896,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "c" || e.key === "C") $("crop").click();
   else if (e.key === "d" || e.key === "D") $("diff").click();
   else if (e.key === "e" || e.key === "E") $("ercmk").click();
+  else if (e.key === "g" || e.key === "G") $("lintmk").click();
   else if (e.key === "i" || e.key === "I") $("ink").click();
   else if (e.key === " "){ e.preventDefault(); $("play").click(); }
   else if (e.key === "+" || e.key === "=") $("zin").click();

@@ -19,7 +19,9 @@ from __future__ import annotations
 import csv
 import io
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from ..checks.bom import _real_components
 from ..model import Component, Schematic
@@ -181,9 +183,9 @@ def check(
     *,
     min_stock: int = 1,
     qty: int = 1,
-    get=None,
-    find=None,
-    cache_dir=None,
+    get: Callable[[str], parts_search.Part | None] | None = None,
+    find: Callable[..., list[parts_search.Part]] | None = None,
+    cache_dir: str | Path | None = None,
 ) -> list[BomLine]:
     """Resolve every BOM line against the catalog (one lookup per identity).
 
@@ -268,7 +270,11 @@ def _confidence(line: BomLine, cand: parts_search.Part, pkg: str) -> str:
     return "high" if val in hay else "low"
 
 
-def suggest_parts(lines: list[BomLine], *, find=None, cache_dir=None) -> int:
+def suggest_parts(
+    lines: list[BomLine], *,
+    find: Callable[..., list[parts_search.Part]] | None = None,
+    cache_dir: str | Path | None = None,
+) -> int:
     """Fill ``line.suggestion`` for not-found / no-part-id lines.
 
     Candidates must match the footprint's package size when it is known;
@@ -365,5 +371,6 @@ def totals(lines: list[BomLine]) -> dict:
                         ("not-found", "out-of-stock", "low-stock")),
         "no_part_id": sum(1 for ln in lines if ln.status == "no-part-id"),
         "priced_lines": len(priced),
-        "est_cost": round(sum(ln.ext_price for ln in priced), 4),
+        "est_cost": round(
+            sum((ln.ext_price for ln in priced if ln.ext_price is not None), 0.0), 4),
     }

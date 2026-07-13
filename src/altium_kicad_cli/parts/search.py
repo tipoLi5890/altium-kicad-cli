@@ -42,10 +42,14 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .. import __version__
+
+# Injectable delay hook (defaults to time.sleep); tests pass a recording stub.
+SleepFn = Callable[[float], None]
 
 # --- service + transport constants ------------------------------------------
 # AKCLI_JLC_BASE_URL overrides the endpoint (self-hosted jlcsearch, a moved
@@ -421,7 +425,7 @@ def _fetch_json_once(url: str, *, opener: urllib.request.OpenerDirector,
 
 
 def _fetch_json(url: str, *, opener: urllib.request.OpenerDirector, timeout: float,
-                sleep=None, attempts: int = MAX_ATTEMPTS) -> object:
+                sleep: SleepFn | None = None, attempts: int = MAX_ATTEMPTS) -> object:
     """GET ``url`` and decode JSON, retrying transient failures.
 
     Only ``retryable`` errors (unreachable host, timeout, HTTP 429/5xx) are
@@ -453,7 +457,7 @@ def search(
     timeout: float = DEFAULT_TIMEOUT,
     cache_dir: str | Path | None = None,
     cache_ttl: float | None = CACHE_TTL_SECONDS,
-    sleep=None,
+    sleep: SleepFn | None = None,
 ) -> list[Part]:
     """Keyword-search jlcsearch and return up to ``limit`` :class:`Part` results.
 
@@ -498,7 +502,7 @@ def get(
     timeout: float = DEFAULT_TIMEOUT,
     cache_dir: str | Path | None = None,
     cache_ttl: float | None = CACHE_TTL_SECONDS,
-    sleep=None,
+    sleep: SleepFn | None = None,
 ) -> Part | None:
     """Fetch one part by LCSC C-number (``"C7593"`` or ``"7593"``); ``None`` if absent."""
     digits = _lcsc_digits(lcsc_id)
