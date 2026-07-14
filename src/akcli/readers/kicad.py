@@ -26,6 +26,7 @@ from pathlib import Path
 
 from .. import model, netbuild, units
 from ..errors import fail
+from ..kicad_escape import unescape_string
 from ..writers import geometry
 from ..model import (
     Component,
@@ -69,12 +70,15 @@ def _fnum(node: sexpr.SNode | None, idx: int, default: float = 0.0) -> float:
 # lib_symbols cache helpers
 # ---------------------------------------------------------------------------
 def _raw_lib_nodes(root: sexpr.SNode) -> dict[str, sexpr.SNode]:
-    """Map cached ``lib_id`` -> raw ``(symbol ...)`` node (for power detection)."""
+    """Map cached ``lib_id`` -> raw ``(symbol ...)`` node (for power detection).
+
+    Keys are **unescaped** to match the unescaped ``lib_id`` used at call sites.
+    """
     out: dict[str, sexpr.SNode] = {}
     libsym = root.find("lib_symbols")
     if libsym is not None:
         for s in libsym.find_all("symbol"):
-            name = _av(s, 1)
+            name = unescape_string(_av(s, 1))
             if name:
                 out[name] = s
     return out
@@ -213,7 +217,7 @@ def _build_file(
     raw = _raw_lib_nodes(root)
 
     for idx, sym in enumerate(_placed_symbols(root)):
-        lib_id = _av(sym.find("lib_id"), 1) or ""
+        lib_id = unescape_string(_av(sym.find("lib_id"), 1)) or ""
         at = sym.find("at")
         px = _mm_to_mil(_fnum(at, 1))
         py = _mm_to_mil(_fnum(at, 2))
@@ -243,7 +247,7 @@ def _build_file(
             seen_units.add(unit)
         else:
             is_dup = (entry is not None and entry[0].library_ref == lib_id)
-            fp = props.get("Footprint") or None
+            fp = unescape_string(props.get("Footprint")) or None
             comp = Component(
                 designator=ref,
                 library_ref=lib_id,

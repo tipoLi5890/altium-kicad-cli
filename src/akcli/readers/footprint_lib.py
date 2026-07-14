@@ -29,6 +29,7 @@ from pathlib import Path
 
 from .. import model
 from ..errors import fail
+from ..kicad_escape import unescape_string
 from .altium_pcb_bin import UNIT_MIL
 from . import sexpr
 
@@ -81,7 +82,7 @@ def parse_footprint_node(node: sexpr.SNode) -> model.FootprintDef:
         except ValueError:
             return 0.0
 
-    fp = model.FootprintDef(name=_av(node, 1) or "")
+    fp = model.FootprintDef(name=unescape_string(_av(node, 1)) or "")
     fp.format_version = _av(node.find("version"), 1)
     if node.tag == "module" and fp.format_version is None:
         fp.warnings.append(

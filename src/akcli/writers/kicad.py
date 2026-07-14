@@ -59,6 +59,7 @@ from pathlib import Path
 
 from .. import model, units
 from ..errors import AkcliError, fail
+from ..kicad_escape import escape_lib_id, unescape_string
 from ..ops import PROTOCOL_VERSION, parse_mid_anchor, validate_oplist
 from ..readers import kicad_lib, sexpr
 from ..readers.sexpr import SNode
@@ -237,6 +238,18 @@ def _placed_symbols(doc: SNode) -> list[SNode]:
     return [s for s in doc.find_all("symbol") if s.find("lib_id") is not None]
 
 
+def _inst_lib_id(sym: SNode) -> str:
+    """A placed instance's ``(lib_id ...)`` value, **unescaped** (``{slash}`` → ``/``).
+
+    Normalizes to the same representation the lib_symbols cache is keyed by, so
+    ``find_cached``/``resolve`` agree whether the doc was written by KiCad (escaped)
+    or by an older akcli (raw)."""
+    node = sym.find("lib_id")
+    if node is None or len(node.children or ()) < 2:
+        return ""
+    return unescape_string(node.children[1].value) or ""
+
+
 def _symbol_reference(sym: SNode) -> str | None:
     inst = sym.find("instances")
     if inst is not None:
@@ -369,7 +382,7 @@ def _resolve_pin_inst(
         fail("VERIFY_FAILED", f"pin reference {ref!r} matches no placed component")
     symdef = None
     for sym in syms:
-        lib_id = sym.find("lib_id").children[1].value or ""
+        lib_id = _inst_lib_id(sym)
         try:
             symdef = _ctx_symdef(doc, ctx, lib_id)
         except AkcliError:
@@ -406,8 +419,7 @@ def _pin_at_point(
     the point anyway; either orientation choice is between the same bodies).
     """
     for sym in _placed_symbols(doc):
-        lib_id_node = sym.find("lib_id")
-        lib_id = (lib_id_node.children[1].value or "") if lib_id_node is not None else ""
+        lib_id = _inst_lib_id(sym)
         if not lib_id:
             continue
         try:
@@ -611,8 +623,7 @@ def _autoplace_ref_value(sym: SNode, symdef, unit: int, ctxpos: tuple[int, int],
     (deterministic bump, replay-stable).
     """
     ctx = ctx if ctx is not None else {}
-    lib_id_node = sym.find("lib_id")
-    lib_id = (lib_id_node.children[1].value or "") if lib_id_node is not None else ""
+    lib_id = _inst_lib_id(sym)
     comp = _instance_component(sym, lib_id)
     pts = [geometry.pin_world(symdef, comp, p) for p in kicad_lib.unit_pins(symdef, unit)]
     ref = _symbol_reference(sym) or ""
@@ -698,7 +709,7 @@ def _make_symbol(
 ) -> SNode:
     """Build a placed ``(symbol ...)`` node with per-pin ``(pin "N" (uuid))``."""
     children = [
-        _list(_atom("lib_id"), _atom(_q(lib_id))),
+        _list(_atom("lib_id"), _atom(_q(escape_lib_id(lib_id)))),
         _at(pos_nm, rotation),
         _list(_atom("unit"), _atom(str(int(unit)))),
     ]
@@ -1168,8 +1179,7 @@ def _op_delete_component(doc, op, idx, src_libs, path, ctx) -> list[str]:
     pin_pts: set[tuple[int, int]] = set()
     if cascade:
         for sym in syms:
-            lib_id_node = sym.find("lib_id")
-            lib_id = (lib_id_node.children[1].value or "") if lib_id_node is not None else ""
+            lib_id = _inst_lib_id(sym)
             symdef = _ctx_symdef(doc, ctx, lib_id)   # uncached lib_id fails loudly
             comp = _instance_component(sym, lib_id)
             for pin in kicad_lib.unit_pins(symdef, _symbol_unit(sym)):

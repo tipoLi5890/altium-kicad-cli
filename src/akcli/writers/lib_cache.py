@@ -43,6 +43,7 @@ from pathlib import Path
 
 from .. import model
 from ..errors import fail
+from ..kicad_escape import escape_lib_id, unescape_string
 from ..readers import kicad_lib, sexpr
 from ..readers.sexpr import SNode
 from ..safety import MAX_FILE_BYTES
@@ -396,19 +397,28 @@ def _existing_names(libsyms: SNode) -> set[str]:
 # Node helpers
 # --------------------------------------------------------------------------- #
 def _symbol_name(sym: SNode) -> str | None:
-    """Decoded name of a ``(symbol "Name" ...)`` node (its second child), or ``None``."""
+    """Decoded, **unescaped** name of a ``(symbol "Name" ...)`` node, or ``None``.
+
+    Unescaping KiCad's ``{slash}`` tokens here makes every cache comparison
+    (``find_cached``, dedup, unit-suffix matching) agree with the unescaped
+    ``lib_id``s the writer resolves against — regardless of whether the on-disk
+    name was written escaped (KiCad) or raw (older akcli)."""
     kids = sym.children or []
     if len(kids) >= 2 and kids[1].is_atom:
-        return kids[1].value
+        return unescape_string(kids[1].value)
     return None
 
 
 def _set_symbol_name(sym: SNode, name: str) -> None:
-    """Requalify a ``(symbol "Old" ...)`` node's name atom in place to ``name``."""
+    """Requalify a ``(symbol "Old" ...)`` name atom in place, **escaped** for KiCad.
+
+    ``name`` is an unescaped lib_id / sub-symbol name; it is written in KiCad's
+    ``{slash}`` form so a save through KiCad does not rewrite the file. Escaping
+    is a no-op for names without special characters (the overwhelming majority)."""
     kids = sym.children or []
     if len(kids) < 2 or not kids[1].is_atom:
         fail("SYMBOL_NOT_FOUND", "malformed symbol body (missing name atom)")
-    kids[1].text = _quote(name)
+    kids[1].text = _quote(escape_lib_id(name))
 
 
 def _doc_child_indent(doc: SNode) -> str:

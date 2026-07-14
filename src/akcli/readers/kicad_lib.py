@@ -35,6 +35,7 @@ from pathlib import Path
 
 from .. import model, units
 from ..errors import fail
+from ..kicad_escape import unescape_string
 from ..safety import MAX_FILE_BYTES
 from . import sexpr
 
@@ -192,10 +193,15 @@ def _part_count(sym: sexpr.SNode) -> int:
 
 
 def _parse_symbol(sym: sexpr.SNode) -> model.SymbolDef:
-    """Build a :class:`model.SymbolDef` from a ``(symbol "Name" ...)`` node."""
-    name = _atom_value(sym, 1) or ""
+    """Build a :class:`model.SymbolDef` from a ``(symbol "Name" ...)`` node.
+
+    The symbol name is stored **unescaped** (KiCad's ``{slash}`` etc. tokens are
+    reversed) so the model holds one representation and comparisons agree with
+    KiCad; the raw escaped node lives on in ``body_sexpr`` for the writer.
+    """
+    name = unescape_string(_atom_value(sym, 1) or "") or ""
     ext_node = sym.find("extends")
-    extends = _atom_value(ext_node, 1) if ext_node else None
+    extends = unescape_string(_atom_value(ext_node, 1)) if ext_node else None
     return model.SymbolDef(
         name=name,
         lib_id=name,
@@ -251,7 +257,11 @@ def _find_symbol(
     The exact pass matches an inline cache (``Device:R``) or a fully qualified
     request; the fallback lets a bare ``(extends "C")`` base name resolve against
     a qualified ``Device:C`` cache entry (and vice-versa for standalone libs).
+
+    ``lib_id`` is unescaped first so a caller passing KiCad's escaped form
+    (``A{slash}B``) matches the unescaped ``SymbolDef.name`` (``A/B``).
     """
+    lib_id = unescape_string(lib_id) or ""
     for lib in sources:
         for s in lib.symbols:
             if s.name == lib_id or s.lib_id == lib_id:

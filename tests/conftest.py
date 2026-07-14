@@ -34,3 +34,32 @@ def _no_network(monkeypatch):
 
     monkeypatch.setattr(_search, "_default_opener", _blocked)
     monkeypatch.setattr(_easyeda, "_default_opener", _blocked)
+
+
+@pytest.fixture(scope="session")
+def _kicad_global_cfg(tmp_path_factory) -> str:
+    """A minimal, controlled KiCad global lib-table (a few standard nicknames).
+
+    Keeps ``library audit`` hermetic: tests neither read the developer's real
+    ``~/.../kicad`` config nor behave differently on CI, while still exercising
+    the project → global nickname resolution path.
+    """
+    cfg = tmp_path_factory.mktemp("kicad_cfg")
+    (cfg / "sym-lib-table").write_text(
+        '(sym_lib_table (version 7)\n'
+        '  (lib (name "Device")(type "KiCad")(uri "Device.kicad_sym")(options "")(descr ""))\n'
+        '  (lib (name "power")(type "KiCad")(uri "power.kicad_sym")(options "")(descr ""))\n'
+        '  (lib (name "Connector")(type "KiCad")(uri "Connector.kicad_sym")(options "")(descr ""))\n'
+        ')\n', encoding="utf-8")
+    (cfg / "fp-lib-table").write_text(
+        '(fp_lib_table (version 7)\n'
+        '  (lib (name "Resistor_SMD")(type "KiCad")(uri "Resistor_SMD.pretty")(options "")(descr ""))\n'
+        '  (lib (name "Connector")(type "KiCad")(uri "Connector.pretty")(options "")(descr ""))\n'
+        '  (lib (name "TestPoint")(type "KiCad")(uri "TestPoint.pretty")(options "")(descr ""))\n'
+        ')\n', encoding="utf-8")
+    return str(cfg)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_kicad_config(monkeypatch, _kicad_global_cfg):
+    monkeypatch.setenv("KICAD_CONFIG_HOME", _kicad_global_cfg)

@@ -12,21 +12,31 @@ GUI. This module makes the project tables a first-class, auditable object:
 * :func:`plan_rename` / :func:`plan_model_paths` — the two historically
   hand-``sed``-ed repairs, as reviewable plans (apply via ``library repair``).
 
-Project tables only: the global table lives in a per-user KiCad config this
-tool does not own; an unresolvable nickname is reported as "not in the PROJECT
-tables" so a globally-registered library reads as a NOTE, not a false ERROR.
+Project **and** global tables: KiCad resolves a nickname against the project
+table first, then the per-user global table (``~/…/kicad/<ver>/{sym,fp}-lib-table``,
+overridable via ``KICAD_CONFIG_HOME``). The global table commonly holds a single
+``(type "Table")`` entry that *points at* KiCad's bundled default table, so it
+must be expanded recursively (see :func:`read_table`). A nickname registered in
+either table resolves — a standard KiCad library (``Device``, ``Connector`` …)
+is therefore NOT flagged. Only a nickname absent from BOTH tables is a real
+error; when the global table cannot be located the finding is softened (we
+cannot confirm the nickname is truly unregistered).
 """
 
 from __future__ import annotations
 
 import os
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import model
 from .readers import footprint_lib, sexpr
 from .report import Finding, Severity, anchor
+
+# `(type "Table")` indirection depth cap (guards a cyclic/deep table chain).
+_MAX_TABLE_DEPTH = 8
 
 __all__ = [
     "LibEntry", "LibTable", "Workspace", "read_table", "discover", "audit",
@@ -59,8 +69,34 @@ class Workspace:
     project_file: Path | None = None            # *.kicad_pro
     sym_table: LibTable | None = None
     fp_table: LibTable | None = None
+    global_sym_table: LibTable | None = None    # per-user KiCad global table
+    global_fp_table: LibTable | None = None
     schematics: list[Path] = field(default_factory=list)
     boards: list[Path] = field(default_factory=list)
+
+    @property
+    def has_global_sym(self) -> bool:
+        return self.global_sym_table is not None
+
+    @property
+    def has_global_fp(self) -> bool:
+        return self.global_fp_table is not None
+
+    @staticmethod
+    def _locate(nick: str, proj: LibTable | None, glob: LibTable | None) -> str | None:
+        if proj is not None and proj.get(nick) is not None:
+            return "project"
+        if glob is not None and glob.get(nick) is not None:
+            return "global"
+        return None
+
+    def locate_sym_nick(self, nick: str) -> str | None:
+        """Where a symbol-lib nickname resolves: ``"project"``/``"global"``/``None``."""
+        return self._locate(nick, self.sym_table, self.global_sym_table)
+
+    def locate_fp_nick(self, nick: str) -> str | None:
+        """Where a footprint-lib nickname resolves: ``"project"``/``"global"``/``None``."""
+        return self._locate(nick, self.fp_table, self.global_fp_table)
 
     def resolve_uri(self, uri: str) -> tuple[Path, list[str]]:
         """Expand ``${KIPRJMOD}``/env vars in a table URI; returns (path, unresolved)."""
@@ -83,8 +119,26 @@ class Workspace:
         return p, unresolved
 
 
-def read_table(path: os.PathLike | str) -> LibTable:
-    """Parse a ``sym-lib-table`` / ``fp-lib-table`` file."""
+def _expand_env_uri(uri: str) -> Path | None:
+    """Expand ``${VAR}`` env vars in a lib-table uri (no ``${KIPRJMOD}``)."""
+    expanded = re.sub(r"\$\{([^}]+)\}",
+                      lambda m: os.environ.get(m.group(1), m.group(0)), uri)
+    if "${" in expanded:
+        return None
+    return Path(expanded)
+
+
+def read_table(path: os.PathLike | str, *, _seen: set | None = None,
+               _depth: int = 0) -> LibTable:
+    """Parse a ``sym-lib-table`` / ``fp-lib-table`` file.
+
+    A ``(lib (type "Table") ...)`` entry is a KiCad **indirection**: its uri
+    points at another lib-table whose entries should be merged in. KiCad's
+    global table is often exactly one such entry pointing at the bundled default
+    table, so without expansion a read sees zero real libraries. Expansion is
+    depth- and cycle-guarded; a missing/unresolvable indirection is dropped
+    (the resolution scope just shrinks) rather than raising.
+    """
     p = Path(path)
     root = sexpr.parse(p.read_text(encoding="utf-8", errors="replace"))
     kind = {"sym_lib_table": "sym", "fp_lib_table": "fp"}.get(root.tag or "")
@@ -111,11 +165,93 @@ def read_table(path: os.PathLike | str) -> LibTable:
                 entry.descr = val or ""
         if entry.name:
             table.entries.append(entry)
+
+    if any(e.type == "Table" for e in table.entries) and _depth < _MAX_TABLE_DEPTH:
+        seen = _seen if _seen is not None else set()
+        try:
+            seen.add(p.resolve())
+        except OSError:
+            pass
+        merged: list[LibEntry] = []
+        for e in table.entries:
+            if e.type != "Table":
+                merged.append(e)
+                continue
+            sub_path = _expand_env_uri(e.uri)
+            try:
+                rp = sub_path.resolve() if sub_path else None
+            except OSError:
+                rp = None
+            if sub_path is None or rp in seen or not sub_path.exists():
+                continue                      # missing/cyclic indirection: drop
+            try:
+                merged.extend(read_table(sub_path, _seen=seen,
+                                         _depth=_depth + 1).entries)
+            except Exception:
+                continue
+        table.entries = merged
     return table
 
 
-def discover(project: os.PathLike | str) -> Workspace:
-    """Build a :class:`Workspace` from a project directory (or ``.kicad_pro``)."""
+def _kicad_config_bases() -> list[Path]:
+    """Candidate KiCad config roots.
+
+    An explicit ``KICAD_CONFIG_HOME`` (or a versioned ``KICAD<N>_CONFIG_HOME``)
+    **replaces** the platform default, matching KiCad — so setting it to an empty
+    directory hermetically disables global-table discovery in tests.
+    """
+    env_bases = [Path(v) for k, v in os.environ.items()
+                 if v and (k == "KICAD_CONFIG_HOME"
+                           or (k.startswith("KICAD") and k.endswith("_CONFIG_HOME")))]
+    if env_bases:
+        return env_bases
+    home = Path.home()
+    if sys.platform == "darwin":
+        return [home / "Library" / "Preferences" / "kicad"]
+    if os.name == "nt":
+        appdata = os.environ.get("APPDATA")
+        return [Path(appdata) / "kicad"] if appdata else []
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    return [(Path(xdg) if xdg else home / ".config") / "kicad"]
+
+
+def _ver_key(name: str) -> tuple:
+    out: list[int] = []
+    for tok in name.split("."):
+        try:
+            out.append(int(tok))
+        except ValueError:
+            out.append(0)
+    return tuple(out) or (0,)
+
+
+def _find_global_table(kind: str, extra_base: Path | None = None) -> Path | None:
+    """Locate the newest per-user global ``{sym,fp}-lib-table`` (or ``None``)."""
+    fname = "sym-lib-table" if kind == "sym" else "fp-lib-table"
+    bases = ([extra_base] if extra_base is not None else []) + _kicad_config_bases()
+    for base in bases:
+        if base is None or not base.exists():
+            continue
+        candidates: list[tuple[tuple, Path]] = []
+        direct = base / fname
+        if direct.exists():
+            candidates.append(((10 ** 6,), direct))     # explicit dir wins
+        for sub in base.glob("*/" + fname):
+            candidates.append((_ver_key(sub.parent.name), sub))
+        if candidates:
+            candidates.sort(key=lambda c: c[0])
+            return candidates[-1][1]
+    return None
+
+
+def discover(project: os.PathLike | str, *,
+             kicad_config_home: os.PathLike | str | None = None) -> Workspace:
+    """Build a :class:`Workspace` from a project directory (or ``.kicad_pro``).
+
+    Also loads the per-user **global** sym/fp lib-tables (so standard KiCad
+    library nicknames resolve). ``kicad_config_home`` overrides discovery of
+    the global tables (used by tests and for a non-default config location).
+    """
     p = Path(project)
     if p.is_file():
         project_dir = p.parent
@@ -130,6 +266,16 @@ def discover(project: os.PathLike | str) -> Workspace:
         ws.sym_table = read_table(sym)
     if fp.exists():
         ws.fp_table = read_table(fp)
+
+    extra = Path(kicad_config_home) if kicad_config_home is not None else None
+    for kind, attr in (("sym", "global_sym_table"), ("fp", "global_fp_table")):
+        gpath = _find_global_table(kind, extra)
+        if gpath is not None:
+            try:
+                setattr(ws, attr, read_table(gpath))
+            except Exception:
+                pass                          # unreadable global table: smaller scope
+
     ws.schematics = sorted(project_dir.glob("*.kicad_sch"))
     ws.boards = sorted(project_dir.glob("*.kicad_pcb"))
     return ws
@@ -258,22 +404,34 @@ def audit(ws: Workspace, sch_paths: list[Path] | None = None) -> list[Finding]:
             continue
         for comp in sch.components:
             nick, _sym = _split_lib_id(comp.library_ref)
-            if nick and ws.sym_table is not None:
-                known = sym_symbols.get(nick)
-                if ws.sym_table.get(nick) is None:
+            if nick:
+                where = ws.locate_sym_nick(nick)
+                if where is None and ws.has_global_sym:
                     out(Finding(
                         "SYMBOL_LIB_UNREGISTERED", Severity.WARNING,
                         f"{sch_path.name} {comp.designator}: symbol library "
-                        f"nickname '{nick}' is not in the project sym-lib-table "
-                        "(embedded copy still renders; re-linking will fail)",
+                        f"nickname '{nick}' is in neither the project nor the "
+                        "global sym-lib-table (embedded copy still renders; "
+                        "re-linking will fail)",
                         anchors=[anchor("component", comp.designator)]))
-                elif known is not None and _sym and _sym not in known:
+                elif where is None:
                     out(Finding(
-                        "SYMBOL_MISSING", Severity.WARNING,
-                        f"{sch_path.name} {comp.designator}: symbol "
-                        f"'{comp.library_ref}' not found in the registered "
-                        "library",
+                        "SYMBOL_LIB_UNREGISTERED", Severity.NOTE,
+                        f"{sch_path.name} {comp.designator}: symbol library "
+                        f"nickname '{nick}' is not in the project sym-lib-table; "
+                        "the global table could not be read to confirm it is a "
+                        "standard KiCad library",
                         anchors=[anchor("component", comp.designator)]))
+                elif where == "project":
+                    known = sym_symbols.get(nick)
+                    if known is not None and _sym and _sym not in known:
+                        out(Finding(
+                            "SYMBOL_MISSING", Severity.WARNING,
+                            f"{sch_path.name} {comp.designator}: symbol "
+                            f"'{comp.library_ref}' not found in the registered "
+                            "library",
+                            anchors=[anchor("component", comp.designator)]))
+                # where == "global": resolved via a standard library (not loaded)
             fp_nick, fp_name = _split_lib_id(comp.footprint)
             if not comp.footprint:
                 continue
@@ -284,14 +442,27 @@ def audit(ws: Workspace, sch_paths: list[Path] | None = None) -> list[Finding]:
                     f"{comp.footprint!r} has no library nickname",
                     anchors=[anchor("component", comp.designator)]))
                 continue
-            if ws.fp_table is not None and ws.fp_table.get(fp_nick) is None:
+            fp_where = ws.locate_fp_nick(fp_nick)
+            if fp_where is None and ws.has_global_fp:
                 out(Finding(
                     "FOOTPRINT_LIB_UNREGISTERED", Severity.ERROR,
                     f"{sch_path.name} {comp.designator}: footprint nickname "
-                    f"'{fp_nick}' (from {comp.footprint!r}) is not in the "
-                    "project fp-lib-table — KiCad will not find this package",
+                    f"'{fp_nick}' (from {comp.footprint!r}) is in neither the "
+                    "project nor the global fp-lib-table — KiCad will not find "
+                    "this package",
                     anchors=[anchor("component", comp.designator)]))
                 continue
+            if fp_where is None:
+                out(Finding(
+                    "FOOTPRINT_LIB_UNREGISTERED", Severity.WARNING,
+                    f"{sch_path.name} {comp.designator}: footprint nickname "
+                    f"'{fp_nick}' (from {comp.footprint!r}) is not in the "
+                    "project fp-lib-table; the global table could not be read "
+                    "to confirm it is a standard KiCad library",
+                    anchors=[anchor("component", comp.designator)]))
+                continue
+            if fp_where == "global":
+                continue        # resolved via a standard library (not loaded)
             defs = fp_defs.get(fp_nick)
             if defs is not None and fp_name and fp_name not in defs:
                 out(Finding(
