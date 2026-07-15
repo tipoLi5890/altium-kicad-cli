@@ -251,11 +251,11 @@ def test_cli_propose_diff_tree(tmp_path, capsys, monkeypatch):
                                     facts=_vref_store())
     from akcli import report
     f1 = tmp_path / "one.json"
-    f1.write_text(report.render(findings, "json", meta=meta))
+    f1.write_text(report.render(findings, "json", meta=meta), encoding="utf-8")
     out = tmp_path / "proposals.json"
     assert cli.main(["review", "propose", str(f1), "--out", str(out)]) == 0
     capsys.readouterr()
-    doc = json.loads(out.read_text())
+    doc = json.loads(out.read_text(encoding="utf-8"))
     jsonschema.validate(doc, PROPOSALS_SCHEMA)
     assert doc["proposals"][0]["oplist_draft"]["protocol_version"] == 1
 
@@ -263,7 +263,7 @@ def test_cli_propose_diff_tree(tmp_path, capsys, monkeypatch):
     fixed, meta2 = engine.analyze(_fb_sch(), profile="fast",
                                   facts=_vref_store(vref=0.55))
     f2 = tmp_path / "two.json"
-    f2.write_text(report.render(fixed, "json", meta=meta2))
+    f2.write_text(report.render(fixed, "json", meta=meta2), encoding="utf-8")
     assert cli.main(["review", "diff", str(f1), str(f2), "--json"]) == 0
     d = json.loads(capsys.readouterr().out)
     assert d["added"] and d["resolved"]

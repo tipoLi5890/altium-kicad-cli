@@ -125,7 +125,7 @@ def test_cli_analyze_is_advisory_and_schema_valid(tmp_path, capsys):
                      "--out", str(out)]) == 0          # advisory: exit 0
     doc = json.loads(capsys.readouterr().out)
     jsonschema.validate(doc, _SCHEMA)
-    assert doc == json.loads(out.read_text())
+    assert doc == json.loads(out.read_text(encoding="utf-8"))
     assert {f["code"] for f in doc["findings"]} == \
            {"REVIEW_DIVIDER_TAP_MISMATCH", "REVIEW_RC_CUTOFF"}
     assert doc["metadata"]["review_profile"] == "standard"

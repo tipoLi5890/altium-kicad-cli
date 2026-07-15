@@ -73,10 +73,10 @@ def test_nested_global_table_resolves(tmp_path):
     cfg.mkdir()
     (cfg / "fp-lib-table").write_text(
         f'(fp_lib_table (version 7)\n'
-        f'  (lib (name "KiCad")(type "Table")(uri "{template}/fp-lib-table")(options "")(descr ""))\n)')
+        f'  (lib (name "KiCad")(type "Table")(uri "{template.as_posix()}/fp-lib-table")(options "")(descr ""))\n)')
     (cfg / "sym-lib-table").write_text(
         f'(sym_lib_table (version 7)\n'
-        f'  (lib (name "KiCad")(type "Table")(uri "{template}/sym-lib-table")(options "")(descr ""))\n)')
+        f'  (lib (name "KiCad")(type "Table")(uri "{template.as_posix()}/sym-lib-table")(options "")(descr ""))\n)')
 
     # nested Table is expanded into the real entries
     fp = libtable.read_table(cfg / "fp-lib-table")

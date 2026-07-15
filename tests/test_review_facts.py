@@ -122,7 +122,7 @@ def test_cli_facts_add_lookup_verify_roundtrip(tmp_path, capsys, monkeypatch):
                      "--set", "vref=0.6V@5", "--set", "en_vih=1.2V@6"]) == 0
     capsys.readouterr()
     # written file validates against the shipped schema
-    doc = json.loads((root / "extracted" / "BUCK1.json").read_text())
+    doc = json.loads((root / "extracted" / "BUCK1.json").read_text(encoding="utf-8"))
     jsonschema.validate(doc, FACTS_SCHEMA)
     assert doc["source"]["pdf"] == "BUCK1.pdf"          # relative to the dir
 
