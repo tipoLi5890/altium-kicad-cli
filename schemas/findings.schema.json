@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tipoLi5890/akcli/schemas/findings.schema.json",
+  "title": "akcli findings report",
+  "description": "The --json output of akcli check / review analyze: schema_version + metadata caveats + a findings array. Optional per-finding fields form the review evidence envelope; a finding without them keeps the historical shape. Consumers must tolerate additive growth across minor schema_version bumps.",
+  "type": "object",
+  "required": ["schema_version", "metadata", "findings"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "metadata": { "type": "object" },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "anchor": {
+      "type": "object",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["component", "pin", "net", "label"] },
+        "id": { "type": "string" },
+        "pos": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2
+        }
+      },
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "required": ["code", "severity", "message", "refs"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "severity": { "enum": ["info", "note", "warning", "error", "critical"] },
+        "message": { "type": "string" },
+        "refs": { "type": "array", "items": { "type": "string" } },
+        "pos": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "anchors": { "type": "array", "items": { "$ref": "#/$defs/anchor" } },
+        "detector": { "type": "string" },
+        "confidence": {
+          "enum": ["deterministic", "heuristic", "datasheet_backed", "llm_reviewed"]
+        },
+        "evidence": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "enum": ["datasheet", "topology", "heuristic_rule",
+                       "symbol_footprint", "bom", "geometry", "api_lookup",
+                       "calc"]
+            },
+            "calc": { "type": "object" },
+            "datasheet": {
+              "type": "object",
+              "required": ["sha256", "page"],
+              "properties": {
+                "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                "page": { "type": "integer", "minimum": 1 },
+                "quote": { "type": "string" }
+              },
+              "additionalProperties": false
+            },
+            "assumptions": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": true
+        },
+        "rule_version": { "type": "string" },
+        "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "remediation": { "type": "string" },
+        "fix_params": { "type": "object" },
+        "status": {
+          "enum": ["reported", "waived", "accepted_risk", "quarantined",
+                   "insufficient_evidence"]
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "description": "datasheet_backed findings MUST carry the evidence that backs them (sha256 + page); a heuristic may never masquerade as datasheet-backed.",
+          "if": { "properties": { "confidence": { "const": "datasheet_backed" } },
+                  "required": ["confidence"] },
+          "then": {
+            "required": ["evidence"],
+            "properties": {
+              "evidence": { "required": ["datasheet"] }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

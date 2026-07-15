@@ -395,3 +395,53 @@ Components resolve to SPICE devices via the `Sim.*`-fields → `sim.json` `model
 `Sim.*` field, a `models` entry, or a `fit_diode` model card. `--deck-only`
 works with no ngspice installed, so it doubles as a review/CI plan step. Full
 reference: `docs/sim.md`.
+
+## (9) Adopt review proposals — the finding→fix loop
+
+When a review run produced findings with `fix_params`, do not hand-derive the
+fix — let `propose` recompute it:
+
+```bash
+akcli review analyze board.kicad_sch --out review.findings.json
+akcli review propose review.findings.json --out proposals.json
+```
+
+Each proposal carries the source finding's fingerprint (traceability), a
+recomputed + E-series-snapped value, and up to three drafts. Adoption rules:
+
+- **`oplist_draft` present** → it is a complete protocol-1 document: save the
+  `oplist_draft` object to a file and run it through the NORMAL pipeline —
+  `akcli plan board.kicad_sch --ops fix.json` then `draw --apply` on user
+  approval. Never bypass plan; the draft inherits every safety rail that way.
+- **`requires_confirmation` non-empty** → the draft is null BY DESIGN (a fix
+  depending on unobserved conditions cannot be auto-applied). Ask the user
+  the listed questions; often the answer is "add a facts file"
+  (akcli-datasheet-facts) which turns the next `propose` run auto-applicable.
+- **`kind: layout`** → a PCB edit; akcli writes schematics only. Hand the
+  summary to the user as a manual layout action.
+- **`contract_draft`** → paste into the project's contract TOML (it already
+  cites the datasheet sha256+page) so the fix becomes a standing gate; verify
+  with `akcli check board.kicad_sch --contract contract.toml --exit-zero`.
+- After applying, close the loop: re-run analyze and
+  `akcli review diff review.findings.json new.findings.json` — the finding
+  must appear under `resolved`, and nothing new may appear unexplained.
+
+## (10) Group re-layout — rigid, net-preserving moves
+
+To tidy a grown sheet into functional blocks, never hand-move parts (labels
+strand). Use the rigid primitives:
+
+```bash
+akcli library check-lock .                       # refuse to write under an open KiCad GUI
+akcli arrange board.kicad_sch --groups groups.toml               # dry-run plan
+akcli arrange board.kicad_sch --groups groups.toml --apply       # .bak + undo, net-verified
+```
+
+`groups.toml` maps `[groups]` block names to designator lists (file order =
+top-to-bottom placement); each part moves as a rigid bundle with the power
+symbols riding on its pins, via `move_component` ops carrying
+`carry_labels`/`carry_wires` — with label-on-pin connectivity the re-layout is
+net-preserving by construction, and the pipeline REFUSES to write on any net
+change. `--group-gap`/`--row-width` tune spacing; `akcli undo` reverts. For a
+single surgical move, `move_component` with `"carry_labels": true,
+"carry_wires": true` is the same rigid semantics as one op.

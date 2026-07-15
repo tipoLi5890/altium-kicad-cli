@@ -95,7 +95,9 @@
             "designator": { "type": "string" },
             "x_mil": { "type": "number" },
             "y_mil": { "type": "number" },
-            "unit": { "type": "integer", "minimum": 1 }
+            "unit": { "type": "integer", "minimum": 1 },
+            "carry_labels": { "type": "boolean" },
+            "carry_wires": { "type": "boolean" }
           },
           "required": ["op", "designator", "x_mil", "y_mil"]
         },

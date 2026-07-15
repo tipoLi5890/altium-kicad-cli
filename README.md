@@ -5,9 +5,11 @@
 **akcli** (CLI command `akcli`, import package `akcli`) is a zero-dependency,
 **KiCad-native AI design agent** — a Python toolkit and Claude Code plugin that lets an LLM agent
 *author* a `.kicad_sch` from a JSON op-list (with net-diff safety rails and one-command undo), run
-ERC / design / **intent / contract** / BOM checks, **verify schematic ↔ PCB equivalence**, **audit
-and repair the project library workspace**, **gate manufacturing against versioned fab profiles**,
-**simulate on KiCad's bundled ngspice**, source real parts and fetch datasheets, and **import Altium
+ERC / design / **intent / contract** / BOM checks, **run an advisory engineering design review**
+(confidence-graded findings across signal, validation, PCB, EMC, domain, and gerber-package
+families), **verify schematic ↔ PCB equivalence**, **audit and repair the project library
+workspace**, **gate manufacturing against versioned fab profiles**, **simulate on KiCad's bundled
+ngspice**, source real parts and fetch datasheets, and **import Altium
 `.SchDoc` / `.SchLib` / `.PcbDoc` / `.PcbLib`** — all with **no Altium or KiCad installed**.
 
 KiCad is the writable target; Altium files are imported into the same normalized model for analysis
@@ -43,6 +45,13 @@ imported legacy schematic or a blank sheet, all the way to a simulated, part-sou
   manual `sed`), versioned **fab profiles** (free-via envelope, tenting, cost thresholds), and a
   **release preflight** that gates every check and writes a traceable manifest —
   [docs/design-integrity.md](docs/design-integrity.md).
+- **Advisory design review.** `akcli review analyze` runs six detector families
+  (signal / validation / pcb / emc / domain / gerber) over the normalized model — even an Altium
+  `.SchDoc` — emitting **confidence-graded** findings (deterministic / heuristic / datasheet_backed)
+  with an evidence envelope, a **datasheet facts store** that upgrades findings to datasheet-backed,
+  and a `propose → plan → draw` fix loop. Advisory by default; the only blocking path is a
+  calibrated `release preflight --review-policy` allowlist —
+  [docs/review-rules.md](docs/review-rules.md).
 - **Net inference you can trust.** A rebuilt net layer handles global same-name merges, junctions,
   T-junctions, and No-ERC markers — fixing the classic "same-named nets split into single-pin nets" bug.
 - **Read-only on Altium, safe writes on KiCad.** Altium files are never modified offline; KiCad writes
@@ -72,6 +81,13 @@ akcli draw board.kicad_sch --ops ops.json --apply --strict-nets  # atomic write 
 `.kicad_sym` libraries behind a net-equivalence safety gate. Altium *write/draw* is available only
 through the optional Windows live driver (Altium 22+ running); offline, Altium is analysis-only.
 
+Two edits are **net-preserving by construction**: `move_component` can carry a symbol's net labels
+and wire endpoints with it (`carry_labels`/`carry_wires`), and `arrange` builds on that primitive —
+`arrange board.kicad_sch --apply` nudges free (unwired) symbols apart until nothing overlaps, and
+`arrange --groups blocks.toml` relocates whole functional blocks (a `group-name → [refdes]` map) as
+rigid bundles. `akcli library check-lock hardware/kicad/board` reports which files the KiCad GUI
+holds open (exit 6 if any) so external automation can gate before a write.
+
 ## Run checks (ERC, power, pinmap, BOM, diff)
 
 Run an electrical rule check and other design checks without opening any EDA tool:
@@ -94,6 +110,36 @@ table drops or demotes findings by code/refs (with the count surfaced in the hea
 files support per-net modes and `fnmatch` wildcard members; located findings carry `pos`/`anchors`
 in JSON/SARIF.
 
+## Design review (advisory)
+
+`akcli review` is an advisory engineering design-review engine on the same normalized model, so it
+reviews an Altium `.SchDoc` as readily as a `.kicad_sch`. `review analyze` runs six detector
+families — **signal** (dividers, feedback Vref plausibility, RC corners, crystal load, op-amp gain,
+connector ESD), **validation** (I²C pull-up window, cross-voltage-domain signals, floating enables),
+**pcb** (unrouted copper via union-find, decap distance, thermal vias, IPC-2221 trace ampacity),
+**emc** (pre-compliance risk: planes, stitching, edge/clock routing, diff-pair skew, TVS placement),
+**domain** (USB-C CC termination), and **gerber** (fab-package completeness/registration/staleness)
+— and emits **confidence-graded** findings (`deterministic` / `heuristic` / `datasheet_backed` /
+`llm_reviewed`) with an evidence envelope published as `findings.schema.json`.
+
+```bash
+akcli review analyze board.kicad_sch --profile deep --pcb board.kicad_pcb --gerbers fab/  # advisory: exit 0 unless --fail-on
+akcli review explain REVIEW_FB_DIVIDER_VREF_MISMATCH    # a rule's spec, formula, and reference
+akcli review facts add TPS61023 --pdf datasheets/tps61023.pdf --set vref=0.6V@5   # audited datasheet facts
+akcli review tree board.kicad_sch                       # power tree: rails -> regulator -> consumers
+akcli review propose review.findings.json --out proposals.json   # findings -> op-list/contract/sim drafts
+```
+
+It is **advisory by default** (exit 0 whatever it finds); `--fail-on warning|error|critical` opts a
+CI job in. Findings that lean on a datasheet number cite the PDF's sha256 + page (the **facts
+store**), and `review propose` recomputes fixes (E-series-snapped) into op-list drafts that go back
+through the normal `plan → draw` safety rails — never touching a file directly. `review validate`
+gates LLM-generated candidates through four deterministic checks (schema / anchor existence /
+datasheet evidence / rule masquerade), quarantining failures. The **only** path by which a review
+finding blocks a release is an explicit, calibrated `release preflight --review-policy` allowlist.
+Full rule catalogue and the extraction/deep-review/gating skills:
+[docs/review-rules.md](docs/review-rules.md).
+
 ## Design integrity: library, contracts, fab, release
 
 Beyond per-file ERC, `akcli` treats the whole design as one auditable object — the library
@@ -105,7 +151,7 @@ akcli library repair hardware/kicad/board --rename-footprint-lib footprint=proj_
 akcli library import-altium vendor.PcbLib --out vendor.pretty --courtyard 0.25 --apply
 akcli check   board.kicad_sch --contract board.contract.toml   # require/forbid pin-net & pin-pair topology
 akcli fab     check board.kicad_pcb --profile jlc-4l-1oz.toml --order order.toml
-akcli release preflight --sch board.kicad_sch --pcb board.kicad_pcb --fab-profile jlc-4l-1oz.toml --out manifest.json
+akcli release preflight --sch board.kicad_sch --pcb board.kicad_pcb --fab-profile jlc-4l-1oz.toml --gerbers fab/ --out manifest.json
 ```
 
 `library audit`/`repair` catch and fix the footprint-nickname and 3D-path traps that used to need
@@ -113,9 +159,13 @@ manual `sed`; **contracts** express datasheet rules ERC can't, with owned, expir
 **fab profiles** are versioned, source-cited vendor policy (free-via envelope, tenting, via-in-pad,
 cost thresholds), and validate a declared order manifest instead of guessing it from the PCB; and
 **`release preflight`** runs every gate (check / intent / contract / library / sch-pcb / fab / order
-/ git) and writes a manifest binding input hashes, the git revision, and each gate's findings.
-KiCad writes refuse `TARGET_LOCKED` while the GUI holds the file open (`--allow-open` to override,
-then File→Revert). Full guide: [docs/design-integrity.md](docs/design-integrity.md).
+/ **review-policy** / **gerber** / git) and writes a manifest binding input hashes, the git
+revision, and each gate's findings. A `--review-policy` TOML allowlist is the only way an advisory
+review finding is allowed to block a release; `--gerbers` adds fab-output
+completeness/alignment/staleness checks. KiCad writes refuse `TARGET_LOCKED` while the GUI holds the
+file open (`--allow-open` to override, then File→Revert), and `akcli library check-lock <dir>` lets
+external automation query the same lock. Full guide:
+[docs/design-integrity.md](docs/design-integrity.md).
 
 ## Simulate and assert
 
@@ -197,7 +247,9 @@ akcli net  board.kicad_sch              # net membership, shared net engine
 
 KiCad pin electrical types are resolved from `lib_symbols` at read time (instance pins carry no type),
 so ERC has the data it needs. The S-expression reader is version-tolerant — KiCad 7/8 are
-fixture-tested and newer formats (9/10) read through the same path.
+fixture-tested and newer formats (9/10) read through the same path. The format traps this
+reader/writer navigates (name escaping, absolute property coordinates, the nested global
+lib-table) are catalogued in [docs/kicad-format-gotchas.md](docs/kicad-format-gotchas.md).
 
 ## Import Altium designs
 
@@ -230,14 +282,17 @@ idempotent. Note: when piping (`akcli … | head`) the shell reports the *pipe's
 use `set -o pipefail` if you branch on it.
 
 - **Claude Code** — install the bundled plugin (below) for the `/akcli:circuit-review`,
-  `circuit-pinmap`, `circuit-draw`, and `circuit-diff` commands plus nine skills: `akcli-circuit-design`
+  `circuit-pinmap`, `circuit-draw`, and `circuit-diff` commands plus twelve skills: `akcli-circuit-design`
   (read/analyze/draw basics), `akcli-circuit-debug` (connectivity & tool triage), `akcli-schematic-review`
   (severity-ranked design review), `akcli-schematic-authoring` (new circuits from an op-list),
   `akcli-altium-interop` (working with Altium Designer), `akcli-parts-sourcing` (JLC/LCSC parts),
   `akcli-jlcpcb-capabilities` (manufacturer limits + KiCad fab-file handoff), `akcli-design-calc`
-  (60 standards-cited engineering calculators via `akcli calc`), and `akcli-setup`
-  (environment probe & repair via `akcli doctor`).
-- **Codex** — install the bundled plugin (below): it packages all eight skills plus the session hook.
+  (60 standards-cited engineering calculators via `akcli calc`), `akcli-setup`
+  (environment probe & repair via `akcli doctor`), `akcli-datasheet-facts` (audited,
+  PDF-pinned facts extraction for datasheet_backed findings), `akcli-deep-review`
+  (LLM candidates gated through `review validate`), and `akcli-release-gating`
+  (preflight manifest + calibrated review-policy / gerber gates).
+- **Codex** — install the bundled plugin (below): it packages all twelve skills plus the session hook.
   Or drop the loose skill folders into `.agents/skills/` for auto-discovery. See
   [docs/codex-plugin.md](docs/codex-plugin.md).
 - **OpenCode** — auto-discovers the bundled skills; drop them into its skills dir and let the agent
@@ -279,22 +334,25 @@ Full details, per-agent setup, and troubleshooting in [INSTALL.md](INSTALL.md).
 
 ## Roadmap
 
-Shipped today (v0.7.x): KiCad write/draw from an 18-op + 9-macro vocabulary (hierarchical
+Shipped today (v0.8.x): KiCad write/draw from an 18-op + 9-macro vocabulary (hierarchical
 `add_sheet`, net-diff safety rails, `new`/multi-level `undo`, output arbitrated against KiCad's own
-netlister), ERC/power/BOM/diff/pinmap/**intent**/**contract** checks with waivers and SARIF,
-schematic ↔ PCB **`verify`**, a project **`library`** workspace (audit/repair/import-altium — Altium
-`.PcbLib` footprint import + deep `.kicad_pcb` reading), versioned **`fab`** profiles, and a
-**`release preflight`** gate (see [docs/design-integrity.md](docs/design-integrity.md)), **`akcli
-sim`** (SPICE decks on KiCad's bundled ngspice, assertions, sweeps, datasheet-fitted models),
-JLCPCB/LCSC part search + BOM purchasability + **datasheet fetch**, 60 standards-cited calculators,
-the `view` dashboard, and version-tolerant Altium/KiCad readers (KiCad hierarchy, Altium
-multi-sheet + binary copper). The forward plan (v0.8 → v1.0, with exit criteria) lives in
+netlister), net-preserving **`arrange --groups`** / `move_component` carry re-layout, an advisory
+**`akcli review`** engine (analyze across signal/validation/pcb/emc/domain/gerber detector families,
+a datasheet **facts** store, `propose`/`diff`/`tree`, `validate`, and a `release --review-policy`
+gate), ERC/power/BOM/diff/pinmap/**intent**/**contract** checks with waivers and SARIF,
+schematic ↔ PCB **`verify`**, a project **`library`** workspace (audit/repair/import-altium/
+**check-lock** — Altium `.PcbLib` footprint import + deep `.kicad_pcb` + **gerber** reading),
+versioned **`fab`** profiles, and a **`release preflight`** gate (see
+[docs/design-integrity.md](docs/design-integrity.md)), **`akcli sim`** (SPICE decks on KiCad's
+bundled ngspice, assertions, sweeps, datasheet-fitted models), JLCPCB/LCSC part search + BOM
+purchasability + **datasheet fetch**, 60 standards-cited calculators, the `view` dashboard, and
+version-tolerant Altium/KiCad readers. The forward plan (v0.9 → v1.0, with exit criteria) lives in
 **[ROADMAP.md](ROADMAP.md)**. Headline items still ahead:
 
-- Published JSON Schemas for `check`/`diff`/`pinmap` findings; machine-detectable lookup misses.
-- Full **ERC pin-type conflict matrix** (the schematic-vs-PCB sync check now ships as `akcli verify`).
+- Published JSON Schemas for `diff`/`pinmap` findings; machine-detectable lookup misses.
+- Full **ERC pin-type conflict matrix** and `check`-side differential-pair / bus continuity rules.
 - Pure-stdlib **SVG schematic rendering** and a generated pinout book.
-- A GitHub **Action** gating schematic PRs (check + diff + intent + sim assertions).
+- A GitHub **Action** gating schematic PRs (check + review + diff + intent + sim assertions).
 - *Optional, demand-driven:* the Altium track — binary `.SchLib` decoder, remaining `.PcbDoc`
   sections, and the Windows **live driver** (scaffold pending validation).
 - A native **MCP server** (deferred by decision; the plain CLI serves agents today).

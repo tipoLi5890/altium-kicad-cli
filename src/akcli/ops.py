@@ -96,7 +96,7 @@ _OP_OPTIONAL: dict[str, dict] = {
     "delete_component": {"cascade": False},
     # delete_object takes EXACTLY ONE of uuid | match; the template shows uuid.
     "delete_object": {"uuid": "<object-uuid>"},
-    "move_component": {"unit": 1},
+    "move_component": {"unit": 1, "carry_labels": False, "carry_wires": False},
     "rename_net": {"scope": "local"},
 }
 
@@ -623,7 +623,8 @@ _OP_FIELDS: dict[str, dict[str, str]] = {
     "delete_component": {"designator": "str", "cascade": "bool"},
     "delete_object": {"uuid": "str", "match": "match"},
     "move_component": {"designator": "str", "x_mil": "num", "y_mil": "num",
-                       "unit": "posint"},
+                       "unit": "posint", "carry_labels": "bool",
+                       "carry_wires": "bool"},
     "rename_net": {"from": "str", "to": "str", "scope": "scope"},
 }
 

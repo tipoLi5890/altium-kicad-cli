@@ -42,6 +42,7 @@ from .commands import jlc as _jlc_cmd
 from .commands import library as _library_cmd
 from .commands import query as _query_cmd
 from .commands import release as _release_cmd
+from .commands import review as _review_cmd
 from .commands import sim as _sim_cmd
 from .commands import view as _view_cmd
 from .commands._shared import _ExitWith
@@ -113,6 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
     _query_cmd.register(sub, common)
     _view_cmd.register(sub, common)
     _checks_cmd.register(sub, common)
+    _review_cmd.register(sub, common)
     _drawing_cmd.register(sub, common)
     _calc_cmd.register(sub, common)
     _jlc_cmd.register(sub, common)

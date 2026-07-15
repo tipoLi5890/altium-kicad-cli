@@ -46,7 +46,7 @@ Bdis DISCH 0 I=(v(q)<0.5) ? v(DISCH)/10 : 0
 * High input impedance (1 meg to ground on each input, textbook nominal for a
 * bipolar comparator front end). The open-collector output sinks to ~0 V when
 * v(inp) > v(inn) and floats otherwise; a tanh() gives a finite ~20 mV/decade
-* transition instead of an ideal step so the transient solver stays happy.
+* transition instead of an ideal step so the transient solver converges cleanly.
 * Pin order: inp inn out vcc.
 *------------------------------------------------------------------------------
 .subckt AKCLI_COMPARATOR inp inn out vcc

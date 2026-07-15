@@ -34,6 +34,7 @@ from ._shared import (
     _load_cfg,
     _load_schematic,
     _require_path,
+    _ExitWith,
 )
 
 _ACTIONABLE = {_report.Severity.WARNING, _report.Severity.ERROR,
@@ -158,6 +159,59 @@ def _cmd_release_preflight(args: argparse.Namespace) -> int:
     else:
         gates.append(_skipped("order", "no --order manifest given"))
 
+    # 8. review policy (calibrated allowlist only) --------------------------------
+    if getattr(args, "review_policy", None):
+        import tomllib
+        pol_path = Path(args.review_policy)
+        try:
+            with pol_path.open("rb") as fh:
+                pol = tomllib.load(fh).get("review") or {}
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            raise _ExitWith(EXIT["USAGE"],
+                            f"ERROR: cannot read review policy: {exc}")
+        allow = pol.get("allow") or []
+        if not isinstance(allow, list) or not all(
+                isinstance(a, str) for a in allow) or not allow:
+            raise _ExitWith(EXIT["USAGE"],
+                            "ERROR: review policy needs a non-empty "
+                            "[review] allow = [\"CODE\", ...] list — only "
+                            "explicitly calibrated rules may block")
+        from ..review import engine as review_engine
+        from ..review import facts as review_facts
+        facts_dir = sch_path.parent / "datasheets"
+        store = (review_facts.load_store(facts_dir)
+                 if (facts_dir / "extracted").is_dir() else None)
+        rv_findings, _rv_meta = review_engine.analyze(
+            sch, pcb=(pcb if pcb_path else None),
+            profile=str(pol.get("profile") or "standard"), facts=store)
+        rv_findings, _w, _d = _report.apply_waivers(rv_findings, cfg.waivers)
+        gated = [f for f in rv_findings if f.code in set(allow)]
+        gates.append(_gate("review", gated))
+        inputs["review_policy"] = {"path": str(pol_path),
+                                   "sha256": _sha256(pol_path),
+                                   "allow": sorted(allow)}
+    else:
+        gates.append(_skipped(
+            "review", "no --review-policy given (review stays advisory)"))
+
+    # 8b. gerber package (fab-output completeness/alignment/staleness) ------------
+    if getattr(args, "gerbers", None):
+        from ..readers import gerber as gerber_reader
+        from ..review import topo as review_topo
+        from ..review.detectors import gerber as gerber_det
+        gdir = Path(args.gerbers)
+        if not gdir.is_dir():
+            raise _ExitWith(EXIT["USAGE"],
+                            f"ERROR: no such gerber dir: {gdir}")
+        gset = gerber_reader.read_gerber_dir(gdir)
+        gctx = review_topo.build_ctx(
+            sch, (pcb if pcb_path else None), None, gset)
+        gates.append(_gate("gerber", gerber_det.run(gctx)))
+        inputs["gerbers"] = {"path": str(gdir),
+                             "files": sorted(f.name for f in gset.files)}
+    else:
+        gates.append(_skipped("gerber", "no --gerbers dir given"))
+
     # 8. git --------------------------------------------------------------------
     git = _git_state(sch_path.parent)
     allow_dirty = bool(getattr(args, "allow_dirty", False))
@@ -220,7 +274,8 @@ def register(sub, common) -> None:
                        help="release gating: run every gate, emit a "
                             "traceable manifest")
     rel_sub = p.add_subparsers(dest="release_command", metavar="<subcommand>")
-    p.set_defaults(handler=_cmd_release_preflight, sch=None)
+    p.set_defaults(handler=_cmd_release_preflight, sch=None,
+                   review_policy=None)
 
     pp = rel_sub.add_parser(
         "preflight", parents=[common],
@@ -233,6 +288,13 @@ def register(sub, common) -> None:
     pp.add_argument("--fab-profile", dest="fab_profile", metavar="FILE",
                     help="fab profile TOML")
     pp.add_argument("--order", metavar="FILE", help="order manifest TOML")
+    pp.add_argument("--gerbers", metavar="DIR",
+                    help="fab output dir — gates on gerber package "
+                         "completeness/alignment/staleness")
+    pp.add_argument("--review-policy", dest="review_policy", metavar="FILE",
+                    help="review gate policy TOML: [review] allow = [codes] "
+                         "(+ optional profile/fail threshold) — only "
+                         "explicitly allowlisted, calibrated rules may block")
     pp.add_argument("--out", metavar="FILE",
                     help="write the release manifest JSON here")
     pp.add_argument("--allow-dirty", dest="allow_dirty", action="store_true",

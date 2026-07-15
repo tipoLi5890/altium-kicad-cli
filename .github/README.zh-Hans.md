@@ -211,12 +211,12 @@ akcli component main.SchDoc U10    # 单个元件的引脚 -> net（需给 desig
 exit code 而非 akcli 的——若要据此判断请加 `set -o pipefail`。
 
 - **Claude Code** — 安装随附的插件（见下方），即可获得 `/akcli:circuit-review`、
-  `circuit-pinmap`、`circuit-draw`、`circuit-diff` 命令与九个 skills：`akcli-circuit-design`（读取/分析/
+  `circuit-pinmap`、`circuit-draw`、`circuit-diff` 命令与十二个 skills：`akcli-circuit-design`（读取/分析/
   绘制基础）、`akcli-circuit-debug`（连接与工具排障）、`akcli-schematic-review`（按严重度分级的设计评审）、
   `akcli-schematic-authoring`（用 op-list 从零设计电路）、`akcli-altium-interop`（与 Altium Designer 互通）、
   `akcli-parts-sourcing`（JLC/LCSC 元件选型）、`akcli-jlcpcb-capabilities`（JLCPCB 制程能力参考）、
-  `akcli-design-calc`（`akcli calc` 的 60 个附标准引用的工程计算器）。
-- **Codex** — 安装随附的插件（见下方）：内含全部九个 skills 与 session hook；或把 skills 文件夹放进
+  `akcli-design-calc`（`akcli calc` 的 60 个附标准引用的工程计算器）、`akcli-setup`（环境探测与修复）、`akcli-datasheet-facts`（资料表事实提取）、`akcli-deep-review`（LLM 候选经 review validate 把关）、`akcli-release-gating`（preflight 与校准过的放行策略）。
+- **Codex** — 安装随附的插件（见下方）：内含全部十二个 skills 与 session hook；或把 skills 文件夹放进
   `.agents/skills/` 让其自动发现。见 [docs/codex-plugin.md](../docs/codex-plugin.md)。
 - **OpenCode** — 会自动发现随附的 skills；把它们放进各自的 skills 目录，
   并让代理通过 shell 调用 `akcli`。命令与一键设置 prompt 见 [INSTALL.md](../INSTALL.md#use-with-ai-coding-agents)。

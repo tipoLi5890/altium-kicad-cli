@@ -207,6 +207,51 @@ def _cmd_library_import_altium(args: argparse.Namespace) -> int:
     return EXIT["OK"]
 
 
+_LOCKABLE_SUFFIXES = (".kicad_sch", ".kicad_pcb", ".kicad_pro")
+
+
+def _cmd_library_check_lock(args: argparse.Namespace) -> int:
+    """`library check-lock [project]` — is any KiCad file open in the GUI?
+
+    KiCad drops a ``~<name>.lck`` next to a document it holds open. akcli's own
+    write ops already refuse a locked target, but hand scripts / ``sed`` do not —
+    this exposes the same check so an external flow can gate on it
+    (``akcli library check-lock . && ./relayout.sh``). Exit 6 (TARGET_LOCKED)
+    when ANY file is locked, 0 when the tree is writable.
+    """
+    from ..writers import kicad as kwriter
+
+    project = Path(getattr(args, "project", None) or ".")
+    if not project.exists():
+        raise _ExitWith(EXIT["NOT_FOUND"], f"ERROR: no such project: {project}")
+    root = project if project.is_dir() else project.parent
+    files = sorted(
+        f for suf in _LOCKABLE_SUFFIXES for f in root.rglob(f"*{suf}")
+        if f.is_file() and not f.name.startswith("~"))
+    locked = [f for f in files if kwriter.gui_lock_path(f).exists()]
+
+    if args.json:
+        _emit(_dumps({
+            "project": str(root),
+            "scanned": len(files),
+            "locked": [{"file": str(f), "lock": str(kwriter.gui_lock_path(f))}
+                       for f in locked],
+            "writable": not locked,
+        }))
+        return EXIT["OPLIST"] if locked else EXIT["OK"]
+
+    if not locked:
+        _emit(f"check-lock: {len(files)} KiCad file(s) under {root} — none open "
+              "in the GUI (safe to write)")
+        return EXIT["OK"]
+    _emit(f"check-lock: {len(locked)} of {len(files)} file(s) appear OPEN in the "
+          "KiCad GUI — external writes are unsafe (a GUI save would overwrite them):")
+    for f in locked:
+        _emit(f"  LOCKED  {f}  ({kwriter.gui_lock_path(f).name})")
+    _emit("close them in KiCad first, or File>Revert after writing")
+    return EXIT["OPLIST"]
+
+
 def register(sub, common) -> None:
     p = sub.add_parser(
         "library", parents=[common],
@@ -258,3 +303,11 @@ def register(sub, common) -> None:
     pi.add_argument("--apply", action="store_true",
                     help="write the files (default: dry-run plan)")
     pi.set_defaults(handler=_cmd_library_import_altium)
+
+    pl = lib_sub.add_parser(
+        "check-lock", parents=[common],
+        help="report which KiCad files are open in the GUI (~<name>.lck); "
+             "exit 6 if any are locked, so external flows can gate")
+    pl.add_argument("project", nargs="?", default=".",
+                    help="project directory or file (default: .)")
+    pl.set_defaults(handler=_cmd_library_check_lock)

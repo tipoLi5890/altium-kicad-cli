@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tipoLi5890/akcli/schemas/proposals.schema.json",
+  "title": "akcli review proposals",
+  "description": "Declarative candidate changes derived from review findings. A proposal NEVER touches a design file: an op-list draft must be run through `akcli plan` / `draw --apply` (inheriting every safety rail), a contract draft is pasted into contract.toml, a sim draft into sim.json. The structural guarantee: a proposal with open requires_confirmation items carries NO op-list draft — a fix depending on unobserved conditions cannot be auto-applied.",
+  "type": "object",
+  "required": ["proposals_version", "source", "proposals"],
+  "properties": {
+    "proposals_version": { "const": "1.0" },
+    "source": {
+      "type": "object",
+      "required": ["findings"],
+      "properties": {
+        "findings": { "type": "string" },
+        "count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "proposals": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/proposal" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "proposal": {
+      "type": "object",
+      "required": ["id", "finding_fingerprint", "finding_code", "kind",
+                   "summary", "requires_confirmation", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^P[0-9]+$" },
+        "finding_fingerprint": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "finding_code": { "type": "string" },
+        "kind": { "enum": ["set_value", "contract", "sim_assertion",
+                           "confirm", "layout"] },
+        "summary": { "type": "string" },
+        "rationale": { "type": "string" },
+        "requires_confirmation": {
+          "type": "array", "items": { "type": "string" }
+        },
+        "oplist_draft": { "type": ["object", "null"] },
+        "contract_draft": { "type": ["string", "null"] },
+        "sim_draft": { "type": ["object", "null"] },
+        "status": { "enum": ["proposed"] }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "description": "unconfirmed conditions forbid an auto-applicable draft",
+          "if": {
+            "properties": {
+              "requires_confirmation": { "minItems": 1 }
+            }
+          },
+          "then": {
+            "properties": { "oplist_draft": { "const": null } }
+          }
+        }
+      ]
+    }
+  }
+}

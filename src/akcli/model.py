@@ -20,7 +20,7 @@ from dataclasses import dataclass, field, fields, is_dataclass
 # 1.1: Pcb gains tracks/vias/arcs/pads (optional adds)
 # 1.2: Pcb gains board/zones/metadata; Library gains metadata/footprints
 #      (FootprintDef/FootprintPad); all optional adds.
-SCHEMA_VERSION = "1.2"
+SCHEMA_VERSION = "1.3"
 
 # (designator, pin_number)
 PinRef = tuple[str, str]

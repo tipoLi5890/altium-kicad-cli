@@ -61,15 +61,35 @@ def _clean(s: str | None) -> str | None:
     return s or None
 
 
-# Parameter names that carry a concrete part number (vendor-library exports).
+# Parameter names that carry a concrete part number (vendor-library exports
+# plus common distributor field conventions).
 _PART_ID_PARAMS: tuple[str, ...] = (
     "Manufacturer Part",
     "MPN",
+    "Mpn",
+    "mpn",
     "LCSC Part Name",
     "LCSC Part",
+    "LCSC",
+    "JLCPCB Part",
+    "JLCPCB#",
     "Supplier Part",
     "Part Number",
+    "PartNumber",
+    "Manufacturer_Part_Number",
+    "DigiKey_PN",
+    "Digi-Key_PN",
+    "DK_PN",
+    "Mouser_PN",
+    "MouserPN",
+    "Farnell",
+    "element14",
 )
+
+# Below this MPN coverage a board is not sourceable as-is. Small sheets are
+# exempt — a 3-part test jig is not a BOM.
+_MPN_COVERAGE_FLOOR = 0.5
+_MPN_COVERAGE_MIN_PARTS = 10
 
 
 def _part_identity(comp: Component) -> str | None:
@@ -243,6 +263,35 @@ def run(sch: Schematic) -> list[Finding]:
                     refs=[desig],
                     pos=pos,
                     anchors=[anchor("component", desig, pos)],
+                )
+            )
+
+    # --- MPN sourcing coverage ---------------------------------------------------
+    # Coverage over LOGICAL components (multi-unit parts count once); a part
+    # counts as covered when any placement carries a part-number identity.
+    if len(groups) >= _MPN_COVERAGE_MIN_PARTS:
+        covered = sum(
+            1 for members in groups.values()
+            if any(_part_identity(c) for c in members)
+        )
+        cov = covered / len(groups)
+        if cov < _MPN_COVERAGE_FLOOR:
+            findings.append(
+                Finding(
+                    code="BOM_MPN_COVERAGE",
+                    severity=Severity.WARNING,
+                    message=(
+                        f"only {covered}/{len(groups)} components "
+                        f"({cov:.0%}) carry a part-number identity "
+                        f"(MPN/distributor field) -- below the "
+                        f"{_MPN_COVERAGE_FLOOR:.0%} sourcing floor, this BOM "
+                        "cannot be ordered as-is; `akcli jlc bom --fix` can "
+                        "fill LCSC parts"
+                    ),
+                    refs=[],
+                    detector="check.bom",
+                    confidence="deterministic",
+                    evidence={"source": "bom"},
                 )
             )
 

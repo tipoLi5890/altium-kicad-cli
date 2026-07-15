@@ -41,16 +41,63 @@ def _backup_depth(cfg) -> int:
     return depth
 
 
+def _load_groups_file(path: str) -> dict[str, list[str]]:
+    """Parse a ``--groups`` map: ``{group_name: [refdes, ...]}`` (TOML or JSON).
+
+    TOML uses a top-level ``[groups]`` table (or bare ``name = [...]`` tables);
+    JSON is either ``{"groups": {...}}`` or the bare mapping. Order is preserved
+    (groups stack down the page in file order). Malformed input is a USAGE error.
+    """
+    import json
+    from pathlib import Path as _Path
+
+    p = _Path(path)
+    try:
+        raw = p.read_bytes()
+    except FileNotFoundError:
+        raise _ExitWith(EXIT["NOT_FOUND"], f"ERROR: groups file not found: {path}")
+    text = raw.decode("utf-8", errors="replace")
+    data: object
+    if p.suffix.lower() == ".json":
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as e:
+            raise _ExitWith(EXIT["USAGE"], f"ERROR: invalid groups JSON: {e}")
+    else:
+        import tomllib
+        try:
+            data = tomllib.loads(text)
+        except tomllib.TOMLDecodeError as e:
+            raise _ExitWith(EXIT["USAGE"], f"ERROR: invalid groups TOML: {e}")
+    if isinstance(data, dict) and isinstance(data.get("groups"), dict):
+        data = data["groups"]
+    if not isinstance(data, dict) or not data:
+        raise _ExitWith(EXIT["USAGE"],
+                        "ERROR: groups file must map group-name -> [refdes, ...]")
+    out: dict[str, list[str]] = {}
+    for gname, refs in data.items():
+        if (not isinstance(refs, list)
+                or not all(isinstance(r, str) and r for r in refs)):
+            raise _ExitWith(EXIT["USAGE"],
+                            f"ERROR: group {gname!r} must be a list of designators")
+        out[str(gname)] = list(refs)
+    return out
+
+
 def _cmd_arrange(args: argparse.Namespace) -> int:
     """`arrange <sch>` — nudge FREE components until nothing overlaps.
 
     Dry-run by default (prints the planned moves); --apply executes them
     through the standard draw pipeline (.bak + connectivity re-verify), so
-    `akcli undo` reverts an arrange like any other write.
+    `akcli undo` reverts an arrange like any other write. With ``--groups`` it
+    instead relocates each functional block into its own shelf-packed region
+    (rigid, net-preserving moves that carry each part's labels/wires).
     """
     target = _require_path(args.path)
     if not str(target).lower().endswith(".kicad_sch"):
         raise _ExitWith(EXIT["USAGE"], "ERROR: arrange works on .kicad_sch")
+    if getattr(args, "groups", None):
+        return _cmd_arrange_groups(args, target)
     from .. import arrange as arrmod
     result = arrmod.plan(target,
                          grid=getattr(args, "grid", None) or arrmod.GRID_MIL,
@@ -105,6 +152,72 @@ def _cmd_arrange(args: argparse.Namespace) -> int:
               + (f" — {len(stuck)} overlap(s) left for manual fixing"
                  if stuck else ""))
         return EXIT["FINDINGS"] if stuck else EXIT["OK"]
+    return code
+
+
+def _cmd_arrange_groups(args: argparse.Namespace, target) -> int:
+    """`arrange --groups <file>` — relocate functional blocks into tidy regions.
+
+    Each group's parts (plus the power symbols riding on them) move as rigid
+    bundles, shelf-packed inside the group with a wide channel between groups.
+    Every move carries its labels/wires, so with label-on-pin connectivity the
+    re-layout is net-preserving; the standard draw pipeline still re-verifies
+    connectivity and REFUSES to write on any net change (with .bak + undo).
+    """
+    from .. import arrange as arrmod
+    groups = _load_groups_file(args.groups)
+    result = arrmod.plan_groups(
+        target, groups,
+        margin=getattr(args, "margin", None) or arrmod.GROUP_MARGIN_MIL,
+        group_gap=getattr(args, "group_gap", None) or arrmod.GROUP_GAP_MIL,
+        row_width=getattr(args, "row_width", None) or arrmod.ROW_WIDTH_MIL)
+    moves, unplaced = result["moves"], result["unplaced"]
+    do_apply = bool(getattr(args, "apply", False))
+    base = {
+        "symbols": result["symbols"], "clean": result["clean"],
+        "groups": result["groups"], "unplaced": unplaced,
+        "moves": [{"designator": m.ref, "from": list(m.frm), "to": list(m.to)}
+                  for m in moves],
+    }
+    if not args.json:
+        for g in result["groups"]:
+            _emit(f"  group {g['group']}: {g['anchors']} part(s)")
+        _emit(f"arrange --groups: {len(moves)} move(s) across "
+              f"{len(result['groups'])} group(s)")
+        if unplaced:
+            _emit("  not placed (unknown/unattached): " + ", ".join(unplaced))
+    if not moves or not do_apply:
+        if args.json:
+            _emit(_dumps({**base, "applied": False}))
+        elif moves:
+            _emit(f"dry-run: {len(moves)} move(s) planned — re-run with --apply")
+        return EXIT["FINDINGS"] if unplaced else EXIT["OK"]
+    from ..writers import kicad as kwriter
+    oplist = {"protocol_version": 1, "target_format": "kicad",
+              "target_file": target.name,
+              "ops": [m.to_op(carry=True) for m in moves]}
+    cfg = _load_cfg(args, target)
+    findings: list = []
+    results = kwriter.apply(oplist, str(target), apply=True,
+                            sources=_draw_symbol_sources(args, cfg),
+                            verify_out=findings, backup_dir=target.parent,
+                            backup_depth=_backup_depth(cfg),
+                            allow_open=bool(getattr(args, "allow_open", False)))
+    code = _draw_exit(results, findings)
+    if args.json:
+        _emit(_dumps({
+            **base, "applied": code == EXIT["OK"],
+            "connectivity": [
+                {"code": f.code, "severity": f.severity.value, "message": f.message}
+                for f in findings],
+        }))
+        return (EXIT["FINDINGS"] if unplaced else EXIT["OK"]) \
+            if code == EXIT["OK"] else code
+    if code == EXIT["OK"]:
+        _emit(f"arrange --groups: applied {len(moves)} move(s) to {target.name}")
+        return EXIT["FINDINGS"] if unplaced else EXIT["OK"]
+    _emit("status: REFUSED — the re-layout would change connectivity "
+          "(nothing written); see the findings above")
     return code
 
 
@@ -633,10 +746,18 @@ def register(sub, common) -> None:
     p.add_argument("path", nargs="?", help="the .kicad_sch to arrange")
     p.add_argument("--apply", action="store_true",
                    help="write the moves (default: preview only)")
+    p.add_argument("--groups", metavar="FILE",
+                   help="relocate functional blocks: a TOML/JSON map of "
+                        "group-name -> [refdes, ...] (net-preserving rigid moves)")
+    p.add_argument("--group-gap", dest="group_gap", type=float, metavar="MIL",
+                   help="vertical channel between groups (default 1200)")
+    p.add_argument("--row-width", dest="row_width", type=float, metavar="MIL",
+                   help="wrap a group's shelf past this width (default 4000)")
     p.add_argument("--grid", type=float, metavar="MIL",
                    help="nudge step in mils (default 100)")
     p.add_argument("--margin", type=float, metavar="MIL",
-                   help="required clearance between symbols (default 50)")
+                   help="clearance between symbols/bundles in mils "
+                        "(default 50; 200 with --groups)")
     p.add_argument("--symbols", metavar="PATH", action="append",
                    help="extra symbol source for the write pipeline")
     p.add_argument("--allow-open", dest="allow_open", action="store_true",

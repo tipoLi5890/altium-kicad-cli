@@ -97,7 +97,7 @@ before any coordinate is trusted. Conversion: `mil = (intval + frac/100000.0) * 
 All dataclasses; `from __future__ import annotations`. `PinRef = tuple[str, str]` = `(designator, pin_number)`.
 
 ```python
-SCHEMA_VERSION = "1.2"          # stamped on every Schematic/Pcb/Library export
+SCHEMA_VERSION = "1.3"          # 1.1 Pcb tracks/vias; 1.2 pad-level nets; 1.3 finding evidence envelope
                                 # 1.0 -> 1.1: Pcb gained tracks/vias/arcs/pads (binary .PcbDoc copper)
 
 class PinType(enum.Enum):       # canonical, format-agnostic

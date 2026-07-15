@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import enum
 import fnmatch
+import hashlib
 import json
 from dataclasses import dataclass, field, replace
 
@@ -33,6 +34,17 @@ _SEV_RANK: dict[Severity, int] = {
 }
 
 
+# Review evidence-envelope vocabularies (schemas/findings.schema.json
+# mirrors these).
+CONFIDENCE_LEVELS: tuple[str, ...] = (
+    "deterministic", "heuristic", "datasheet_backed", "llm_reviewed",
+)
+FINDING_STATUSES: tuple[str, ...] = (
+    "reported", "waived", "accepted_risk", "quarantined",
+    "insufficient_evidence",
+)
+
+
 @dataclass
 class Finding:
     """A single check result.
@@ -43,6 +55,24 @@ class Finding:
     entities involved (kind ∈ ``component|pin|net|label``); build them with
     :func:`anchor`. Both feed the JSON/SARIF exports and the web UI's markers;
     findings without positions render exactly as before.
+
+    The remaining fields are the OPTIONAL review evidence envelope (all default
+    to unset and are serialized only when present, so pre-review findings keep
+    their historical JSON shape byte-for-byte):
+
+    * ``detector`` — the detector module that produced the finding.
+    * ``confidence`` — one of :data:`CONFIDENCE_LEVELS`.
+    * ``evidence`` — dict carrying the *why*: ``source`` (datasheet / topology /
+      heuristic_rule / symbol_footprint / bom / geometry / api_lookup / calc),
+      a ``calc`` envelope, ``datasheet`` ``{sha256, page, quote?}`` and
+      ``assumptions``.
+    * ``rule_version`` — bumped (major) only when the rule's SEMANTICS change.
+    * ``fingerprint`` — stable identity over (code, rule_version-major, anchors);
+      deliberately message-free so rewording never churns CI alerts. Compute
+      with :func:`compute_fingerprint`.
+    * ``remediation`` — suggested fix, human-readable.
+    * ``fix_params`` — structured fix metadata for ``review propose``.
+    * ``status`` — one of :data:`FINDING_STATUSES`.
     """
 
     code: str
@@ -51,6 +81,28 @@ class Finding:
     refs: list = field(default_factory=list)
     pos: tuple | None = None
     anchors: list = field(default_factory=list)
+    detector: str | None = None
+    confidence: str | None = None
+    evidence: dict | None = None
+    rule_version: str | None = None
+    fingerprint: str | None = None
+    remediation: str | None = None
+    fix_params: dict | None = None
+    status: str | None = None
+
+
+def compute_fingerprint(code: str, rule_version: str | None,
+                        anchors: list) -> str:
+    """Stable finding identity: sha256(code | rule-major | sorted anchors)[:32].
+
+    Message text is deliberately EXCLUDED — rewording a finding must never
+    churn alert identity, so identity rests on the rule code, its semantic
+    (major) version, and the anchored entities alone.
+    """
+    major = str(rule_version or "1").split(".", 1)[0]
+    ids = sorted(f"{a.get('kind', '')}:{a.get('id', '')}" for a in anchors or [])
+    basis = "|".join([code, major, *ids])
+    return hashlib.sha256(basis.encode("utf-8")).hexdigest()[:32]
 
 
 def anchor(kind: str, id: object, pos: tuple | None = None) -> dict:
@@ -172,8 +224,8 @@ def _render_json(findings: list[Finding], meta: dict) -> str:
 
 
 def _finding_json(f: Finding) -> dict:
-    # pos/anchors keys are emitted only when present so findings without a
-    # position keep their historical shape (json turns tuples into arrays).
+    # Optional keys are emitted only when present so findings without them
+    # keep their historical shape (json turns tuples into arrays).
     d: dict = {
         "code": f.code,
         "severity": f.severity.value,
@@ -184,7 +236,41 @@ def _finding_json(f: Finding) -> dict:
         d["pos"] = list(f.pos)
     if f.anchors:
         d["anchors"] = list(f.anchors)
+    for key in ("detector", "confidence", "rule_version", "fingerprint",
+                "remediation", "status"):
+        v = getattr(f, key)
+        if v is not None:
+            d[key] = v
+    if f.evidence:
+        d["evidence"] = dict(f.evidence)
+    if f.fix_params:
+        d["fix_params"] = dict(f.fix_params)
     return d
+
+
+def finding_from_json(d: dict) -> Finding:
+    """Rebuild a :class:`Finding` from its :func:`_finding_json` dict.
+
+    Round-trip partner for the findings JSON export (``review report`` re-reads
+    a findings file to re-render it in another format). Unknown keys are
+    ignored (consumers must tolerate additive schema growth).
+    """
+    return Finding(
+        code=str(d.get("code", "")),
+        severity=Severity(d.get("severity", "info")),
+        message=str(d.get("message", "")),
+        refs=list(d.get("refs", [])),
+        pos=tuple(d["pos"]) if d.get("pos") is not None else None,
+        anchors=list(d.get("anchors", [])),
+        detector=d.get("detector"),
+        confidence=d.get("confidence"),
+        evidence=d.get("evidence"),
+        rule_version=d.get("rule_version"),
+        fingerprint=d.get("fingerprint"),
+        remediation=d.get("remediation"),
+        fix_params=d.get("fix_params"),
+        status=d.get("status"),
+    )
 
 
 # SARIF severity levels (GitHub code scanning): error / warning / note.
@@ -222,11 +308,16 @@ def _render_sarif(findings: list[Finding], meta: dict, source: str | None) -> st
         text = f.message
         if f.refs:
             text += " (refs: " + ", ".join(map(str, f.refs)) + ")"
+        # v1 (message-based) stays for alert continuity; v2 is the wording-
+        # immune review fingerprint and wins in consumers that know it.
+        fps = {"akcliFinding/v1": fp}
+        if f.fingerprint:
+            fps["akcliFinding/v2"] = f.fingerprint
         result: dict = {
             "ruleId": f.code,
             "level": _SARIF_LEVEL.get(f.severity, "note"),
             "message": {"text": text},
-            "partialFingerprints": {"akcliFinding/v1": fp},
+            "partialFingerprints": fps,
         }
         if source:
             result["locations"] = [{
@@ -244,12 +335,16 @@ def _render_sarif(findings: list[Finding], meta: dict, source: str | None) -> st
                 {"name": a.get("id", ""), "kind": a.get("kind", "")}
                 for a in f.anchors
             ]
-        if f.pos is not None or f.anchors:
+        if f.pos is not None or f.anchors or f.confidence or f.detector:
             akcli: dict = {}
             if f.pos is not None:
                 akcli["pos"] = list(f.pos)
             if f.anchors:
                 akcli["anchors"] = list(f.anchors)
+            if f.confidence:
+                akcli["confidence"] = f.confidence
+            if f.detector:
+                akcli["detector"] = f.detector
             result["properties"] = {"akcli": akcli}
         results.append(result)
 
@@ -318,14 +413,56 @@ def _render_junit(findings: list[Finding], meta: dict, source: str | None) -> st
     )
 
 
+def _render_markdown(findings: list[Finding], meta: dict,
+                     source: str | None) -> str:
+    """GitHub-flavoured Markdown report: trust summary + one table row each.
+
+    The trust summary counts findings by confidence: deterministic findings
+    carry weight, heuristics are flagged for manual review — a reader should
+    never mistake one for the other.
+    """
+    lines: list[str] = [f"# akcli findings — {source or 'report'}", ""]
+    by_conf: dict[str, int] = {}
+    for f in findings:
+        by_conf[f.confidence or "unspecified"] = (
+            by_conf.get(f.confidence or "unspecified", 0) + 1)
+    lines.append(f"**{len(findings)} finding(s)**"
+                 + (" — " + ", ".join(f"{k}: {v}" for k, v in
+                                      sorted(by_conf.items()))
+                    if findings else ""))
+    lines.append("")
+    if findings:
+        lines.append("| severity | code | confidence | message | refs |")
+        lines.append("|---|---|---|---|---|")
+        ordered = sorted(findings,
+                         key=lambda f: (-_SEV_RANK.get(f.severity, 0), f.code))
+        for f in ordered:
+            msg = f.message.replace("|", "\\|")
+            refs = ", ".join(map(str, f.refs)).replace("|", "\\|")
+            lines.append(f"| {f.severity.value.upper()} | `{f.code}` | "
+                         f"{f.confidence or '-'} | {msg} | {refs} |")
+        remediations = [(f.code, f.remediation) for f in ordered if f.remediation]
+        if remediations:
+            lines += ["", "## Remediation", ""]
+            for code, rem in remediations:
+                lines.append(f"- `{code}` — {rem}")
+    else:
+        lines.append("(none)")
+    lines += ["", "## Metadata", ""]
+    for key, label, _default in _META_FIELDS:
+        lines.append(f"- {label}: {meta[key]}")
+    return "\n".join(lines) + "\n"
+
+
 def render(
     findings: list[Finding],
     fmt: str = "text",
     meta: dict | None = None,
     source: str | None = None,
 ) -> str:
-    """Render findings as ``text``/``json`` (metadata header always present) or
-    ``sarif`` (GitHub code scanning) / ``junit`` (CI test reporters)."""
+    """Render findings as ``text``/``json`` (metadata header always present),
+    ``sarif`` (GitHub code scanning), ``junit`` (CI test reporters) or
+    ``markdown`` (human review summary with a trust rollup)."""
     m = _meta_dict(meta)
     if fmt == "json":
         return _render_json(findings, m)
@@ -333,4 +470,6 @@ def render(
         return _render_sarif(findings, m, source)
     if fmt == "junit":
         return _render_junit(findings, m, source)
+    if fmt == "markdown":
+        return _render_markdown(findings, m, source)
     return _render_text(findings, m)

@@ -211,12 +211,12 @@ Altium 實例）。
 exit code 而非 akcli 的——若要據此判斷請加 `set -o pipefail`。
 
 - **Claude Code** — 安裝隨附的外掛（見下方），即可取得 `/akcli:circuit-review`、
-  `circuit-pinmap`、`circuit-draw`、`circuit-diff` 指令與九個 skills：`akcli-circuit-design`（讀取／分析／
+  `circuit-pinmap`、`circuit-draw`、`circuit-diff` 指令與十二個 skills：`akcli-circuit-design`（讀取／分析／
   繪製基礎）、`akcli-circuit-debug`（連線與工具除錯）、`akcli-schematic-review`（依嚴重度分級的設計審查）、
   `akcli-schematic-authoring`（用 op-list 從零設計電路）、`akcli-altium-interop`（與 Altium Designer 互通）、
   `akcli-parts-sourcing`（JLC／LCSC 零件選型）、`akcli-jlcpcb-capabilities`（JLCPCB 製程能力參考）、
-  `akcli-design-calc`（`akcli calc` 的 60 個附標準引用的工程計算器）。
-- **Codex** — 安裝隨附的外掛（見下方）：內含全部九個 skills 與 session hook；或把 skills 資料夾放進
+  `akcli-design-calc`（`akcli calc` 的 60 個附標準引用的工程計算器）、`akcli-setup`（環境探測與修復）、`akcli-datasheet-facts`（資料表事實擷取）、`akcli-deep-review`（LLM 候選經 review validate 把關）、`akcli-release-gating`（preflight 與校準過的放行政策）。
+- **Codex** — 安裝隨附的外掛（見下方）：內含全部十二個 skills 與 session hook；或把 skills 資料夾放進
   `.agents/skills/` 讓其自動探索。見 [docs/codex-plugin.md](../docs/codex-plugin.md)。
 - **OpenCode** — 會自動探索隨附的 skills；把它們放進各自的 skills 目錄，
   並讓代理透過 shell 呼叫 `akcli`。指令與一鍵設定 prompt 見 [INSTALL.md](../INSTALL.md#use-with-ai-coding-agents)。

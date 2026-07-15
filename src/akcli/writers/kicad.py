@@ -1339,16 +1339,86 @@ def _op_rename_net(doc, op, idx, src_libs, path, ctx) -> list[str]:
     raise _Note(f"renamed {count} object(s) from {frm!r} to {to!r}")
 
 
+def _instance_pin_points_nm(doc, ctx, sym) -> set[tuple[int, int]]:
+    """World-coordinate (nm) pin tips of ONE placed instance, or ``set()``.
+
+    Resolved from the document's ``(lib_symbols)`` cache. An unresolved lib_id
+    yields the empty set rather than raising — a plain move must not fail just
+    because a carry could not be computed; the connectivity gate then flags any
+    anchor the move stranded, keeping the edit loud instead of silent.
+    """
+    lib_id = _inst_lib_id(sym)
+    try:
+        symdef = _ctx_symdef(doc, ctx, lib_id)
+    except AkcliError:
+        return set()
+    comp = _instance_component(sym, lib_id)
+    return {geometry.pin_world(symdef, comp, pin)
+            for pin in kicad_lib.unit_pins(symdef, _symbol_unit(sym))}
+
+
+def _translate_at(node: SNode, dx: int, dy: int) -> None:
+    """Shift a node's ``(at x y [angle])`` by ``(dx, dy)`` nm, keeping the angle."""
+    at = node.find("at")
+    if at is None:
+        return
+    px, py = _at_nm(at)
+    kids = node.children or []
+    kids[kids.index(at)] = _at((px + dx, py + dy), _fnum_at(at, 3))
+
+
+def _translate_wire_pins(wire: SNode, pins: set[tuple[int, int]],
+                         dx: int, dy: int) -> bool:
+    """Shift only the ``(xy)`` endpoints of ``wire`` that sit on a carried pin.
+
+    An endpoint on a moved pin follows it (stays electrically glued); an
+    endpoint on a stationary pin of another component is left in place, so the
+    segment stretches to keep BOTH nets connected. Returns whether any endpoint
+    moved.
+    """
+    pts = wire.find("pts")
+    if pts is None:
+        return False
+    moved = False
+    for xy in pts.find_all("xy"):
+        kids = xy.children or []
+        if len(kids) < 3:
+            continue
+        try:
+            p = (units.mm_to_nm(float(kids[1].value)),
+                 units.mm_to_nm(float(kids[2].value)))
+        except (TypeError, ValueError):
+            continue
+        if p in pins:
+            kids[1] = _mm(p[0] + dx)
+            kids[2] = _mm(p[1] + dy)
+            moved = True
+    return moved
+
+
+_CARRY_LABEL_TAGS = ("label", "global_label", "hierarchical_label")
+
+
 def _op_move_component(doc, op, idx, src_libs, path, ctx) -> list[str]:
     """Move ONE placed instance (designator + optional unit) to x/y.
 
     Properties travel with the body (their ``(at)`` is absolute, so the same
-    delta is applied). Wires do NOT stretch — the connectivity gate flags any
-    endpoint the move disconnected, keeping the edit loud instead of silently
-    leaving wires behind.
+    delta is applied). By default wires do NOT stretch — the connectivity gate
+    flags any endpoint the move disconnected, keeping the edit loud instead of
+    silently leaving wires behind.
+
+    ``carry_labels`` / ``carry_wires`` promote the move to a rigid-body
+    relocation: any net label (``carry_labels``) or wire endpoint
+    (``carry_wires``) anchored on one of this instance's pin tips is shifted by
+    the SAME delta. With the label-on-pin connectivity pattern (no cross-part
+    wires) ``carry_labels`` makes the move provably net-preserving — every pin
+    keeps the label that names its net. This is the atomic operation a group
+    re-layout is built from (``akcli arrange --groups``).
     """
     ref = op["designator"]
     unit = int(op.get("unit", 1))
+    carry_labels = bool(op.get("carry_labels", False))
+    carry_wires = bool(op.get("carry_wires", False))
     sym = next((s for s in _symbols_by_ref(doc, ref) if _symbol_unit(s) == unit), None)
     if sym is None:
         fail("VERIFY_FAILED", f"move_component: no placed instance of {ref!r} unit {unit}")
@@ -1359,6 +1429,12 @@ def _op_move_component(doc, op, idx, src_libs, path, ctx) -> list[str]:
     at = sym.find("at")
     old = _at_nm(at) if at is not None else (0, 0)
     rot = _fnum_at(at, 3)
+
+    # Pin tips must be sampled BEFORE the body moves — a carried anchor is one
+    # sitting on a pre-move pin coordinate.
+    pins = (_instance_pin_points_nm(doc, ctx, sym)
+            if (carry_labels or carry_wires) else set())
+
     kids = sym.children or []
     kids[kids.index(at)] = _at(new, rot)
     dx, dy = new[0] - old[0], new[1] - old[1]
@@ -1369,6 +1445,25 @@ def _op_move_component(doc, op, idx, src_libs, path, ctx) -> list[str]:
         px, py = _at_nm(pat)
         pkids = prop.children or []
         pkids[pkids.index(pat)] = _at((px + dx, py + dy), _fnum_at(pat, 3))
+
+    carried_labels = carried_wires = 0
+    if pins and (dx or dy):
+        for c in doc.children or []:
+            if not c.is_list or not (c.children or []):
+                continue
+            head = c.children[0].value
+            if carry_labels and head in _CARRY_LABEL_TAGS:
+                a = c.find("at")
+                if a is not None and _at_nm(a) in pins:
+                    _translate_at(c, dx, dy)
+                    carried_labels += 1
+            elif carry_wires and head in ("wire", "bus"):
+                if _translate_wire_pins(c, pins, dx, dy):
+                    carried_wires += 1
+    if carry_labels or carry_wires:
+        raise _Note(
+            f"moved {ref!r}; carried {carried_labels} label(s), "
+            f"{carried_wires} wire(s)")
     return []
 
 

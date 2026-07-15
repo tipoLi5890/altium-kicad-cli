@@ -7,6 +7,8 @@ description: >-
   or BOM check results; spot-checking a netlist against datasheet pin functions;
   cross-checking an MCU pinmap against an expected pin table (CSV/JSON/DTS-derived);
   reviewing what changed between two schematic revisions and whether anything regressed;
+  running the `akcli review` engine (signal/validation/PCB/EMC/gerber detectors) and
+  interpreting its confidence-graded findings, trust summary, and EMC risk score;
   or writing a hardware review report with Blocker/Major/Minor/Info/Question findings.
   Triggers on keywords: design review, schematic review, circuit review, 審查, hardware
   review, ERC audit, power tree, decoupling, pull-up, strap pin, boot pin, floating input,
@@ -32,10 +34,19 @@ A review is **strictly read-only**. Never modify the schematic under review, and
 - **"0 findings" is not "clean".** Read the metadata header `check` prints (passive-pin
   ratio, No-ERC suppressed count, unnamed-net count, frac coords) before concluding anything.
 - **The schematic is authoritative; expected tables and datasheet notes are advisory.**
-- Run `check`/`diff`/`pinmap` with `--fail-on never` (or the deprecated
-  `--exit-zero` alias) in review mode: exit `1` means "findings exist", not "tool
-  failed", and report mode keeps scripted pipelines flowing. Tune the gate for CI
-  with `--fail-on {info,note,warning,error,never}`, never by hiding findings.
+- **Confidence is part of the finding.** `review` findings carry an explicit
+  confidence: `deterministic` (recomputable geometry/math — trust it),
+  `datasheet_backed` (carries the PDF sha256+page — trust it, cite the page),
+  `heuristic` (name/prefix inference — YOU adjudicate before reporting above
+  Minor), `llm_reviewed` (an accepted observation — never more than that).
+  A `status: insufficient_evidence` finding is an open TODO (usually "add a
+  facts file" — see akcli-datasheet-facts), never a pass.
+- Run `check`/`diff`/`pinmap` in report mode so exit `1` means "findings exist",
+  not "tool failed": `check` takes `--fail-on {info,note,warning,error,never}`
+  (`--exit-zero` is its deprecated alias for `--fail-on never`); `diff`/`pinmap`/
+  `verify` take only `--exit-zero` (always exit 0). `review analyze` takes
+  `--fail-on {warning,error,critical}` (advisory: exit 0 without it). Tune the CI
+  gate with `check`/`review --fail-on`, never by hiding findings.
 - **Waiver discipline — never waive without a reason.** The checker-agnostic
   `[[waiver]]` config table drops (`severity = "off"`) or demotes
   (`note`/`info`) a finding by `code`/`refs`, but a review may only rely on a
@@ -60,7 +71,44 @@ entry and rails, the connectors, anything undesignated (`$U<n>` components) or u
 Identify the 3–5 highest-risk parts (MCU, regulators, USB/level shifters, connectors) — they
 get the deep treatment in Steps 3–4.
 
-### Step 2 — Automated checks, then interpret the caveats
+### Step 2 — Run the review engine first (breadth), then the structural checks
+
+```bash
+akcli review analyze board.kicad_sch --profile deep --pcb board.kicad_pcb --gerbers fab/ --out review.findings.json
+akcli review analyze board.SchDoc --profile standard --out review.findings.json
+akcli review report review.findings.json --format markdown
+```
+
+The engine runs the detector families (signal: dividers/RC/crystal/ESD/op-amp;
+validation: I²C pull-ups/voltage domains/enables; pcb: routing/decap/thermal/
+trace ampacity; emc: 8 pre-compliance rules; gerber: fab-package checks;
+domain: USB-C CC) — `--pcb`/`--gerbers` are optional and their families are
+listed in `detectors_skipped` when absent, so the metadata always says what
+was and wasn't reviewed. Interpretation rules:
+
+- Read `trust_summary` first: it counts findings per confidence tier. A
+  report that is all-heuristic needs YOUR adjudication before any of it
+  lands above Minor.
+- `akcli review explain REVIEW_XTAL_LOAD` prints any rule's spec, formula and
+  literature reference — cite it in the report instead of re-deriving.
+- The `emc` metadata block (deep profile + `--pcb`) is a severity-weighted
+  advisory `risk_score` with `probe_points`; quote its standing note — it is
+  pre-compliance risk analysis, never a compliance verdict. A quiet board
+  scores 0 *with the block present*: "reviewed and quiet" ≠ "never reviewed".
+- Findings with `fix_params` feed `akcli review propose` — mention available
+  auto-fixes in the report but NEVER apply them during a review (read-only).
+- Heuristic findings you adjudicate as false positives are waived in config
+  with a `reason`, not deleted from the report.
+- Upgrade path: heuristic divider/crystal/domain findings that say "verify
+  against the datasheet" become `datasheet_backed` once a facts file exists —
+  extract with the akcli-datasheet-facts skill and re-run; that is stronger
+  review evidence than hand-checking.
+
+For LLM-side depth the detectors cannot reach (design intent, cross-domain
+semantics), generate candidates and gate them through `akcli review validate`
+— see the akcli-deep-review skill; quarantined candidates are NOT findings.
+
+### Step 2b — Structural checks, then interpret the caveats
 
 ```bash
 akcli check board.SchDoc --erc --power --bom --exit-zero -C akcli.toml
@@ -126,7 +174,13 @@ The schematic always wins; a mismatch is a finding to report, never a schematic 
 ```bash
 akcli diff v1.SchDoc v2.SchDoc --exit-zero
 akcli diff v1.SchDoc v2.SchDoc --exit-zero --json
+akcli review diff v1.findings.json v2.findings.json
 ```
+
+`review diff` aligns the two runs' findings by their wording-immune
+fingerprints: report the `added` list (regressions), celebrate `resolved`,
+and call out `severity_changed` (a heuristic that became `datasheet_backed`
+is evidence hardening, not churn).
 
 Nets are matched by pin **membership**, not display name, so a pure rename shows as a NOTE
 and a membership change as a WARNING with `+`/`-` pin lists. Answer three questions in the
@@ -169,9 +223,11 @@ suspicious dividers/pull-ups/load caps and cite the printed reference.
 - **Connector pinout sanity** — dump each connector (`akcli component board.SchDoc J1`) and
   compare against the mating standard (USB, SWD/JTAG, Qwiic...): power/ground on the right
   positions, no shield-to-signal shorts.
-- **Power-tree consistency** — from `check --power`'s rail list, verify every rail has
-  exactly one source (regulator output or power entry), every consumer sits on the intended
-  rail, and rail names imply voltages consistent with `[[rail]]` config.
+- **Power-tree consistency** — start from `akcli review tree board.kicad_sch` (rails →
+  regulating IC found via its feedback divider → consumers → decoupling count) and verify
+  every rail has exactly one source, every consumer sits on the intended rail, and rail
+  names imply voltages consistent with `[[rail]]` config. Paste the tree into the report's
+  power section.
 - **Interface cross-check** — I2C: SDA/SCL each one net end-to-end with pull-ups to the right
   rail. UART: A's TX lands on B's RX (`akcli net board.SchDoc UART_TX` then `component` both
   ends) — a TX-to-TX net is a Blocker. SPI: MOSI/MISO orientation per datasheet naming, one

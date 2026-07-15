@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tipoLi5890/akcli/schemas/datasheet-facts.schema.json",
+  "title": "akcli datasheet facts",
+  "description": "One audited facts file per MPN (datasheets/extracted/<MPN>.json). Every fact is pinned to the source PDF by sha256 + page so a datasheet_backed finding can always be traced back to the exact document that justified it; a fact without a page cannot exist. extraction_method records HOW the numbers got here (manual entry is a first-class method); quality is the reviewer's own grading, never inferred.",
+  "type": "object",
+  "required": ["facts_version", "mpn", "source", "facts"],
+  "properties": {
+    "facts_version": { "const": "1.0" },
+    "mpn": { "type": "string", "minLength": 1 },
+    "variant": { "type": ["string", "null"] },
+    "package": { "type": ["string", "null"] },
+    "source": {
+      "type": "object",
+      "required": ["sha256", "extraction_method"],
+      "properties": {
+        "pdf": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "extraction_method": { "enum": ["manual", "pdftotext", "llm"] },
+        "quality": { "enum": ["unverified", "verified"] }
+      },
+      "additionalProperties": false
+    },
+    "facts": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+      "additionalProperties": { "$ref": "#/$defs/fact" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "fact": {
+      "type": "object",
+      "required": ["unit", "page"],
+      "properties": {
+        "value": { "type": "number" },
+        "min": { "type": "number" },
+        "typ": { "type": "number" },
+        "max": { "type": "number" },
+        "unit": { "type": "string" },
+        "page": { "type": "integer", "minimum": 1 },
+        "quote": { "type": "string" },
+        "conditions": { "type": "string" }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        { "required": ["value"] },
+        { "required": ["min"] },
+        { "required": ["typ"] },
+        { "required": ["max"] }
+      ]
+    }
+  }
+}

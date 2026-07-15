@@ -192,7 +192,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
----
 
 If you believe any attribution here is incomplete or incorrect, please open a GitHub issue so it can
 be corrected.

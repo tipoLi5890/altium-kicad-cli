@@ -89,7 +89,7 @@ def test_build_info_mpn_falls_back_to_pkg_head():
 
 
 # ----------------------------------------------------------- resolve --------
-def test_resolve_happy_path_and_canonical_cnum():
+def test_resolve_success_path_and_canonical_cnum():
     row = ds.resolve("c2984661", lookup=lambda c: _info(lcsc=c))
     assert row.status == "resolved" and row.url == PDF_URL
     assert row.lcsc == "C2984661"                # canonicalized

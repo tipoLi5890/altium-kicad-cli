@@ -61,7 +61,7 @@ pip install git+https://github.com/tipoLi5890/akcli
 ## Use with AI coding agents
 
 `akcli` is a plain CLI, so any agent that can run shell commands drives it once it's on PATH (install it
-with one of the options above). The repo also ships **nine skills** under `skills/` that teach the agent
+with one of the options above). The repo also ships **twelve skills** under `skills/` that teach the agent
 how to drive `akcli`: `akcli-circuit-design` (read/analyze/draw basics), `akcli-circuit-debug` (connectivity & tool
 triage), `akcli-schematic-review` (severity-ranked design review), `akcli-schematic-authoring` (new circuits from an
 op-list), `akcli-altium-interop` (working with Altium Designer), `akcli-parts-sourcing` (JLC/LCSC parts),
@@ -72,20 +72,20 @@ config. Run the `cp` commands below from a clone of this repo.
 
 ### Claude Code
 
-Install the plugin — it bundles all nine skills and the slash commands:
+Install the plugin — it bundles all twelve skills and the slash commands:
 
 ```text
 /plugin marketplace add tipoLi5890/akcli
 /plugin install akcli@akcli
 ```
 
-You get the nine skills and `/akcli:circuit-review`, `circuit-pinmap`,
+You get the twelve skills and `/akcli:circuit-review`, `circuit-pinmap`,
 `circuit-draw`, and `circuit-diff`, all calling `akcli`.
 
 ### Codex
 
 `akcli` runs through Codex's built-in shell once it's on PATH. Install it as a **Codex plugin** —
-it bundles all nine skills and the session hook (see [docs/codex-plugin.md](docs/codex-plugin.md)):
+it bundles all twelve skills and the session hook (see [docs/codex-plugin.md](docs/codex-plugin.md)):
 
 ```bash
 codex plugin marketplace add tipoLi5890/akcli   # or `add ./` from a clone

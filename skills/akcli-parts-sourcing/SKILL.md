@@ -34,6 +34,10 @@ sourcing loop.
   has hard minimums (0402/0201, BGA pitch, pin pitch) — see the akcli-jlcpcb-capabilities skill.
 - **The schematic is authoritative.** Record every sourcing decision on the schematic
   (an `LCSC` parameter per designator), never only in a side document.
+- **A downloaded datasheet can become audited facts** — after `jlc datasheet`
+  fetches the PDF, the akcli-datasheet-facts skill extracts its numbers into
+  `datasheets/extracted/` (sha256+page pinned) so `akcli review analyze`
+  upgrades findings to datasheet_backed. Source → PDF → facts is one chain.
 - **Read the datasheet before committing a part** — electrical characteristics, absolute
   maximum ratings and the typical application circuit come from the PDF, not from memory
   (step 4 below).

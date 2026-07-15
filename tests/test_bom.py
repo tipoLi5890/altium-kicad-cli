@@ -292,3 +292,45 @@ def test_power_symbols_are_not_bom_items():
         _comp("R1"),
     ])
     assert bom.run(sch) == []
+
+
+# ---------------------------------------------------------------------------
+# MPN sourcing coverage
+# ---------------------------------------------------------------------------
+def _comps_with_mpn(n_total: int, n_with_mpn: int) -> list[Component]:
+    comps = []
+    for i in range(n_total):
+        c = _comp(f"R{i + 1}")
+        if i < n_with_mpn:
+            c.parameters = {"MPN": f"RC0402-{i}"}
+        comps.append(c)
+    return comps
+
+
+def test_mpn_coverage_below_floor_warns():
+    findings = bom.run(_sch(_comps_with_mpn(12, 2)))
+    hits = [f for f in findings if f.code == "BOM_MPN_COVERAGE"]
+    assert len(hits) == 1
+    f = hits[0]
+    assert f.severity is Severity.WARNING and "2/12" in f.message
+    assert f.evidence == {"source": "bom"}
+
+
+def test_mpn_coverage_above_floor_is_silent():
+    findings = bom.run(_sch(_comps_with_mpn(12, 7)))
+    assert not [f for f in findings if f.code == "BOM_MPN_COVERAGE"]
+
+
+def test_mpn_coverage_small_sheet_exempt():
+    findings = bom.run(_sch(_comps_with_mpn(5, 0)))
+    assert not [f for f in findings if f.code == "BOM_MPN_COVERAGE"]
+
+
+def test_mpn_distributor_field_conventions_count():
+    comps = _comps_with_mpn(12, 0)
+    for i, key in enumerate(("DigiKey_PN", "Mouser_PN", "LCSC",
+                             "JLCPCB Part", "Manufacturer_Part_Number",
+                             "DK_PN", "MPN")):
+        comps[i].parameters = {key: f"X-{i}"}
+    findings = bom.run(_sch(comps))
+    assert not [f for f in findings if f.code == "BOM_MPN_COVERAGE"]  # 7/12

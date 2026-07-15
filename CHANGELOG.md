@@ -32,7 +32,156 @@ When in doubt, prefer additive, backwards-compatible changes and leave the versi
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.8.0] - 2026-07-15
+
 ### Added
+- **`akcli review` — engineering design review (review track M1–M3)**.
+  Detectors run on the normalized model (per-rule specification and
+  literature citations in `docs/review-rules.md`), so every rule reviews
+  KiCad `.kicad_sch` **and** Altium `.SchDoc` inputs alike:
+  - `review analyze <sch> [--pcb] [--profile fast|standard|deep]
+    [--detector NAME] [--out FILE] [--fail-on SEV]` — **advisory by
+    default** (exit 0 whatever it finds; `--fail-on` opts a CI job into
+    gating). Config `[[waiver]]` entries apply as they do to `check`.
+  - `review report <findings.json> --format text|json|sarif|junit|markdown`
+    — re-render a findings file; `markdown` is a new render format with a
+    per-confidence trust rollup.
+  - `review explain <CODE>` — the rule's spec: check, formula, confidence,
+    upstream provenance.
+  - Signal family (M2): feedback/plain divider review (implied Vref
+    plausibility, tap-name mismatch, unvalued-resistor
+    insufficient-evidence), RC low-pass corner (via `calc rc`, envelope +
+    citation carried in evidence), crystal load caps (missing / asymmetric /
+    computed CL with stated C_stray assumption), connector ESD/TVS coverage,
+    op-amp gain topology (non-inverting / inverting / unity buffer /
+    open-loop warning).
+  - Validation family (M3): I²C pull-up window via `calc i2c-pullup`
+    (missing / below R_min / above R_max-with-stated-C_b / SDA-SCL
+    mismatch), cross-voltage-domain signals (level-shifter aware), floating
+    enable/shutdown pins.
+  - PCB family (M5, runs with `--pcb`, `standard` profile): copper-geometry
+    engine (per-net union-find over pads/tracks/vias with layer awareness;
+    zones merge by bbox — over-merge only, so unrouted verdicts stay true
+    positives) powering `REVIEW_PCB_UNROUTED`; decoupling-distance review
+    (`REVIEW_DECAP_DISTANCE`, measured mm in evidence); exposed-pad thermal
+    vias (`REVIEW_THERMAL_VIA`); junction-temperature estimate
+    (`REVIEW_THERMAL_JUNCTION` — facts `theta_ja`/`power_dissipation`/
+    `t_j_max` → datasheet_backed, typical-package θ_JA table fallback →
+    heuristic, no recorded dissipation → no estimate); power-rail trace
+    ampacity (`REVIEW_TRACE_WIDTH`, IPC-2221 with the `calc trackwidth`
+    envelope as round-trip oracle). Without `--pcb` the family lands in
+    `detectors_skipped`, never runs vacuously.
+  - Agent surface for the review track: three new plugin skills —
+    `akcli-datasheet-facts` (the agent-side extraction loop: read the PDF,
+    `review facts add --method llm` with page+quote, `verify` as the honesty
+    gate), `akcli-deep-review` (candidate-generation discipline for
+    `review validate`: anchor everything, own namespace, store-backed
+    datasheet claims, honest quarantine reporting), `akcli-release-gating`
+    (preflight manifest doctrine + review-policy calibration governance +
+    gerber staleness gate). Upgraded: `akcli-schematic-review` (engine-first
+    protocol, confidence doctrine, `review tree`/`diff` integration),
+    `akcli-schematic-authoring` (proposal-adoption loop, group re-layout,
+    check-lock), `akcli-setup` (pdftotext capability row),
+    `akcli-parts-sourcing` (datasheet→facts chain), and the
+    `/circuit-review` slash command (review engine first). Skill count
+    9 → 12.
+  - Gerber package review (M9): `readers/gerber.py` — fab-output directory
+    reader (RS-274X with X2 FileFunction role detection + filename fallback,
+    units/format/extents; Excellon tools/holes/extents; ambiguous
+    implied-decimal coordinates yield a warning and no bbox, never a guess).
+    `review analyze --gerbers DIR` + `release preflight --gerbers DIR` run
+    the package checks: minimum fab set, copper count vs the board stackup,
+    bbox registration, mixed units, and **staleness** (outline gerber vs the
+    board file's Edge.Cuts extent — catches ordering an outdated export).
+  - Deep-review gate + blocking policy (M8): `review validate` — four
+    deterministic gates over LLM candidates (schema / anchor existence /
+    datasheet sha256+page+quote / deterministic-rule masquerade), failures
+    quarantined with reasons, accepted candidates stamped `llm_reviewed`
+    observations that can never block. `release preflight --review-policy`
+    — the ONLY path by which review findings gate a release: an explicit
+    `[review] allow = [codes]` allowlist (policy sha256 + list recorded in
+    the manifest); everything unlisted stays advisory. First domain-family
+    detector: USB-C CC termination (`REVIEW_USB_CC_MISSING`/`_VALUE`,
+    Rd = 5.1 kΩ; controller-handled CC nets skipped).
+    `tools/corpus_replay.py` (dev-only): corpus snapshot/drift harness —
+    the calibration step before allowlisting a rule.
+  - Closed loop (M7): `review propose` — findings → declarative candidate
+    changes (`schemas/proposals.schema.json`, wheel-mirrored): value fixes
+    recomputed + E-series-snapped via `calc eseries` into protocol-1 op-list
+    drafts (run through `plan`/`draw --apply`), contract drafts carrying the
+    datasheet sha256+page into `evidence`, sim-assertion drafts; the
+    schema itself enforces "open `requires_confirmation` ⇒ no op-list
+    draft", and PCB fixes are `layout` proposals (akcli writes schematics
+    only). `review diff` — fingerprint-aligned drift between two findings
+    files (added/resolved/changed/persisting, `--fail-on-new`).
+    `review tree` — per-rail power structure (regulator via its feedback
+    divider, consumers, decoupling count).
+  - EMC family (M6, `--pcb` + `deep` profile): eight pre-compliance rules
+    in three batches — ground-pour presence/coverage, ground-via stitching
+    (λ/20 at a stated 1 GHz assumption), board-edge + clock-edge routing
+    (Edge.Cuts bbox; no outline → silent, never a pass), differential-pair
+    intra-pair skew (25 ps budget, short side named in `fix_params`),
+    TVS-to-connector clamp distance, adjacent-signal-layer stackup. The
+    report metadata gains an advisory `emc` block (severity-weighted
+    `risk_score`, `probe_points`, and the standing "risk analysis, not a
+    compliance verdict" note) whenever the family runs — a quiet board
+    scores 0 with the block present.
+  - Datasheet facts store (M4): `review facts add|verify|lookup` — one
+    audited JSON per MPN under `datasheets/extracted/`, every fact pinned to
+    its source PDF by sha256 + page (+ optional verbatim quote);
+    `schemas/datasheet-facts.schema.json` shipped + wheel-mirrored. `verify`
+    audits schema / PDF presence / sha256 staleness / quote presence (via a
+    new optional `pdftotext` driver; absent tool → NOTE, never a silent
+    skip). `review analyze --facts DIR` (auto-discovers
+    `<sch dir>/datasheets`) upgrades detectors to `datasheet_backed`:
+    feedback-divider Vref mismatch (`REVIEW_FB_DIVIDER_VREF_MISMATCH`),
+    crystal CL mismatch with suggested cap value
+    (`REVIEW_XTAL_LOAD_MISMATCH`), and voltage-domain adjudication
+    (`abs_max_io` proves a pin tolerant → INFO, or confirms the violation).
+  - BOM (M3): `BOM_MPN_COVERAGE` in `check --bom` — MPN/distributor-field
+    sourcing coverage below 50 % on a ≥10-part sheet, with the
+    `_PART_ID_PARAMS` table extended to common distributor field
+    conventions (DigiKey/Mouser/LCSC/JLCPCB/Farnell).
+  - Engine guarantees: per-detector containment (`REVIEW_DETECTOR_ERROR`,
+    quarantined), deterministic ordering, every finding stamped with
+    detector + wording-immune fingerprint; metadata always reports
+    detectors run/skipped and a trust summary.
+- **Findings evidence envelope + published schema** (closes the ROADMAP v0.8
+  "findings.schema.json" item). `Finding` gains optional
+  `detector` / `confidence` (deterministic | heuristic | datasheet_backed |
+  llm_reviewed) / `evidence` / `rule_version` / `fingerprint` /
+  `remediation` / `fix_params` / `status` — serialized only when set, so
+  pre-review findings keep their historical JSON shape byte-for-byte.
+  `schemas/findings.schema.json` (mirrored into the wheel) validates every
+  `check`/`review` JSON report and structurally enforces
+  "`datasheet_backed` ⇒ `evidence.datasheet.{sha256,page}`". SARIF gains a
+  wording-immune `akcliFinding/v2` fingerprint alongside v1.
+- **Rigid, net-preserving re-layout** — the atomic operation a functional-block
+  re-layout needs:
+  - `move_component` gains optional `carry_labels` / `carry_wires` (booleans,
+    default false — no `protocol_version` bump). A moved part now takes the net
+    labels (and wire endpoints) anchored on its pins along with it, by the same
+    delta. With the label-on-pin connectivity pattern this makes the move
+    **provably net-preserving** — every pin keeps the label that names its net —
+    instead of silently stranding labels at the old coordinates.
+  - `akcli arrange --groups groups.toml` relocates whole functional blocks into
+    their own shelf-packed regions (wide channel between groups), moving each
+    part plus the power symbols riding on its pins as a rigid bundle via carried
+    `move_component` ops. TOML or JSON `group-name → [refdes, …]`; `--group-gap`
+    / `--row-width` tune spacing. Goes through the standard draw pipeline
+    (`.bak` + connectivity re-verify + `undo`) and **refuses to write on any net
+    change**. Documented in `docs/kicad-format-gotchas.md`.
+- **`akcli library check-lock [project]`** — reports which KiCad files are open
+  in the GUI (`~<name>.lck`) and exits 6 (`TARGET_LOCKED`) if any are locked, so
+  external flows (hand scripts, `sed`) can gate on the same guard akcli's own
+  writes use: `akcli library check-lock . && ./relayout.sh`.
+- **KiCad format gotchas doc** — `docs/kicad-format-gotchas.md` consolidates the
+  rules any layout/edit op must obey: `{…}` name escaping, absolute property
+  `(at)` coordinates, the nested `(type "Table")` global lib-table, the
+  rigid-move ops, the "KiCad open ⇒ external writes unsafe" caveat, and the
+  3D-model path-policy trade-offs.
 - **Altium `.PcbLib` reading** — `akcli read part.PcbLib` decodes footprint
   storages into the new `FootprintDef`/`FootprintPad` library model (pads with
   position/size/drill/shape/rotation, NPTH vs plated, per-type
@@ -104,6 +253,16 @@ When in doubt, prefer additive, backwards-compatible changes and leave the versi
   stderr.
 
 ### Changed
+- `schema_version` 1.2 → **1.3** (additive): findings gain the optional
+  review evidence-envelope fields above; consumers that ignore unknown keys
+  are unaffected.
+- **Package version → `0.8.0`** and `akcli --version` now reports the
+  version of the code actually running. A co-located `pyproject.toml`
+  (`project.name == "akcli"`, i.e. a source checkout) is authoritative over the
+  installed dist metadata, so bumping the working tree always moves
+  `--version` — an in-development build no longer masquerades as the last
+  release (the `0.7.0`/design-integrity overlap). An installed wheel is
+  unaffected (no sibling `pyproject.toml`).
 - `schema_version` 1.1 → **1.2** (additive): `Pcb` gains
   `zones`/`board`/`warnings`/`metadata`, `Library` gains
   `footprints`/`warnings`/`metadata`, new `FootprintDef`/`FootprintPad`.

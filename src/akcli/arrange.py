@@ -46,9 +46,13 @@ class Move:
     frm: tuple[float, float]
     to: tuple[float, float]
 
-    def to_op(self) -> dict:
-        return {"op": "move_component", "designator": self.ref,
-                "x_mil": self.to[0], "y_mil": self.to[1]}
+    def to_op(self, *, carry: bool = False) -> dict:
+        op = {"op": "move_component", "designator": self.ref,
+              "x_mil": self.to[0], "y_mil": self.to[1]}
+        if carry:
+            op["carry_labels"] = True
+            op["carry_wires"] = True
+        return op
 
 
 def _collect(root: sexpr.SNode) -> tuple[list[SymInfo], set[tuple[float, float]]]:
@@ -162,5 +166,136 @@ def plan(path: str | Path, *, grid: float = GRID_MIL,
         "moves": moves,
         "anchored_overlaps": sorted(set(anchored_overlaps)),
         "clean": not moves and not anchored_overlaps,
+        "symbols": len(syms),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# group re-layout (`arrange --groups`)
+# --------------------------------------------------------------------------- #
+# Defaults tuned for a human-refinable starting layout (mils): tight inside a
+# group, a wide channel between groups so functional blocks read apart.
+GROUP_MARGIN_MIL = 200.0      # clearance between bundles inside a group
+GROUP_GAP_MIL = 1200.0        # vertical channel between groups
+ROW_WIDTH_MIL = 4000.0        # wrap a group's shelf past this width
+_UNGROUPED = "(ungrouped)"
+
+
+def _union(boxes: list[_Box]) -> _Box:
+    return _Box(min(b.x0 for b in boxes), min(b.y0 for b in boxes),
+                max(b.x1 for b in boxes), max(b.y1 for b in boxes), "", (0.0, 0.0))
+
+
+def _bundle_host(sat: SymInfo, anchors: list[SymInfo]) -> SymInfo | None:
+    """The anchor a satellite (#PWR/#FLG) rides with: shared pin first, else nearest.
+
+    A power port sits exactly on its host's pin (pin-tip coincidence). A
+    PWR_FLAG often lands on a wire MIDPOINT (no pin), so it falls back to the
+    nearest anchor by box-centre distance — good enough to keep it in the right
+    functional block; the connectivity gate refuses the whole re-layout if that
+    guess ever splits a net, so a wrong guess is loud, never silent.
+    """
+    on_pin = [a for a in anchors if sat.pin_tips & a.pin_tips]
+    if on_pin:
+        return min(on_pin, key=lambda a: a.ref)
+    if not anchors:
+        return None
+    scx = (sat.box.x0 + sat.box.x1) / 2
+    scy = (sat.box.y0 + sat.box.y1) / 2
+    return min(anchors, key=lambda a: (
+        ((a.box.x0 + a.box.x1) / 2 - scx) ** 2
+        + ((a.box.y0 + a.box.y1) / 2 - scy) ** 2))
+
+
+def plan_groups(path: str | Path, groups: dict[str, list[str]], *,
+                margin: float = GROUP_MARGIN_MIL, group_gap: float = GROUP_GAP_MIL,
+                row_width: float = ROW_WIDTH_MIL,
+                origin: tuple[float, float] | None = None) -> dict:
+    """Rigidly relocate each functional group into its own shelf-packed block.
+
+    ``groups`` maps a group name to the component designators it owns (order
+    preserved). A satellite power symbol (``#PWR``/``#FLG``) rides with the
+    anchor it is attached to; a listed-but-absent or unlisted anchor is
+    reported. Each bundle (anchor + its satellites) moves as a RIGID body via
+    ``move_component`` with ``carry_labels``/``carry_wires``, so — with the
+    label-on-pin pattern — the re-layout is net-preserving by construction.
+
+    Never touches the file; returns ``{"moves", "unplaced", "groups", "clean",
+    "symbols"}``. The moves are applied through the standard draw pipeline
+    (``.bak`` + connectivity verify + ``undo``).
+    """
+    root = sexpr.parse(Path(path).read_text(encoding="utf-8", errors="replace"))
+    syms, _anchors_pts = _collect(root)
+    by_ref = {s.ref: s for s in syms}
+
+    anchors = [s for s in syms if not s.ref.startswith("#")]
+    satellites = [s for s in syms if s.ref.startswith("#")]
+
+    # anchor -> group (listed wins; the rest fall into a trailing bucket)
+    group_of: dict[str, str] = {}
+    unplaced: list[str] = []
+    ordered_groups: list[str] = []
+    for gname, refs in groups.items():
+        ordered_groups.append(gname)
+        for ref in refs:
+            if ref not in by_ref:
+                unplaced.append(ref)
+            elif ref.startswith("#"):
+                # satellites follow their host; naming one explicitly is a no-op
+                continue
+            else:
+                group_of[ref] = gname
+    for a in anchors:
+        group_of.setdefault(a.ref, _UNGROUPED)
+    if any(g == _UNGROUPED for g in group_of.values()):
+        ordered_groups.append(_UNGROUPED)
+
+    # satellites ride with an anchor's bundle (same group, same delta)
+    members: dict[str, list[SymInfo]] = {a.ref: [a] for a in anchors}
+    for sat in satellites:
+        host = _bundle_host(sat, anchors)
+        if host is not None:
+            members[host.ref].append(sat)
+        else:
+            unplaced.append(sat.ref)
+
+    # shelf-pack each group's bundles; groups stack down the page with a gap
+    ox = origin[0] if origin else min((s.box.x0 for s in syms), default=0.0)
+    oy = origin[1] if origin else min((s.box.y0 for s in syms), default=0.0)
+    moves: list[Move] = []
+    group_report: list[dict] = []
+    cursor_y = oy
+    for gname in ordered_groups:
+        anchor_refs = [a.ref for a in anchors if group_of.get(a.ref) == gname]
+        if not anchor_refs:
+            continue
+        bundles = [(ref, _union([m.box for m in members[ref]])) for ref in anchor_refs]
+        shelf_x = ox
+        shelf_top = cursor_y
+        shelf_h = 0.0
+        block_bottom = cursor_y
+        for ref, bbox in bundles:
+            bw, bh = bbox.x1 - bbox.x0, bbox.y1 - bbox.y0
+            if shelf_x > ox and (shelf_x + bw) > (ox + row_width):
+                shelf_x = ox                               # wrap to the next shelf
+                shelf_top = block_bottom + margin
+                shelf_h = 0.0
+            dx = shelf_x - bbox.x0
+            dy = shelf_top - bbox.y0
+            for m in members[ref]:
+                to = (m.at[0] + dx, m.at[1] + dy)
+                if (round(to[0]), round(to[1])) != (round(m.at[0]), round(m.at[1])):
+                    moves.append(Move(ref=m.ref, frm=m.at, to=to))
+            shelf_x += bw + margin
+            shelf_h = max(shelf_h, bh)
+            block_bottom = max(block_bottom, shelf_top + shelf_h)
+        group_report.append({"group": gname, "anchors": len(anchor_refs)})
+        cursor_y = block_bottom + group_gap
+
+    return {
+        "moves": moves,
+        "unplaced": sorted(set(unplaced)),
+        "groups": group_report,
+        "clean": not moves,
         "symbols": len(syms),
     }

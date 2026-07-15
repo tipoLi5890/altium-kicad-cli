@@ -41,7 +41,11 @@ def test_build_system_declares_setuptools_77_floor(pyproject: dict):
 def test_core_project_metadata(pyproject: dict):
     proj = pyproject["project"]
     assert proj["name"] == "akcli"
-    assert re.fullmatch(r"\d+\.\d+\.\d+", proj["version"])
+    # MAJOR.MINOR.PATCH, optionally with a PEP 440 pre/dev suffix so an
+    # in-development build (e.g. 0.8.0.dev0) is a distinguishable version rather
+    # than masquerading as the last release.
+    assert re.fullmatch(r"\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?(?:\.dev\d+)?",
+                        proj["version"])
     assert proj["license"] == "MIT"
     assert proj["requires-python"] == ">=3.11"
     # Every supported minor gets a Trove classifier (and CI matrix coverage).
