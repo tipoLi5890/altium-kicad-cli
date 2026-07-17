@@ -197,7 +197,7 @@ def _emit_deck(args: argparse.Namespace, d, deck_sha: str) -> int:
         })))
         return EXIT["OK"]
     if getattr(args, "out", None):
-        Path(args.out).write_text(d.text, encoding="utf-8")
+        Path(args.out).write_text(d.text, encoding="utf-8", newline="\n")
         sys.stderr.write(f"wrote deck ({len(d.text.splitlines())} lines) to {args.out}\n")
     else:
         _emit(d.text)

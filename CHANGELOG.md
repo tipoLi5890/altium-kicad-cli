@@ -30,6 +30,27 @@ All notable changes to `akcli` are documented here. The format is based on
 
 When in doubt, prefer additive, backwards-compatible changes and leave the version contracts untouched.
 
+## [Unreleased]
+
+### Fixed
+- **Windows CI (the 0.10.0 release run)**: text written with `Path.write_text`
+  was newline-translated on Windows (`\n` -> `\r\n`), inflating `--render`
+  preview files past their reported byte count and breaking the renderer's
+  cross-platform determinism promise. Every text write in `src/akcli` now pins
+  `encoding="utf-8", newline="\n"` (webui state files gained the missing
+  `encoding=` too), and the new AST gate `tests/test_text_io_portability.py`
+  makes unpinned text I/O a CI failure on every platform — the whole
+  cp1252/CRLF class (0.8.0, 0.9.0, 0.10.0 regressions) is now structural,
+  not whack-a-mole. Also annotated `render_svg._render_grid` for the mypy
+  beachhead (the other red job).
+- **Release runbook order** (`docs/releasing.md`): push `main`, wait for CI
+  green on that commit, and only then push the tag — the tag-triggered
+  Release workflow does not wait for CI, so tagging together with main
+  published 0.4.0/0.8.0/0.9.0/0.10.0 before `windows-latest` had ever run
+  the release commit. New root `CLAUDE.md` records the portability rules,
+  the CI-parity gates (ruff + mypy + pytest) and the op-vocabulary lockstep
+  checklist.
+
 ## [0.10.0] - 2026-07-17
 
 ### Added — modular schematic authoring (functional groups & layout experience)

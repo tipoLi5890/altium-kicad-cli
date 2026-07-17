@@ -268,7 +268,7 @@ class Dash:
         f = self.state_dir / "state.json" if self.state_dir else None
         if f and f.exists():
             try:
-                raw = json.loads(f.read_text())
+                raw = json.loads(f.read_text(encoding="utf-8"))
                 if isinstance(raw, dict):
                     state = raw
             except ValueError:
@@ -291,7 +291,8 @@ class Dash:
             version = self.state["version"]
             if self.state_dir:
                 tmp = self.state_dir / "state.json.tmp"
-                tmp.write_text(json.dumps(self.state, ensure_ascii=False))
+                tmp.write_text(json.dumps(self.state, ensure_ascii=False),
+                               encoding="utf-8", newline="\n")
                 tmp.replace(self.state_dir / "state.json")
         self.bus.publish({"version": version})
 
@@ -749,7 +750,7 @@ def _make_handler(dash: Dash):
                     self._json(409, {"error": "not watching a schematic"})
                     return
                 (dash.target.parent / "note.txt").write_text(
-                    body[:MAX_NOTE] + "\n", encoding="utf-8")
+                    body[:MAX_NOTE] + "\n", encoding="utf-8", newline="\n")
                 self._json(200, {"ok": True})
             elif path == "/live/clear":
                 dash.clear()

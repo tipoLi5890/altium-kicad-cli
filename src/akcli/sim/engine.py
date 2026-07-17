@@ -171,8 +171,8 @@ def run(
     workdir.mkdir(parents=True, exist_ok=True)
     deck_file = workdir / "deck.cir"
     cmd_file = workdir / "commands.txt"
-    deck_file.write_text(deck_text, encoding="utf-8")
-    cmd_file.write_text("\n".join(commands) + "\n", encoding="utf-8")
+    deck_file.write_text(deck_text, encoding="utf-8", newline="\n")
+    cmd_file.write_text("\n".join(commands) + "\n", encoding="utf-8", newline="\n")
 
     # Snapshot pre-existing files so we can attribute new ones to wrdata.
     before = {p.name for p in workdir.iterdir()}

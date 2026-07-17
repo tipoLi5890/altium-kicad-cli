@@ -16,8 +16,15 @@ otherwise it is skipped and the release still succeeds.
 2. Move `CHANGELOG.md`'s `## [Unreleased]` section to `## [X.Y.Z]` (that
    section becomes the GitHub Release body verbatim).
 3. `git add pyproject.toml CHANGELOG.md ...` and commit.
-4. `git tag vX.Y.Z`
-5. `git push origin main && git push origin vX.Y.Z`
+4. `git push origin main` — and **wait for the CI workflow to go green on
+   that exact commit before tagging**. Release commits are big squashed
+   batches developed on macOS/Linux; historically every Windows-only failure
+   (locale-encoding text I/O, `\n` -> `\r\n` translation, POSIX shlex
+   splitting, subprocess env/exe semantics) surfaced HERE, on
+   `windows-latest`, after the tag was already public (0.4.0, 0.8.0, 0.9.0,
+   0.10.0). Tagging first inverts the gate — the GitHub Release ships before
+   the matrix has ever run the commit.
+5. `git tag vX.Y.Z && git push origin vX.Y.Z` — only once CI is green.
 6. Watch the `Release` workflow run in the Actions tab; verify the GitHub
    Release was created with `dist/*.whl` and `dist/*.tar.gz` attached, and (if
    PyPI publishing is enabled) that the new version appears on PyPI.

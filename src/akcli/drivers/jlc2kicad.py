@@ -167,4 +167,4 @@ def _absolutize_models(artifacts: list[str], root: Path, footprint_lib: str) -> 
         text = p.read_text(encoding="utf-8")
         patched = text.replace('(model "packages3d/', f'(model "{base}/')
         if patched != text:
-            p.write_text(patched, encoding="utf-8")
+            p.write_text(patched, encoding="utf-8", newline="\n")

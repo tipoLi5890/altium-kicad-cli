@@ -108,7 +108,7 @@ def _cmd_review_analyze(args: argparse.Namespace) -> int:
 
     payload = _report.render(findings, "json", meta=meta, source=str(target))
     if getattr(args, "out", None):
-        Path(args.out).write_text(payload, encoding="utf-8")
+        Path(args.out).write_text(payload, encoding="utf-8", newline="\n")
     if args.json:
         _emit(payload)
     else:
@@ -234,7 +234,7 @@ def _cmd_facts_add(args: argparse.Namespace) -> int:
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(fx.facts_to_doc(facts), ensure_ascii=False,
-                               indent=2) + "\n", encoding="utf-8")
+                               indent=2) + "\n", encoding="utf-8", newline="\n")
     if args.json:
         _emit(_dumps(_stamp({"written": str(path), "mpn": mpn,
                              "sha256": facts.sha256, "facts_set": sorted(added),
@@ -331,7 +331,7 @@ def _cmd_review_propose(args: argparse.Namespace) -> int:
     out_doc = prop.build_proposals(doc, source=str(path))
     payload = _dumps(out_doc)
     if getattr(args, "out", None):
-        Path(args.out).write_text(payload + "\n", encoding="utf-8")
+        Path(args.out).write_text(payload + "\n", encoding="utf-8", newline="\n")
     if args.json or not getattr(args, "out", None):
         _emit(payload)
     else:
@@ -382,7 +382,7 @@ def _cmd_review_testbench(args: argparse.Namespace) -> int:
             if out_dir:
                 base = Path(out_dir) / f"{b.fingerprint[:8]}_{b.kind}"
                 base.parent.mkdir(parents=True, exist_ok=True)
-                base.with_suffix(".deck").write_text(d.text, encoding="utf-8")
+                base.with_suffix(".deck").write_text(d.text, encoding="utf-8", newline="\n")
                 entry["deck_path"] = str(base.with_suffix(".deck"))
                 entry.pop("deck")
             written.append(entry)
@@ -503,7 +503,7 @@ def _cmd_review_validate(args: argparse.Namespace) -> int:
     payload = _report.render(accepted, "json", meta=meta,
                              source=str(cand_path))
     if getattr(args, "out", None):
-        Path(args.out).write_text(payload, encoding="utf-8")
+        Path(args.out).write_text(payload, encoding="utf-8", newline="\n")
     if args.json:
         _emit(payload)
     else:

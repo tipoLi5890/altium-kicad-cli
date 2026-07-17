@@ -274,7 +274,7 @@ def _cmd_nets(args: argparse.Namespace) -> int:
         if snap_out == "-":
             _emit(rendered)
             return EXIT["OK"]
-        Path(snap_out).write_text(rendered, encoding="utf-8")
+        Path(snap_out).write_text(rendered, encoding="utf-8", newline="\n")
         sys.stderr.write(f"wrote intent snapshot: {snap_out} "
                          f"({len(doc['nets'])} net(s) — assert with "
                          f"`akcli check <sch> --intent {snap_out}`)\n")
@@ -620,13 +620,13 @@ def _cmd_export(args: argparse.Namespace) -> int:
             "content": text,
         })
         if getattr(args, "output", None):
-            Path(args.output).write_text(payload + "\n", encoding="utf-8")
+            Path(args.output).write_text(payload + "\n", encoding="utf-8", newline="\n")
             sys.stderr.write(f"wrote {args.output}\n")
         else:
             _emit(payload)
         return EXIT["OK"]
     if getattr(args, "output", None):
-        Path(args.output).write_text(text, encoding="utf-8")
+        Path(args.output).write_text(text, encoding="utf-8", newline="\n")
         sys.stderr.write(f"wrote {args.output}\n")
     else:
         _emit(text)

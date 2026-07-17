@@ -551,7 +551,7 @@ def _cmd_new(args: argparse.Namespace) -> int:
                         f"ERROR: {target} exists (use --force to overwrite)")
     text = _blank_sch(paper, getattr(args, "title", None))
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(text, encoding="utf-8")
+    target.write_text(text, encoding="utf-8", newline="\n")
     status_line = (f"status: CREATED — wrote {target.name} "
                    f"(blank {paper} sheet; `akcli draw` to add parts)")
     if args.json:
@@ -742,7 +742,7 @@ def _render_preview(tmp_path, out_path) -> dict | None:
         # the next op-list's numbers can be read straight off the image
         svg = render_svg.render(sch, prims, grid=True)
         out = Path(out_path)
-        out.write_text(svg, encoding="utf-8")
+        out.write_text(svg, encoding="utf-8", newline="\n")
         return {"path": str(out), "bytes": len(svg.encode("utf-8"))}
     except Exception as e:  # noqa: BLE001 — advisory surface, never fatal
         sys.stderr.write(

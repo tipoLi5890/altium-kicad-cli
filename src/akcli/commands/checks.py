@@ -341,7 +341,7 @@ def _cmd_expected(args: argparse.Namespace) -> int:
     payload = _dumps({k: table[k] for k in sorted(table)})
     out = getattr(args, "output", None)
     if out:
-        Path(out).write_text(payload + "\n", encoding="utf-8")
+        Path(out).write_text(payload + "\n", encoding="utf-8", newline="\n")
         sys.stderr.write(f"wrote {len(table)} pin assignment(s) to {out}\n")
     else:
         _emit(payload)

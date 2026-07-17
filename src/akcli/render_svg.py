@@ -15,6 +15,7 @@ same SVG bytes.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from xml.sax.saxutils import escape
 
@@ -176,7 +177,8 @@ def _body_rect(c: Component) -> tuple[float, float, float, float]:
     return x0, y0, w, h
 
 
-def _render_grid(scene: _SheetScene, x, y, out: list[str]) -> None:
+def _render_grid(scene: _SheetScene, x: Callable[[float], str],
+                 y: Callable[[float], str], out: list[str]) -> None:
     """World-coordinate gridlines + captions so an agent can READ positions.
 
     The whole authoring model is coordinate-driven (mils, 50-mil grid), but a

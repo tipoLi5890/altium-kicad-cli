@@ -224,7 +224,7 @@ def _cmd_jlc_bom(args: argparse.Namespace) -> int:
         if csv_out == "-":
             _emit(text)          # CSV replaces the table: stdout = data
         else:
-            Path(csv_out).write_text(text, encoding="utf-8")
+            Path(csv_out).write_text(text, encoding="utf-8", newline="\n")
             sys.stderr.write(f"wrote JLCPCB BOM CSV: {csv_out}\n")
     agg = bom_jlc.totals(lines)
     if csv_out == "-":
@@ -571,7 +571,7 @@ def _cmd_jlc_add(args: argparse.Namespace) -> int:
         if place_doc is not None:
             place_path = Path(out_dir) / "place.json"
             try:
-                place_path.write_text(_dumps(place_doc) + "\n", encoding="utf-8")
+                place_path.write_text(_dumps(place_doc) + "\n", encoding="utf-8", newline="\n")
             except OSError:  # pragma: no cover - best-effort file write
                 place_path = None
         else:

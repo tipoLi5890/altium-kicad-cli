@@ -160,7 +160,7 @@ def _cmd_calc(args: argparse.Namespace) -> int:
         if args.ops == "-":
             _emit(rendered)
             return EXIT["OK"]
-        Path(args.ops).write_text(rendered + "\n", encoding="utf-8")
+        Path(args.ops).write_text(rendered + "\n", encoding="utf-8", newline="\n")
         import sys as _sys
         print(f"op-list written to {args.ops} "
               f"({len(opdoc['ops'])} ops — edit coordinates, then `akcli plan`)",

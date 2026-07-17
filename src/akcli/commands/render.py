@@ -35,7 +35,7 @@ def _cmd_render(args: argparse.Namespace) -> int:
         _emit(svg)
         return EXIT["OK"]
     out = Path(out_arg) if out_arg else path.with_suffix(path.suffix + ".svg")
-    out.write_text(svg, encoding="utf-8")
+    out.write_text(svg, encoding="utf-8", newline="\n")
 
     summary = {
         "schema_version": "1",
