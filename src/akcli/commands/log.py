@@ -23,10 +23,12 @@ def _cmd_log(args: argparse.Namespace) -> int:
     target = None
     if where.exists() and where.is_file():
         target = where.name
-    entries = journal.read_entries(where, target=target,
-                                   limit=getattr(args, "limit", None))
+    entries = journal.read_entries(where, target=target)
     if getattr(args, "cmd", None):
         entries = [e for e in entries if e.get("cmd") == args.cmd]
+    limit = getattr(args, "limit", None)
+    if limit is not None and limit >= 0:
+        entries = entries[-limit:]
 
     if args.json:
         _emit(_dumps(_stamp({
@@ -55,6 +57,8 @@ def _cmd_log(args: argparse.Namespace) -> int:
         detail = f"  ({', '.join(extra)})" if extra else ""
         _emit(f"{e.get('ts', '?'):<20} {e.get('cmd', '?'):<16} "
               f"{e.get('target', '?'):<24} {e.get('status', '?')}{detail}")
+        if e.get("note"):
+            _emit(f"{'':<20} note: {e['note']}")
     return EXIT["OK"]
 
 

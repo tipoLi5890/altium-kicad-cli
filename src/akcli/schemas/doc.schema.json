@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tipoLi5890/akcli/schemas/doc.schema.json",
+  "title": "AkcliDoc",
+  "description": "akcli doc --json: the pinout book as data — per-component pin tables (pin number/name/type + the net the pin actually landed on), the review-tree power-rail summary, and the grouped BOM. Deterministic for identical input bytes. Consumers must tolerate additive growth.",
+  "type": "object",
+  "required": ["schema_version", "source", "refs", "components", "rails", "bom"],
+  "properties": {
+    "schema_version": {"const": "1"},
+    "source": {"type": "string"},
+    "refs": {"type": "array", "items": {"type": "string"}},
+    "component_count": {"type": "integer", "minimum": 0},
+    "net_count": {"type": "integer", "minimum": 0},
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref", "pins"],
+        "properties": {
+          "ref": {"type": "string"},
+          "lib_id": {"type": "string"},
+          "value": {"type": "string"},
+          "footprint": {"type": "string"},
+          "dnp": {"type": "boolean"},
+          "pins": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["number", "name", "type", "net"],
+              "properties": {
+                "number": {"type": "string"},
+                "name": {"type": "string"},
+                "type": {"type": "string"},
+                "net": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "rails": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["net", "pins", "decoupling_caps"],
+        "properties": {
+          "net": {"type": "string"},
+          "voltage": {"type": ["number", "null"]},
+          "regulator": {
+            "type": ["object", "null"],
+            "properties": {
+              "ref": {"type": "string"},
+              "fb_pin": {"type": "string"},
+              "divider": {"type": "array", "items": {"type": "string"}}
+            }
+          },
+          "consumers": {"type": "array", "items": {"type": "string"}},
+          "decoupling_caps": {"type": "integer", "minimum": 0},
+          "pins": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "bom": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["qty", "refs"],
+        "properties": {
+          "qty": {"type": "integer", "minimum": 1},
+          "refs": {"type": "array", "items": {"type": "string"}},
+          "value": {"type": "string"},
+          "lib_id": {"type": "string"},
+          "footprint": {"type": "string"},
+          "dnp": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

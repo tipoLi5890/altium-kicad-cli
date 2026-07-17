@@ -33,6 +33,7 @@ LAYOUT_POWER_ON_PIN = "LAYOUT_POWER_ON_PIN"        # power symbol anchored on a 
 LAYOUT_LABEL_OVER_WIRE = "LAYOUT_LABEL_OVER_WIRE"  # label text crosses an unrelated wire
 LAYOUT_WIRE_THROUGH_SYMBOL = "LAYOUT_WIRE_THROUGH_SYMBOL"  # wire crosses a symbol body
 LAYOUT_GROUP_OVERLAP = "LAYOUT_GROUP_OVERLAP"      # two functional groups' extents intersect
+LAYOUT_GROUP_CLEARANCE = "LAYOUT_GROUP_CLEARANCE"  # groups closer than the configured channel
 LAYOUT_FRAME_STALE = "LAYOUT_FRAME_STALE"          # a group frame no longer contains its members
 LAYOUT_TEXTBOX_OVER_SYMBOL = "LAYOUT_TEXTBOX_OVER_SYMBOL"  # note box drawn over a part
 
@@ -157,8 +158,13 @@ def _fmt(p: tuple[float, float]) -> str:
     return f"({r(p[0])},{r(p[1])})"
 
 
-def run(path: str | Path) -> list[Finding]:
-    """Lint one ``.kicad_sch`` for geometric overlaps; returns findings."""
+def run(path: str | Path, *, group_clearance_mil: float = 0.0) -> list[Finding]:
+    """Lint one ``.kicad_sch`` for geometric overlaps; returns findings.
+
+    ``group_clearance_mil`` > 0 (``[check] group_clearance`` in akcli.toml)
+    additionally requires that much channel between every pair of functional
+    groups' extents (``LAYOUT_GROUP_CLEARANCE``, advisory like the rest).
+    """
     p = Path(path)
     if p.suffix.lower() != ".kicad_sch":
         return [Finding(
@@ -439,8 +445,8 @@ def run(path: str | Path) -> list[Finding]:
     for a_i in range(len(gnames)):
         for b_i in range(a_i + 1, len(gnames)):
             ga, gb = gnames[a_i], gnames[b_i]
-            if _overlaps(group_union[ga], group_union[gb]):
-                ua, ub = group_union[ga], group_union[gb]
+            ua, ub = group_union[ga], group_union[gb]
+            if _overlaps(ua, ub):
                 findings.append(Finding(
                     LAYOUT_GROUP_OVERLAP, Severity.WARNING,
                     f"functional groups {ga!r} and {gb!r} overlap "
@@ -451,6 +457,21 @@ def run(path: str | Path) -> list[Finding]:
                     refs=[ga, gb],
                     pos=(ua.x0, ua.y0),
                 ))
+            elif group_clearance_mil > 0:
+                # widest axis gap = the straight routing channel between the
+                # extents; disjoint boxes always have one positive axis gap
+                gap = max(max(ub.x0 - ua.x1, ua.x0 - ub.x1),
+                          max(ub.y0 - ua.y1, ua.y0 - ub.y1))
+                if gap < group_clearance_mil:
+                    findings.append(Finding(
+                        LAYOUT_GROUP_CLEARANCE, Severity.WARNING,
+                        f"functional groups {ga!r} and {gb!r} are only "
+                        f"{gap:g} mil apart (< {group_clearance_mil:g} mil "
+                        "[check].group_clearance) — re-pack with `akcli "
+                        "arrange --groups` using at least that group_gap",
+                        refs=[ga, gb],
+                        pos=(ua.x0, ua.y0),
+                    ))
     if group_union:
         from ..groupframe import frame_uuid
         from ..writers.kicad import _root_uuid

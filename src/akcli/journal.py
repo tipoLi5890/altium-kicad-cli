@@ -9,8 +9,12 @@ dry-run for this op-list, how deep is the undo stack" without re-deriving it.
 Contract
 --------
 * One directory-level journal per workspace: ``<target-dir>/.akcli/journal.jsonl``.
+  The ``.akcli/`` directory is the workspace state root; rotated draw backups
+  live under ``.akcli/backups/`` (see :func:`backups_dir`).
 * Append-only JSONL; every entry carries ``journal_version``/``ts`` (UTC ISO
   8601)/``cmd``/``target``/``status``. Readers skip corrupt lines.
+* Write commands may attach a free-form ``note`` (``--note``) recording WHY
+  an edit was made — design intent next to the mechanical record.
 * Journaling **never fails the parent command**: any ``OSError`` degrades to a
   stderr note. ``AKCLI_JOURNAL=off`` disables writes entirely.
 * Size-capped: past ``_MAX_BYTES`` the file rotates once to
@@ -28,14 +32,30 @@ from pathlib import Path
 JOURNAL_VERSION = "1.0"
 DIR_NAME = ".akcli"
 FILE_NAME = "journal.jsonl"
+BACKUP_DIR_NAME = "backups"
 
 _MAX_BYTES = 5 * 1024 * 1024
 
 
+def workspace_dir(target: Path) -> Path:
+    """The ``.akcli/`` state root for the workspace containing ``target``."""
+    base = target if target.is_dir() else target.parent
+    return base / DIR_NAME
+
+
 def journal_path(target: Path) -> Path:
     """The journal file for the workspace containing ``target`` (file or dir)."""
-    base = target if target.is_dir() else target.parent
-    return base / DIR_NAME / FILE_NAME
+    return workspace_dir(target) / FILE_NAME
+
+
+def backups_dir(target: Path) -> Path:
+    """Rotated-backup directory (``.akcli/backups/``) for ``target``'s workspace.
+
+    Writers create it lazily on the first backed-up apply; readers must
+    tolerate its absence (pre-0.12 workspaces kept ``<name>.bak`` next to the
+    edited file — see the legacy fallback in ``commands/drawing.py``).
+    """
+    return workspace_dir(target) / BACKUP_DIR_NAME
 
 
 def enabled() -> bool:

@@ -251,7 +251,7 @@ def test_relink_symbols_only_scopes_and_applies(tmp_path, capsys):
     out = capsys.readouterr().out
     assert rc == EXIT["OK"]
     assert "status: APPLIED" in out and "1 symbol(s)" in out
-    assert (tmp_path / "board.kicad_sch.bak").exists()
+    assert (tmp_path / ".akcli" / "backups" / "board.kicad_sch.bak").exists()
     # idempotent: a re-plan finds everything current
     rc = main(["relink-symbols", str(sch), "--libs", str(libdir),
                "--only", "Fake", "--json"])

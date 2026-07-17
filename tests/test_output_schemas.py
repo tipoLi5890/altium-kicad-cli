@@ -42,6 +42,13 @@ def _assert_valid(doc: dict, schema: str) -> None:
     assert errors == [], f"payload drifted from {schema}: {errors}"
 
 
+def test_doc_json_validates():
+    doc = _json_of(["doc", str(FIXTURES / "corpus" / "analog_frontend.kicad_sch"),
+                    "--json", "--refs", "R*,C*"])
+    _assert_valid(doc, "doc.schema.json")
+    assert doc["components"] and doc["rails"] and doc["bom"]
+
+
 def test_diff_json_validates():
     doc = _json_of(["diff", str(FIXTURES / "shared_name_label.SchDoc"),
                     str(FIXTURES / "two_gnd_ports.SchDoc"),

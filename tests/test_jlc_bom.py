@@ -327,4 +327,4 @@ def test_cli_fix_end_to_end(tmp_path, capsys, monkeypatch):
     text = work.read_text(encoding="utf-8")
     assert '(property "LCSC" "C1525"' in text
     # the fix went through the draw pipeline -> undo can revert it
-    assert (work.parent / (work.name + ".bak")).exists()
+    assert (work.parent / ".akcli" / "backups" / (work.name + ".bak")).exists()

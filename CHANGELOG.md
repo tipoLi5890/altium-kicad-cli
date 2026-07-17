@@ -30,6 +30,53 @@ All notable changes to `akcli` are documented here. The format is based on
 
 When in doubt, prefer additive, backwards-compatible changes and leave the version contracts untouched.
 
+## [0.12.0] - 2026-07-17
+
+### Added — group layout: 2D packing + clearance policy
+- **`arrange --groups --page-width MIL`** — group blocks pack side by side in
+  two dimensions (wrap past the page width) with `--group-gap` guaranteed on
+  BOTH axes, instead of the single-column stack; the plan/`--json` report now
+  carries each block's `at`/`size`. Driven by the pod-board case where the
+  single-column layout was applied and immediately undone.
+- **`[arrange]` config table** (`group_margin`/`group_gap`/`row_width`/
+  `page_width`) pins the layout policy per project — e.g. `group_gap = 1000`
+  guarantees a >= 1000 mil channel between functional groups on every re-pack.
+- **`[check] group_clearance = N`** — `check --layout` flags any pair of
+  groups closer than N mils (`LAYOUT_GROUP_CLEARANCE`, advisory), catching
+  manual moves that squeeze the routing channel without overlapping.
+
+### Fixed
+- **`arrange --groups --apply` now enforces its net-preservation contract**:
+  the rigid moves are dry-applied to a temp copy and the write is REFUSED
+  (exit 6, split/merge lines on stderr) when the before/after netlists are
+  not equivalent — previously a sheet wired across group boundaries could be
+  re-packed into silent net splits/merges (observed on a real board: a
+  rail-to-GND merge). `--allow-net-changes` is the explicit override.
+
+### Added — workspace state engineering + pinout book
+- **`akcli doc <file> [-o book.md] [--refs GLOBS] [--json]`** — the ROADMAP v0.10
+  pinout book: per-IC/connector pin tables (pin number/name/type + the net each
+  pin actually landed on), the `review tree` power-rail summary, and a grouped
+  BOM, as deterministic Markdown (no timestamps; same input bytes -> same
+  output bytes) or a `--json` payload.
+- **Journal intent notes**: write commands (`plan`/`draw`/`arrange`/`undo`)
+  accept `--note TEXT` to record *why* an edit was made next to the
+  mechanical facts; `akcli log` prints the note under the entry. Sessions do
+  not identify themselves — the design is the shared object.
+- **`docs/agent-state.md`** — the workspace-state contract: where state lives
+  (`.akcli/`, `akcli.toml`, intent snapshots, facts store), design-intent
+  notes, and the session-resume ritual.
+
+### Changed
+- **Rotated draw backups moved into `.akcli/backups/`** (previously
+  `<name>.bak` beside the edited file): `draw`/`arrange`/`sim fit-diode
+  --write`/`jlc bom --fix`/`relink-symbols`/`groups --frames` all write there;
+  journal entries and status lines reference the new path. `akcli undo` walks
+  the new location and **falls back to a legacy beside-the-file stack** when
+  `.akcli/backups/` holds no snapshots for the target, so existing workspaces
+  keep their undo history. (`library repair` backups stay next to the repaired
+  lib-table files — those live outside schematic workspaces.)
+
 ## [0.11.0] - 2026-07-17
 
 ### Added — BOM completeness (safety, semantics, workflow, reporting)

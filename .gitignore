@@ -39,7 +39,7 @@ coverage.xml
 # Local-only / untrusted real-board expectations (never commit)
 AKCLI_ALTIUM_EXPECT*.json
 
-# Workspace write journal (akcli log)
+# Workspace state: write journal (akcli log) + rotated undo backups
 .akcli/
 
 # CLI default output dirs (jlc add / footprint export) — never commit run output

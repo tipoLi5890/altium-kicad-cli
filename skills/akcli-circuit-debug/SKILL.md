@@ -158,8 +158,9 @@ akcli draw board.kicad_sch --ops ops.json --symbols extra.kicad_sym   # if SYMBO
   that is safe, and do File>Revert in KiCad afterwards so the GUI picks up the write.
 - `--dry-run` is accepted but **inert** — dry-run is already the default; only `--apply` changes
   behavior. Do not treat `--dry-run` as extra safety.
-- **Backup/rollback:** a successful `--apply` writes `<name>.kicad_sch.bak` next to the target
-  before replacing it. To roll back, copy the `.bak` over the target. If the target changed on
+- **Backup/rollback:** a successful `--apply` writes `<name>.kicad_sch.bak` under the
+  workspace's `.akcli/backups/` before replacing the target. To roll back, run `akcli undo`
+  (or copy the `.bak` over the target). If the target changed on
   disk between akcli's read and write, apply aborts with `VERIFY_FAILED` and touches nothing —
   re-run from a fresh dry-run.
 - **Re-read-after-apply discipline:** an exit-0 apply proves the write landed, not that intent

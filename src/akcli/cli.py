@@ -36,6 +36,7 @@ from . import __version__
 from .commands import calc as _calc_cmd
 from .commands import capabilities as _capabilities_cmd
 from .commands import checks as _checks_cmd
+from .commands import doc as _doc_cmd
 from .commands import doctor as _doctor_cmd
 from .commands import drawing as _drawing_cmd
 from .commands import fab as _fab_cmd
@@ -124,6 +125,7 @@ def build_parser() -> argparse.ArgumentParser:
     # One module per command family registers its subparsers + handlers.
     _query_cmd.register(sub, common)
     _render_cmd.register(sub, common)
+    _doc_cmd.register(sub, common)
     _view_cmd.register(sub, common)
     _checks_cmd.register(sub, common)
     _review_cmd.register(sub, common)

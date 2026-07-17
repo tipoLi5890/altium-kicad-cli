@@ -96,3 +96,31 @@ def test_path_must_be_string(tmp_path):
     with pytest.raises(AkcliError) as ei:
         config.load_config(p)
     assert ei.value.code == "BAD_CONFIG"
+
+
+def test_arrange_table_accepted(tmp_path):
+    cfg = config.load_config(_write(tmp_path, """
+[arrange]
+group_margin = 200
+group_gap = 1000
+row_width = 5000
+page_width = 20000
+"""))
+    assert cfg.arrange == {"group_margin": 200, "group_gap": 1000,
+                           "row_width": 5000, "page_width": 20000}
+
+
+def test_arrange_rejects_unknown_and_nonpositive(tmp_path):
+    with pytest.raises(AkcliError):
+        config.load_config(_write(tmp_path, "[arrange]\ngroup_gapp = 1000\n"))
+    with pytest.raises(AkcliError):
+        config.load_config(_write(tmp_path, "[arrange]\ngroup_gap = 0\n"))
+    with pytest.raises(AkcliError):
+        config.load_config(_write(tmp_path, "[arrange]\npage_width = true\n"))
+
+
+def test_check_group_clearance_accepted_and_validated(tmp_path):
+    cfg = config.load_config(_write(tmp_path, "[check]\ngroup_clearance = 1000\n"))
+    assert cfg.check["group_clearance"] == 1000
+    with pytest.raises(AkcliError):
+        config.load_config(_write(tmp_path, "[check]\ngroup_clearance = -1\n"))

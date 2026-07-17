@@ -524,5 +524,5 @@ def test_fit_diode_apply_write_commits(tmp_path, capsys):
                      "--write"]) == 0
     text = target.read_text(encoding="utf-8")
     assert "Sim.Params" in text and "Sim.Device" in text
-    assert (tmp_path / "board.kicad_sch.bak").exists()
+    assert (tmp_path / ".akcli" / "backups" / "board.kicad_sch.bak").exists()
     assert "applied" in capsys.readouterr().out

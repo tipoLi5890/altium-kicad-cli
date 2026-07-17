@@ -232,6 +232,7 @@ def _bundle_host(sat: SymInfo, anchors: list[SymInfo]) -> SymInfo | None:
 def plan_groups(path: str | Path, groups: dict[str, list[str]], *,
                 margin: float = GROUP_MARGIN_MIL, group_gap: float = GROUP_GAP_MIL,
                 row_width: float = ROW_WIDTH_MIL,
+                page_width: float | None = None,
                 origin: tuple[float, float] | None = None) -> dict:
     """Rigidly relocate each functional group into its own shelf-packed block.
 
@@ -242,8 +243,16 @@ def plan_groups(path: str | Path, groups: dict[str, list[str]], *,
     ``move_component`` with ``carry_labels``/``carry_wires``, so — with the
     label-on-pin pattern — the re-layout is net-preserving by construction.
 
+    Block placement: by default groups stack straight down the page,
+    ``group_gap`` apart. With ``page_width`` set, group blocks shelf-pack in
+    TWO dimensions — left to right, wrapping past ``page_width`` — with
+    ``group_gap`` guaranteed both horizontally and vertically (the layout the
+    pod-class boards use: functional neighbours side by side, a routing
+    channel between every pair).
+
     Never touches the file; returns ``{"moves", "unplaced", "groups", "clean",
-    "symbols"}``. The moves are applied through the standard draw pipeline
+    "symbols"}``; each ``groups`` entry reports the block's ``at``/``size``
+    (mil). The moves are applied through the standard draw pipeline
     (``.bak`` + connectivity verify + ``undo``).
     """
     root = sexpr.parse(Path(path).read_text(encoding="utf-8", errors="replace"))
@@ -281,38 +290,61 @@ def plan_groups(path: str | Path, groups: dict[str, list[str]], *,
         else:
             unplaced.append(sat.ref)
 
-    # shelf-pack each group's bundles; groups stack down the page with a gap
     ox = origin[0] if origin else min((s.box.x0 for s in syms), default=0.0)
     oy = origin[1] if origin else min((s.box.y0 for s in syms), default=0.0)
-    moves: list[Move] = []
-    group_report: list[dict] = []
-    cursor_y = oy
+
+    # pass 1 — shelf-pack each group's bundles into a LOCAL block at (0,0):
+    # per-member deltas into block coordinates plus the block's w x h.
+    blocks: list[dict] = []
     for gname in ordered_groups:
         anchor_refs = [a.ref for a in anchors if group_of.get(a.ref) == gname]
         if not anchor_refs:
             continue
         bundles = [(ref, _union([m.box for m in members[ref]])) for ref in anchor_refs]
-        shelf_x = ox
-        shelf_top = cursor_y
+        rel: list[tuple[SymInfo, float, float]] = []
+        shelf_x = 0.0
+        shelf_top = 0.0
         shelf_h = 0.0
-        block_bottom = cursor_y
+        block_bottom = 0.0
+        block_right = 0.0
         for ref, bbox in bundles:
             bw, bh = bbox.x1 - bbox.x0, bbox.y1 - bbox.y0
-            if shelf_x > ox and (shelf_x + bw) > (ox + row_width):
-                shelf_x = ox                               # wrap to the next shelf
+            if shelf_x > 0.0 and (shelf_x + bw) > row_width:
+                shelf_x = 0.0                              # wrap to the next shelf
                 shelf_top = block_bottom + margin
                 shelf_h = 0.0
             dx = shelf_x - bbox.x0
             dy = shelf_top - bbox.y0
             for m in members[ref]:
-                to = (m.at[0] + dx, m.at[1] + dy)
-                if (round(to[0]), round(to[1])) != (round(m.at[0]), round(m.at[1])):
-                    moves.append(Move(ref=m.ref, frm=m.at, to=to))
+                rel.append((m, dx, dy))
             shelf_x += bw + margin
             shelf_h = max(shelf_h, bh)
             block_bottom = max(block_bottom, shelf_top + shelf_h)
-        group_report.append({"group": gname, "anchors": len(anchor_refs)})
-        cursor_y = block_bottom + group_gap
+            block_right = max(block_right, shelf_x - margin)
+        blocks.append({"group": gname, "anchors": len(anchor_refs),
+                       "rel": rel, "w": block_right, "h": block_bottom})
+
+    # pass 2 — place the blocks: a single column by default, or a 2D shelf
+    # (wrap past page_width) with group_gap guaranteed on BOTH axes.
+    moves: list[Move] = []
+    group_report: list[dict] = []
+    gx, gy = ox, oy
+    row_bottom = oy
+    for blk in blocks:
+        if page_width is not None and gx > ox and (gx - ox) + blk["w"] > page_width:
+            gx = ox                                        # wrap to the next band
+            gy = row_bottom + group_gap
+        for m, dx, dy in blk["rel"]:
+            to = (m.at[0] + dx + gx, m.at[1] + dy + gy)
+            if (round(to[0]), round(to[1])) != (round(m.at[0]), round(m.at[1])):
+                moves.append(Move(ref=m.ref, frm=m.at, to=to))
+        group_report.append({"group": blk["group"], "anchors": blk["anchors"],
+                             "at": [gx, gy], "size": [blk["w"], blk["h"]]})
+        row_bottom = max(row_bottom, gy + blk["h"])
+        if page_width is not None:
+            gx += blk["w"] + group_gap
+        else:
+            gy = gy + blk["h"] + group_gap
 
     return {
         "moves": moves,

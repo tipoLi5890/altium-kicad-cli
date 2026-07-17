@@ -168,6 +168,9 @@ Run the design checks (ERC-lite + power + BOM hygiene + nets + layout) and print
   at 0). `[check] pair_suffixes = [["_P","_N"], ...]` replaces the suffix table and
   `bus_min_family` raises the family-size threshold; geometric diff-pair *skew* stays in
   `review analyze` (EMC family).
+- `[check] group_clearance = N` (mils, `0` = off) makes `--layout` require that much channel
+  between every pair of functional groups' extents (`LAYOUT_GROUP_CLEARANCE`, advisory) —
+  the lint side of `arrange --groups --group-gap N`.
 - `--nets` is **connectivity hygiene**: `NET_SINGLE_PIN` (a floating label or
   a power port driving nothing), `NET_OFF_GRID` (pins off the configured grid
   — wires that touch on screen without ever connecting), and, on `.kicad_sch`
@@ -327,7 +330,7 @@ UniqueID, then `(value, footprint, pin-count)` signature, then refdes. `--json` 
 `schemas/diff.schema.json` (summary counts, rename map, per-component and per-net changes with
 match method + confidence).
 
-### `akcli arrange <target.kicad_sch> [--apply] [--groups [FILE]] [--frames] [--grid MIL] [--margin MIL] [--symbols PATH ...]`
+### `akcli arrange <target.kicad_sch> [--apply] [--groups [FILE]] [--frames] [--grid MIL] [--margin MIL] [--group-gap MIL] [--page-width MIL] [--symbols PATH ...]`
 Resolve symbol overlaps by nudging **free** components — parts with no wire
 endpoint or label anchor on any pin (moving anchored parts would strand their
 connectivity, which is exactly what `check --nets` flags). Greedy first-fit in
@@ -345,9 +348,35 @@ region as **rigid, net-preserving bundles** (moves carry labels/wires; power
 satellites ride their host). `--groups FILE` takes a TOML/JSON
 `{group: [refdes, ...]}` map; **bare `--groups`** derives the map from the
 sheet's hidden `Group` properties — the file itself is the module map.
+Net preservation is **enforced at apply time**: the moves are dry-applied to
+a temp copy and the before/after netlists must be equivalent, otherwise the
+write is REFUSED (exit `6`) with the split/merge lines on stderr — a sheet
+wired *across* group boundaries cannot move rigidly (connect groups with
+label-on-pin nets instead). `--allow-net-changes` is the explicit override.
 `--frames` redraws each group's border + title after packing (keyed uuids
 replace stale frames; one `undo` reverts the arrange together with its
 frames).
+
+Group blocks stack straight down the page by default, `--group-gap` apart
+(default 1200 mil). **`--page-width MIL` switches to 2D packing**: blocks go
+side by side left→right, wrap past the page width, and `--group-gap` is
+guaranteed on **both** axes — functional neighbours adjacent with a routing
+channel between every pair. Project policy pins these in `akcli.toml` so
+every session packs the same way (flags still override):
+
+```toml
+[arrange]
+group_gap = 1000      # channel between group blocks, both axes (mil)
+page_width = 20000    # pack side by side, wrap past this width
+group_margin = 200    # clearance between bundles inside a group
+row_width = 4000      # wrap a group's internal shelf past this width
+```
+
+The matching lint: `[check] group_clearance = 1000` makes `check --layout`
+flag any pair of groups whose extents sit closer than that channel
+(`LAYOUT_GROUP_CLEARANCE`, advisory) — so a later manual move that squeezes
+the gap is caught even when nothing overlaps. The dry-run/`--json` report
+now carries each block's `at`/`size` (mil) for programmatic verification.
 
 ### `akcli verify <file_a> <file_b> [--strict]`
 Two modes, dispatched by the **second** file's type:
@@ -379,7 +408,9 @@ UUID, so regenerating it breaks idempotent re-runs.
 
 ### `akcli undo <target.kicad_sch> [--apply] [--steps N] [--list]`
 Restore the target from the **rotated draw backups** that `akcli draw --apply`
-writes beside it (`<name>.bak` newest, then `.bak2`, `.bak3` — up to 3).
+writes under the workspace's `.akcli/backups/` (`<name>.bak` newest, then
+`.bak2`, `.bak3` — up to 3). Legacy pre-0.12 stacks beside the file are still
+found when `.akcli/backups/` holds none for the target.
 Dry-run by default (prints the part/net delta that restoring would cause);
 `--apply` swaps, so **undo twice is a redo**.
 - `--list` prints the backup stack (level, path, size, mtime — newest first,
@@ -488,7 +519,7 @@ Execute an op-list against a KiCad `.kicad_sch`. The vocabulary is 22 ops + 10 m
 - **Default is a dry run** (no file written): prints per-op results and the connectivity
   verification. (`--dry-run` is accepted but inert — omitting `--apply` already is the dry run.)
 - `--apply` performs the write via the atomic snapshot → temp → verify-on-temp → `os.replace`
-  pipeline, writing a `<target>.bak` copy alongside the file. The write is rejected (exit `6`)
+  pipeline, writing a rotated `<target>.bak` copy under `.akcli/backups/`. The write is rejected (exit `6`)
   if any op errors or the connectivity verifier finds an ERROR (e.g. `DANGLING_ENDPOINT`,
   `DANGLING_BUS_ENTRY` — a bus entry end landing on neither a bus nor a wire).
 - **Net changes** (both `plan` and `draw`, dry-run and apply): the op-list is dry-applied to a
@@ -521,7 +552,7 @@ Execute an op-list against a KiCad `.kicad_sch`. The vocabulary is 22 ops + 10 m
   GUI prints a `File>Revert` reminder on stderr. (Same guard on `arrange`/`undo --apply`.)
 - A final status line states the outcome unambiguously:
   `status: dry-run — nothing written (re-run with --apply)`,
-  `status: APPLIED — wrote board.kicad_sch (backup board.kicad_sch.bak; akcli undo reverts)`, or
+  `status: APPLIED — wrote board.kicad_sch (backup .akcli/backups/board.kicad_sch.bak; akcli undo reverts)`, or
   `REFUSED: --strict-nets: net split/merge touches a named net; nothing written`.
 - After a successful `--apply`, an **advisory** `kicad-cli` ERC runs when that binary is
   installed (never fatal); `--no-erc` skips it honestly (logged at `-v`) — akcli's own
@@ -558,7 +589,7 @@ status: dry-run — 2 replacement(s) pending; re-run with --apply
 - Dry-run by default. `--apply` splices the fresh blocks in, then a **safety gate** re-reads
   both versions and requires identical net membership — a moved pin in the new library refuses
   the write with `VERIFY_FAILED` (exit `6`) and leaves the file untouched. On pass it writes
-  `<name>.bak` and replaces atomically.
+  `.akcli/backups/<name>.bak` and replaces atomically.
 - `--only power,Device` restricts to the listed library nicknames (or full lib_ids).
 - Exit `6` when any entry is `missing-lib` (scope with `--only` to silence intentionally
   unavailable nicks); `--json` lists the actions (minus the raw symbol text).
@@ -705,14 +736,32 @@ visual-feedback channel after a `draw --apply`: render, then *look* at what you 
 cross — the numbers on the image are exactly the numbers op-lists use (`plan/draw --render`
 previews always include it).
 
+### `akcli doc <file> [-o FILE] [--refs GLOBS]`
+Generate the **pinout book** — a human-readable Markdown design document composed from the
+normalized model (works on `.kicad_sch` and Altium `.SchDoc`, no EDA install):
+- **Pin tables** per IC/connector (default refs `U*,J*,CN*,P*`; override with a comma-separated
+  `--refs` glob list): pin number, name, electrical type, and the net each pin *actually landed
+  on* — the as-drawn pinout a reviewer checks against the datasheet.
+- **Power rails** — the `review tree` analysis as a table (rail, voltage, regulator, consumers,
+  decoupling count).
+- **BOM** — real in-BOM components grouped by value/footprint/symbol, refs natural-sorted.
+
+Deterministic output (same input bytes → same Markdown bytes; no timestamps), so books diff
+cleanly in review. `-o FILE` writes the file (stdout stays clean); `--json` emits the same
+content structured (`{source, components: [{ref, lib_id, value, footprint, pins: [...]}, …],
+rails, bom}`). The design-review entry point: `/circuit-draw` output plus `akcli doc` is what a
+human reads without opening an EDA tool.
+
 ### `akcli log [PATH] [--limit N] [--cmd NAME]`
 Query the **workspace write journal**. Every write-path command (`plan`, `draw`, `arrange`,
 `undo`, `relink-symbols`) appends one JSONL entry to `<dir>/.akcli/journal.jsonl` — timestamp,
 command, target, status (`dry-run`/`applied`/`refused`), the op-list sha256, op count, the
 net-diff verdict, and the backup name — so a later invocation (or a harness hook) can answer
 "was there a plan for this op-list before the `--apply`" and "what did the last session do here"
-without re-deriving state. `PATH` is the workspace directory or an edited file (which filters to
-that file); `--cmd` filters by command; `--json` emits
+without re-deriving state. Write commands accept `--note TEXT` to record *why* the edit was
+made next to *what* was done — design intent for the next session (see
+[agent-state.md](agent-state.md)). `PATH` is the workspace directory
+or an edited file (which filters to that file); `--cmd` filters by command; `--json` emits
 `{journal_version, journal, returned, entries}`. Journaling never fails the parent command
 (failures degrade to a stderr `note:`), is size-capped with one rotation
 (`journal.jsonl.1`), and `AKCLI_JOURNAL=off` disables it. Add `.akcli/` to your project's

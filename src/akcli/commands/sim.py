@@ -670,15 +670,17 @@ def _fit_diode_apply(args, models, result, name, model_card,
                 f"would set on {designator} in {target}:\n"
                 f"{_dumps(oplist)}\n\n"
                 "re-run with --write to apply "
-                f"(writes {target.name}.bak; `akcli undo` reverts)"
+                f"(writes .akcli/backups/{target.name}.bak; `akcli undo` reverts)"
             )
         return EXIT["OK"]
 
+    from .. import journal as _journal
     from ..writers import kicad as kwriter  # lazy
     findings: list = []
     try:
         results = kwriter.apply(oplist, str(target), apply=True,
-                                backup_dir=target.parent, verify_out=findings)
+                                backup_dir=_journal.backups_dir(target),
+                                verify_out=findings)
     except AkcliError as exc:
         raise _ExitWith(exc.exit_code, exc.as_error_line()) from exc
 
@@ -698,7 +700,7 @@ def _fit_diode_apply(args, models, result, name, model_card,
         if code == EXIT["OK"]:
             _emit(f"# akcli sim fit-diode\n\n{model_card}\n\n"
                   f"applied Sim.Device=D / Sim.Params to {designator} in {target}\n"
-                  f"(backup {target.name}.bak; `akcli undo` reverts)")
+                  f"(backup .akcli/backups/{target.name}.bak; `akcli undo` reverts)")
         else:
             _emit(f"# akcli sim fit-diode\n\nfailed to apply to {designator} in "
                   f"{target} — nothing written")

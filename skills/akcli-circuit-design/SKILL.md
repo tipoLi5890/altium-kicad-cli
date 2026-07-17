@@ -55,6 +55,7 @@ akcli net  <file> [name] --json   # netlist: nets -> pin members, aliases, sourc
                                   # (a named miss exits 8 with {"found": false})
 akcli component <file> <REF>      # one component's pin -> net (e.g. U3); omit REF to list all
 akcli render <file> -o out.svg    # install-free SVG — LOOK at the sheet (works on .SchDoc too)
+akcli doc <file> -o book.md       # pinout book: pin->net tables + power rails + BOM (human hand-off)
 akcli log <dir-or-file>           # workspace write journal: what plan/draw/undo did here
 ```
 

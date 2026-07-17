@@ -230,7 +230,10 @@ suspicious dividers/pull-ups/load caps and cite the printed reference.
   scan each IC's input pins for nets with no driver.
 - **Connector pinout sanity** — dump each connector (`akcli component board.SchDoc J1`) and
   compare against the mating standard (USB, SWD/JTAG, Qwiic...): power/ground on the right
-  positions, no shield-to-signal shorts.
+  positions, no shield-to-signal shorts. For a board-wide sweep,
+  `akcli doc board.SchDoc -o book.md` renders every IC/connector's pin→net table (plus the
+  rail summary and BOM) in one deterministic Markdown document — the natural artifact to
+  attach to the review.
 - **Power-tree consistency** — start from `akcli review tree board.kicad_sch` (rails →
   regulating IC found via its feedback divider → consumers → decoupling count) and verify
   every rail has exactly one source, every consumer sits on the intended rail, and rail

@@ -134,3 +134,101 @@ def test_power_port_rides_with_its_host(tmp_path, capsys):
                      "--symbols", str(DEVICE), "--symbols", str(POWER)]) == 0
     # net-preserving means the GND port stayed glued to R1.2 through the move
     assert netdiff.diff(before, _nets(tgt)).equivalent
+
+
+# --------------------------------------------------------------------------- #
+# 2D side-by-side packing (--page-width / [arrange] page_width)
+# --------------------------------------------------------------------------- #
+def _block(result, name):
+    return next(g for g in result["groups"] if g["group"] == name)
+
+
+def test_page_width_packs_groups_side_by_side(tmp_path):
+    tgt = _seed_two_blocks(tmp_path)
+    groups = {"block_a": ["R1", "R2"], "block_b": ["R3", "R4"]}
+    result = arrange.plan_groups(tgt, groups, group_gap=1000.0,
+                                 page_width=20000.0)
+    a, b = _block(result, "block_a"), _block(result, "block_b")
+    # same band, and EXACTLY the requested channel between the blocks
+    assert a["at"][1] == b["at"][1]
+    assert b["at"][0] - (a["at"][0] + a["size"][0]) == 1000.0
+
+
+def test_page_width_wraps_to_the_next_band(tmp_path):
+    tgt = _seed_two_blocks(tmp_path)
+    groups = {"block_a": ["R1", "R2"], "block_b": ["R3", "R4"]}
+    result = arrange.plan_groups(tgt, groups, group_gap=1000.0,
+                                 page_width=1.0)   # nothing fits beside A
+    a, b = _block(result, "block_a"), _block(result, "block_b")
+    assert b["at"][0] == a["at"][0]
+    assert b["at"][1] - (a["at"][1] + a["size"][1]) == 1000.0
+
+
+def test_page_width_is_net_preserving_end_to_end(tmp_path, capsys):
+    tgt = _seed_two_blocks(tmp_path)
+    gf = _groups_file(tmp_path)
+    before = _nets(tgt)
+    capsys.readouterr()
+    assert cli.main(["arrange", str(tgt), "--groups", str(gf),
+                     "--page-width", "20000", "--group-gap", "1000",
+                     "--apply"]) == 0
+    assert netdiff.diff(before, _nets(tgt)).equivalent
+
+
+def test_arrange_config_pins_group_layout_policy(tmp_path, capsys):
+    # [arrange] in akcli.toml supplies the defaults; flags stay optional
+    tgt = _seed_two_blocks(tmp_path)
+    gf = _groups_file(tmp_path)
+    (tmp_path / "akcli.toml").write_text(
+        "[arrange]\ngroup_gap = 1000\npage_width = 20000\n",
+        encoding="utf-8")
+    capsys.readouterr()
+    assert cli.main(["arrange", str(tgt), "--groups", str(gf), "--json"]) == 0
+    doc = json.loads(capsys.readouterr().out)
+    a, b = doc["groups"][0], doc["groups"][1]
+    assert a["at"][1] == b["at"][1]                       # side by side
+    assert b["at"][0] - (a["at"][0] + a["size"][0]) == 1000.0
+
+
+# --------------------------------------------------------------------------- #
+# net-preservation gate (the --groups contract, enforced at apply time)
+# --------------------------------------------------------------------------- #
+def _seed_coincident_pair(tmp_path: Path) -> Path:
+    """R1.2 tip exactly on R2.1 tip: a net held together only by geometry.
+
+    Separating the two into different group blocks MUST split that net —
+    the deterministic stand-in for real boards wired across group borders.
+    """
+    tgt = tmp_path / "board.kicad_sch"
+    tgt.write_text('(kicad_sch (version 20231120) (generator "akcli") '
+                   '(uuid "33333333-4444-5555-6666-777777777777") (paper "A4"))\n')
+    rs = kw.apply(_oplist(
+        {"op": "place_component", "lib_id": "Device:R", "designator": "R1",
+         "x_mil": 2000, "y_mil": 1000, "value": "1k"},
+        # Device:R pin tips sit 150 mil above/below the anchor -> R1.2 tip at
+        # (2000,1150) == R2.1 tip when R2 anchors at (2000,1300)
+        {"op": "place_component", "lib_id": "Device:R", "designator": "R2",
+         "x_mil": 2000, "y_mil": 1300, "value": "1k"},
+        {"op": "add_net_label", "name": "VIN", "at": "R1.1"},
+        {"op": "add_net_label", "name": "GND", "at": "R2.2"},
+    ), str(tgt), apply=True, sources=[str(DEVICE)])
+    assert all(r.status == "ok" for r in rs), [r.message for r in rs]
+    return tgt
+
+
+def test_apply_refuses_a_net_changing_regroup(tmp_path, capsys):
+    tgt = _seed_coincident_pair(tmp_path)
+    gf = tmp_path / "groups.toml"
+    gf.write_text('[groups]\nblock_a = ["R1"]\nblock_b = ["R2"]\n')
+    before = tgt.read_bytes()
+    capsys.readouterr()
+    rc = cli.main(["arrange", str(tgt), "--groups", str(gf), "--apply"])
+    err = capsys.readouterr().err
+    assert rc == 6
+    assert "REFUSED" in err and "netlist" in err
+    assert tgt.read_bytes() == before            # nothing written
+
+    # explicit risk acceptance still works
+    assert cli.main(["arrange", str(tgt), "--groups", str(gf), "--apply",
+                     "--allow-net-changes"]) == 0
+    assert tgt.read_bytes() != before

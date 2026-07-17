@@ -235,7 +235,7 @@ def test_apply_splices_replacement_and_backs_up(proj):
     assert res["replaced"] == ["Fake:R2"]
 
     bak = Path(res["backup"])
-    assert bak == sch.with_name(sch.name + ".bak")
+    assert bak == sch.parent / ".akcli" / "backups" / (sch.name + ".bak")
     assert bak.read_text(encoding="utf-8") == original
 
     new_text = sch.read_text(encoding="utf-8")
@@ -250,7 +250,7 @@ def test_apply_without_backup(proj):
     sch, libdir, _ = proj
     res = relink.apply(sch, relink.plan(sch, [libdir]), backup=False)
     assert res["written"] is True and res["backup"] is None
-    assert not sch.with_name(sch.name + ".bak").exists()
+    assert not (sch.parent / ".akcli" / "backups" / (sch.name + ".bak")).exists()
 
 
 def test_apply_noop_without_replace_actions(proj):
@@ -275,7 +275,8 @@ def test_apply_refuses_connectivity_change(proj):
     assert "connectivity" in ei.value.message
 
     assert sch.read_text(encoding="utf-8") == original   # untouched
-    assert not sch.with_name(sch.name + ".bak").exists()  # no backup either
+    assert not (sch.parent / ".akcli" / "backups"
+                / (sch.name + ".bak")).exists()         # no backup either
     assert not list(sch.parent.glob("*.tmp"))              # no temp leftovers
 
 

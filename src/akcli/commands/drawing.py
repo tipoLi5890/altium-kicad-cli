@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from ..errors import EXIT, AkcliError
 from ._shared import (
@@ -134,7 +135,7 @@ def _cmd_arrange(args: argparse.Namespace) -> int:
     findings: list = []
     results = kwriter.apply(oplist, str(target), apply=True,
                             sources=_draw_symbol_sources(args, cfg),
-                            verify_out=findings, backup_dir=target.parent,
+                            verify_out=findings, backup_dir=_backups_dir(target),
                             backup_depth=_backup_depth(cfg),
                             allow_open=bool(getattr(args, "allow_open", False)))
     code = _draw_exit(results, findings)
@@ -142,7 +143,8 @@ def _cmd_arrange(args: argparse.Namespace) -> int:
     _journal.record(target, "arrange",
                     "applied" if code == EXIT["OK"] else "refused",
                     op_count=len(moves),
-                    backup=(f"{target.name}.bak" if code == EXIT["OK"] else None))
+                    note=getattr(args, "note", None),
+                    backup=(_backup_label(target) if code == EXIT["OK"] else None))
     if args.json:
         _emit(_dumps(_stamp({
             **base, "applied": code == EXIT["OK"],
@@ -182,11 +184,18 @@ def _cmd_arrange_groups(args: argparse.Namespace, target) -> int:
                 "--groups FILE or place components with a group tag first")
     else:
         groups = _load_groups_file(args.groups)
+    cfg = _load_cfg(args, target)
+    # layout policy: explicit flag > [arrange] config > built-in default
+    arr = getattr(cfg, "arrange", None) or {}
     result = arrmod.plan_groups(
         target, groups,
-        margin=getattr(args, "margin", None) or arrmod.GROUP_MARGIN_MIL,
-        group_gap=getattr(args, "group_gap", None) or arrmod.GROUP_GAP_MIL,
-        row_width=getattr(args, "row_width", None) or arrmod.ROW_WIDTH_MIL)
+        margin=(getattr(args, "margin", None)
+                or arr.get("group_margin") or arrmod.GROUP_MARGIN_MIL),
+        group_gap=(getattr(args, "group_gap", None)
+                   or arr.get("group_gap") or arrmod.GROUP_GAP_MIL),
+        row_width=(getattr(args, "row_width", None)
+                   or arr.get("row_width") or arrmod.ROW_WIDTH_MIL),
+        page_width=(getattr(args, "page_width", None) or arr.get("page_width")))
     moves, unplaced = result["moves"], result["unplaced"]
     do_apply = bool(getattr(args, "apply", False))
     base = {
@@ -212,11 +221,46 @@ def _cmd_arrange_groups(args: argparse.Namespace, target) -> int:
     oplist = {"protocol_version": 1, "target_format": "kicad",
               "target_file": target.name,
               "ops": [m.to_op(carry=True) for m in moves]}
-    cfg = _load_cfg(args, target)
+
+    # NET-PRESERVATION GATE — the --groups contract made mechanical: dry-apply
+    # the rigid moves to a temp copy and require net EQUIVALENCE before
+    # anything is written. Label-on-pin sheets pass by construction; a sheet
+    # wired ACROSS group boundaries can split/merge nets when bundles
+    # separate — refuse that loudly instead of stretching wires silently.
+    import os
+    import shutil
+    from ..netdiff import diff as _net_diff
+    from ..netdiff import format_summary as _net_summary
+    from ..readers import kicad as kreader
+    before_nets = kreader.read_sch(str(target)).nets
+    # next to the target so hierarchical child sheets still resolve
+    tmp = target.parent / f".{target.name}.groupsdiff.{os.getpid()}.tmp"
+    shutil.copy2(target, tmp)
+    try:
+        kwriter.apply(oplist, str(tmp), apply=True,
+                      sources=_draw_symbol_sources(args, cfg),
+                      verify_out=[], backup_dir=None, allow_open=True)
+        after_nets = kreader.read_sch(str(tmp)).nets
+    finally:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+    nd = _net_diff(before_nets, after_nets)
+    if not nd.equivalent and not getattr(args, "allow_net_changes", False):
+        for ln in _net_summary(nd):
+            sys.stderr.write(f"  {ln}\n")
+        raise _ExitWith(
+            EXIT["OPLIST"],
+            "REFUSED: arrange --groups would change the netlist (see the "
+            "lines above); nothing written. Wires crossing group boundaries "
+            "cannot move rigidly — connect groups with label-on-pin nets, "
+            "fix the group map, or pass --allow-net-changes to accept")
+
     findings: list = []
     results = kwriter.apply(oplist, str(target), apply=True,
                             sources=_draw_symbol_sources(args, cfg),
-                            verify_out=findings, backup_dir=target.parent,
+                            verify_out=findings, backup_dir=_backups_dir(target),
                             backup_depth=_backup_depth(cfg),
                             allow_open=bool(getattr(args, "allow_open", False)))
     code = _draw_exit(results, findings)
@@ -224,7 +268,8 @@ def _cmd_arrange_groups(args: argparse.Namespace, target) -> int:
     _journal.record(target, "arrange-groups",
                     "applied" if code == EXIT["OK"] else "refused",
                     op_count=len(moves),
-                    backup=(f"{target.name}.bak" if code == EXIT["OK"] else None))
+                    note=getattr(args, "note", None),
+                    backup=(_backup_label(target) if code == EXIT["OK"] else None))
     frames_refreshed = 0
     if code == EXIT["OK"] and getattr(args, "frames", False):
         frames_refreshed = _refresh_frames(args, target, cfg)
@@ -284,6 +329,18 @@ def _bak_name(name: str, level: int) -> str:
 _BACKUP_SCAN_MAX = 99          # matches the config backup_depth ceiling
 
 
+def _backups_dir(target) -> Path:
+    """Where new rotated backups go: ``.akcli/backups/`` in the workspace."""
+    from .. import journal as _journal
+    return _journal.backups_dir(target)
+
+
+def _backup_label(target) -> str:
+    """Human/journal label for the level-1 backup (workspace-relative posix)."""
+    from .. import journal as _journal
+    return f"{_journal.DIR_NAME}/{_journal.BACKUP_DIR_NAME}/{target.name}.bak"
+
+
 def _backup_stack(target) -> list:
     """Every rotated backup for ``target``, newest first: ``[(path, level), …]``.
 
@@ -291,12 +348,19 @@ def _backup_stack(target) -> list:
     and the fresh ``.bak`` copy) must not hide the deeper snapshots that still
     exist — ``undo --list``/``--steps`` walk whatever is really on disk, in
     level order.
+
+    Backups live in ``.akcli/backups/``; when that directory holds none for
+    this target, fall back to the legacy pre-0.12 location (``<name>.bak``
+    next to the file) so `undo` keeps working on an existing workspace.
     """
-    return [
-        (p, level)
-        for level in range(1, _BACKUP_SCAN_MAX + 1)
-        if (p := target.parent / _bak_name(target.name, level)).exists()
-    ]
+    def _scan(base: Path) -> list:
+        return [
+            (p, level)
+            for level in range(1, _BACKUP_SCAN_MAX + 1)
+            if (p := base / _bak_name(target.name, level)).exists()
+        ]
+
+    return _scan(_backups_dir(target)) or _scan(target.parent)
 
 
 def _undo_summary(cur, old) -> str:
@@ -326,7 +390,9 @@ def _refuse_if_gui_open(args: argparse.Namespace, target) -> None:
 def _cmd_undo(args: argparse.Namespace) -> int:
     """`undo <target>` — restore the target from its rotated draw backups.
 
-    `akcli draw --apply` leaves a stack `<name>.bak, .bak2, …` beside the file.
+    `akcli draw --apply` leaves a stack `<name>.bak, .bak2, …` under the
+    workspace's `.akcli/backups/` (legacy pre-0.12 stacks beside the file are
+    still found).
     Default `undo --apply` swaps the target with `.bak`, so undo-twice is a redo
     (existing behaviour, byte-identical). `--steps N` walks back N snapshots
     while shifting the stack so a single redo still undoes the last step;
@@ -381,7 +447,7 @@ def _undo_swap(args: argparse.Namespace, target) -> int:
     """
     stack = _backup_stack(target)
     if not stack:
-        bak = target.parent / (target.name + ".bak")
+        bak = _backups_dir(target) / (target.name + ".bak")
         raise _ExitWith(EXIT["NOT_FOUND"],
                         f"ERROR: no backup at {bak} (created by `akcli draw --apply`)")
     bak = stack[0][0]
@@ -405,7 +471,8 @@ def _undo_swap(args: argparse.Namespace, target) -> int:
     _shutil.copy2(target, bak)
     tmp.replace(target)
     from .. import journal as _journal
-    _journal.record(target, "undo", "applied", steps=1, backup=bak.name)
+    _journal.record(target, "undo", "applied", steps=1, backup=bak.name,
+                    note=getattr(args, "note", None))
     if args.json:
         _emit(_dumps(_stamp({"applied": True, "target": str(target),
                              "backup": str(bak), "steps": 1,
@@ -426,7 +493,7 @@ def _undo_walk(args: argparse.Namespace, target, steps: int) -> int:
     """
     stack = _backup_stack(target)
     if not stack:
-        bak = target.parent / (target.name + ".bak")
+        bak = _backups_dir(target) / (target.name + ".bak")
         raise _ExitWith(EXIT["NOT_FOUND"],
                         f"ERROR: no backup at {bak} (created by `akcli draw --apply`)")
     steps = min(steps, len(stack))
@@ -464,7 +531,8 @@ def _undo_walk(args: argparse.Namespace, target, steps: int) -> int:
         hi -= 1
     from .. import journal as _journal
     _journal.record(target, "undo", "applied", steps=steps,
-                    backup=positions[steps].name)
+                    backup=positions[steps].name,
+                    note=getattr(args, "note", None))
     if args.json:
         _emit(_dumps(_stamp({"applied": True, "target": str(target),
                              "backup": str(positions[steps]),
@@ -876,10 +944,10 @@ def _run_draw(args: argparse.Namespace, do_apply: bool) -> int:
     findings: list = []
     results = kwriter.apply(
         oplist, str(target), apply=do_apply, sources=sources, verify_out=findings,
-        # write a rotated <name>.bak next to the target on apply (the atomic write
-        # already guarantees the original is never corrupted; this is extra safety
-        # and the stack `akcli undo` walks). Depth from [project] backup_depth.
-        backup_dir=(target.parent if do_apply else None),
+        # write a rotated <name>.bak under .akcli/backups/ on apply (the atomic
+        # write already guarantees the original is never corrupted; this is extra
+        # safety and the stack `akcli undo` walks). Depth from [project] backup_depth.
+        backup_dir=(_backups_dir(target) if do_apply else None),
         backup_depth=_backup_depth(cfg),
         allow_open=bool(getattr(args, "allow_open", False)),
     )
@@ -916,7 +984,7 @@ def _run_draw(args: argparse.Namespace, do_apply: bool) -> int:
     elif code == EXIT["OK"]:
         status = "applied"
         status_line = (f"status: APPLIED — wrote {target.name} "
-                       f"(backup {target.name}.bak; `akcli undo` reverts)")
+                       f"(backup {_backup_label(target)}; `akcli undo` reverts)")
     else:
         status = "refused"
         status_line = "status: REFUSED — nothing written (fix the errors above)"
@@ -950,7 +1018,8 @@ def _run_draw(args: argparse.Namespace, do_apply: bool) -> int:
         op_count=len(oplist.get("ops", []) or []),
         net_diff=(None if net_lines is None
                   else {"equivalent": net_equiv, "risk": net_risk}),
-        backup=(f"{target.name}.bak" if status == "applied" else None),
+        note=getattr(args, "note", None),
+        backup=(_backup_label(target) if status == "applied" else None),
     )
 
     return code
@@ -983,9 +1052,19 @@ def register(sub, common) -> None:
                         "title after packing (keyed uuids replace stale "
                         "frames in place)")
     p.add_argument("--group-gap", dest="group_gap", type=float, metavar="MIL",
-                   help="vertical channel between groups (default 1200)")
+                   help="channel between group blocks, both axes with "
+                        "--page-width (default 1200; [arrange] group_gap)")
     p.add_argument("--row-width", dest="row_width", type=float, metavar="MIL",
                    help="wrap a group's shelf past this width (default 4000)")
+    p.add_argument("--page-width", dest="page_width", type=float, metavar="MIL",
+                   help="with --groups: pack group blocks side by side in 2D, "
+                        "wrapping past this width (default: single column; "
+                        "[arrange] page_width)")
+    p.add_argument("--allow-net-changes", dest="allow_net_changes",
+                   action="store_true",
+                   help="with --groups --apply: write even when the rigid "
+                        "re-layout would change net membership (default: "
+                        "refuse — the re-layout must be net-preserving)")
     p.add_argument("--grid", type=float, metavar="MIL",
                    help="nudge step in mils (default 100)")
     p.add_argument("--margin", type=float, metavar="MIL",
@@ -996,6 +1075,9 @@ def register(sub, common) -> None:
     p.add_argument("--allow-open", dest="allow_open", action="store_true",
                    help="write even when a KiCad GUI lock file is present "
                         "(File>Revert in KiCad afterwards)")
+    p.add_argument("--note", metavar="TEXT",
+                   help="free-form intent note recorded in the workspace "
+                        "journal (why this edit was made)")
     p.set_defaults(handler=_cmd_arrange)
 
     p = sub.add_parser("new", parents=[common],
@@ -1011,7 +1093,7 @@ def register(sub, common) -> None:
 
     p = sub.add_parser("undo", parents=[common],
                        help="restore a .kicad_sch from its rotated draw backups "
-                            "(<name>.bak..bakN; undo twice = redo)")
+                            "(.akcli/backups/<name>.bak..bakN; undo twice = redo)")
     p.add_argument("path", nargs="?", help="the .kicad_sch to restore")
     p.add_argument("--apply", action="store_true",
                    help="actually swap (default is a dry-run preview)")
@@ -1023,6 +1105,9 @@ def register(sub, common) -> None:
     p.add_argument("--allow-open", dest="allow_open", action="store_true",
                    help="swap even when a KiCad GUI lock file is present "
                         "(File>Revert in KiCad afterwards)")
+    p.add_argument("--note", metavar="TEXT",
+                   help="free-form intent note recorded in the workspace "
+                        "journal (why this edit was made)")
     p.set_defaults(handler=_cmd_undo)
 
     p = sub.add_parser("ops", parents=[common],
@@ -1055,6 +1140,9 @@ def register(sub, common) -> None:
     p.add_argument("--render", metavar="OUT.svg",
                    help="render the WOULD-BE sheet (dry-applied to a temp "
                         "copy) to an SVG preview — look before you --apply")
+    p.add_argument("--note", metavar="TEXT",
+                   help="free-form intent note recorded in the workspace "
+                        "journal (why this edit was made)")
     p.set_defaults(handler=_cmd_plan)
 
     p = sub.add_parser("draw", parents=[common],
@@ -1082,4 +1170,7 @@ def register(sub, common) -> None:
     p.add_argument("--render", metavar="OUT.svg",
                    help="render the resulting sheet (dry-applied to a temp "
                         "copy) to an SVG preview — look before you --apply")
+    p.add_argument("--note", metavar="TEXT",
+                   help="free-form intent note recorded in the workspace "
+                        "journal (why this edit was made)")
     p.set_defaults(handler=_cmd_draw)

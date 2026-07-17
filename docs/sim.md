@@ -487,7 +487,7 @@ would set on D4 in board.kicad_sch:
   ]
 }
 
-re-run with --write to apply (writes board.kicad_sch.bak; `akcli undo` reverts)
+re-run with --write to apply (writes .akcli/backups/board.kicad_sch.bak; `akcli undo` reverts)
 ```
 
 Add `--write` to commit through the KiCad writer (rotated `.bak`, connectivity

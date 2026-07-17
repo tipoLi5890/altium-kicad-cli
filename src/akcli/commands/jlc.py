@@ -235,18 +235,19 @@ def _cmd_jlc_bom(args: argparse.Namespace) -> int:
             oplist = {"protocol_version": 1, "target_format": "kicad",
                       "target_file": path.name, "ops": ops}
             findings: list = []
+            from .. import journal as _journal
             results = kwriter.apply(oplist, str(path), apply=True,
                                     sources=[], verify_out=findings,
-                                    backup_dir=path.parent)
+                                    backup_dir=_journal.backups_dir(path))
             code = _draw_exit(results, findings)
             # Every write goes through the journal — `akcli log` must never be
             # blind to a BOM auto-fix (same provenance as plan/draw/arrange).
-            from .. import journal as _journal
+            _bak = f"{_journal.DIR_NAME}/{_journal.BACKUP_DIR_NAME}/{path.name}.bak"
             _journal.record(
                 path, "jlc-bom-fix",
                 "applied" if code == EXIT["OK"] else "refused",
                 op_count=len(ops),
-                backup=(f"{path.name}.bak" if code == EXIT["OK"] else None))
+                backup=(_bak if code == EXIT["OK"] else None))
             if code != EXIT["OK"]:
                 return code
             fixed = [ln for ln in lines if ln.suggestion]

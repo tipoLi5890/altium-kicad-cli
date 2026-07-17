@@ -168,8 +168,8 @@ def apply(sch_path: os.PathLike | str, actions: list[dict],
     Non-``replace`` actions are ignored, so :func:`plan`'s full output can be
     passed straight in. With nothing to replace the file is left untouched.
     Otherwise the new document must pass the net-membership equivalence gate
-    (see module docstring) before ``<name>.bak`` is written (when ``backup``)
-    and the file is atomically replaced.
+    (see module docstring) before ``.akcli/backups/<name>.bak`` is written
+    (when ``backup``) and the file is atomically replaced.
 
     Returns ``{"path", "replaced": [lib_ids], "backup": path | None,
     "written": bool}``. Raises ``VERIFY_FAILED`` when the gate refuses,
@@ -229,7 +229,10 @@ def apply(sch_path: os.PathLike | str, actions: list[dict],
                  f"{len(lost)} net(s) lost [{_fmt_nets(lost)}], "
                  f"{len(gained)} gained [{_fmt_nets(gained)}] — refusing to write")
         if backup:
-            bak = p.with_name(p.name + ".bak")
+            from . import journal
+            bdir = journal.backups_dir(p)
+            bdir.mkdir(parents=True, exist_ok=True)
+            bak = bdir / (p.name + ".bak")
             shutil.copy2(p, bak)
             result["backup"] = str(bak)
         os.replace(tmp, p)

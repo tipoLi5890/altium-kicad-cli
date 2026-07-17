@@ -140,3 +140,34 @@ def test_layout_lint_textbox_over_symbol(tmp_path):
          "size": [400, 400]}]}, str(tgt), apply=True)
     assert all(r.status == "ok" for r in rs)
     assert "LAYOUT_TEXTBOX_OVER_SYMBOL" not in {f.code for f in layout.run(tgt)}
+
+
+def test_group_clearance_lint_fires_below_threshold(tmp_path):
+    # far-apart blocks: silent at 1000 mil, flagged at an absurd threshold
+    tgt = _seed_grouped(tmp_path, interleaved=False)
+    codes = {f.code for f in layout.run(tgt, group_clearance_mil=1000.0)}
+    assert layout.LAYOUT_GROUP_CLEARANCE not in codes
+    findings = [f for f in layout.run(tgt, group_clearance_mil=99999.0)
+                if f.code == layout.LAYOUT_GROUP_CLEARANCE]
+    assert findings and set(findings[0].refs) == {"block_a", "block_b"}
+
+
+def test_group_clearance_never_doubles_an_overlap(tmp_path):
+    # overlapping groups report LAYOUT_GROUP_OVERLAP only, even with clearance on
+    tgt = _seed_grouped(tmp_path, interleaved=True)
+    fs = layout.run(tgt, group_clearance_mil=99999.0)
+    codes = [f.code for f in fs
+             if f.code in (layout.LAYOUT_GROUP_OVERLAP,
+                           layout.LAYOUT_GROUP_CLEARANCE)]
+    assert codes == [layout.LAYOUT_GROUP_OVERLAP]
+
+
+def test_group_clearance_config_drives_check_cli(tmp_path, capsys):
+    tgt = _seed_grouped(tmp_path, interleaved=False)
+    (tmp_path / "akcli.toml").write_text(
+        "[check]\ngroup_clearance = 99999\n", encoding="utf-8")
+    capsys.readouterr()
+    rc = cli.main(["check", str(tgt), "--layout", "--json", "--exit-zero"])
+    assert rc == 0
+    doc = json.loads(capsys.readouterr().out)
+    assert any(f["code"] == "LAYOUT_GROUP_CLEARANCE" for f in doc["findings"])

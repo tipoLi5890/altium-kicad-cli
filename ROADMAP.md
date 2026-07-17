@@ -12,7 +12,7 @@ Windows live bridge into a running Altium instance) — not a symmetric conversi
 repositioning (2026-07) reshaped this roadmap: the Altium-interop items that earlier milestones
 treated as release-critical now live in a demand-driven optional track.
 
-## Where we are (v0.11.0)
+## Where we are (v0.12.0)
 
 Shipped and working today (details per release in [CHANGELOG.md](CHANGELOG.md)):
 
@@ -80,8 +80,12 @@ Shipped and working today (details per release in [CHANGELOG.md](CHANGELOG.md)):
   `akcli capabilities` (the self-describing surface manifest), `akcli render` (install-free SVG),
   the workspace write journal + `akcli log`, `akcli ops validate` + a PreToolUse draw guard,
   `read --summary`/`nets --match`/`--limit` output throttling, and structured per-op
-  `remediation` hints.
-- **Quality gates:** ~2 400 tests (parser fuzzing, round-trip netlist properties, live ngspice in
+  `remediation` hints. 0.12.0 additions: `akcli doc` (the pinout book), the `.akcli/` workspace
+  state root (journal + rotated undo backups + `--note` design-intent records,
+  [docs/agent-state.md](docs/agent-state.md)), 2D side-by-side group packing
+  (`arrange --groups --page-width`, `[arrange]` policy, `[check] group_clearance`), and the
+  enforced net-preservation gate on `arrange --groups --apply`.
+- **Quality gates:** ~2 600 tests (parser fuzzing, round-trip netlist properties, live ngspice in
   CI, Windows/macOS/Linux × Python 3.11–3.14), ruff + mypy (parts/ + calc/), a
   **docs-conformance gate** (every documented command line and count claim is executed/asserted in
   CI), wheel-install smoke, tag-driven GitHub Releases.
@@ -264,8 +268,9 @@ Goal: humans reviewing agent work get visuals and documents, not just JSON.
       base ref, post SARIF annotations (carried over from v0.9 — the CLI side of the gate is
       complete) (M)
 - [ ] Waveform panel in the `view` dashboard (the open half of v0.9's sim deepening) (M)
-- [ ] `akcli doc <file> -o book.md`: pinout book composing per-IC/connector pin tables, rail
-      summary (from `review tree`), and BOM (M)
+- [x] `akcli doc <file> -o book.md`: pinout book composing per-IC/connector pin tables, rail
+      summary (from `review tree`), and BOM — **shipped in 0.12.0** (deterministic Markdown +
+      `--json`; `--refs` widens the pin-table set) (M)
 
 **Exit criterion:** `/circuit-draw` can show a human what it placed without any EDA install, and a
 design review can start from a generated pinout book.

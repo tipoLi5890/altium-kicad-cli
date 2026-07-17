@@ -5,7 +5,8 @@ Two features that remove dogfooding friction from the write side:
 * ``new <file.kicad_sch>`` writes the smallest valid document the reader and
   ``draw`` accept — no more hand-written blank sheets. Refuses an existing file
   without ``--force``; validates ``--paper``; ``--json`` envelope.
-* ``draw --apply`` now rotates backups ``<name>.bak, .bak2 … .bak{depth}``
+* ``draw --apply`` rotates backups ``<name>.bak, .bak2 … .bak{depth}``
+  under the workspace's ``.akcli/backups/``
   (default depth 3). ``undo`` keeps its single-step swap (undo twice = redo),
   adds ``--list`` (show the stack) and ``--steps N`` (walk back N snapshots while
   leaving a one-step redo intact).
@@ -117,16 +118,17 @@ def test_draw_rotates_backups_up_to_depth(tmp_path):
     tgt = _copy_v8(tmp_path)
     for mpn in ("MPN-A", "MPN-B", "MPN-C", "MPN-D"):
         _apply_mpn(tmp_path, tgt, mpn)
-    # depth 3: .bak/.bak2/.bak3 exist, the 4th-oldest snapshot dropped
-    assert (tmp_path / "board.kicad_sch.bak").exists()
-    assert (tmp_path / "board.kicad_sch.bak2").exists()
-    assert (tmp_path / "board.kicad_sch.bak3").exists()
-    assert not (tmp_path / "board.kicad_sch.bak4").exists()
+    # depth 3: .bak/.bak2/.bak3 exist under .akcli/backups/, the 4th dropped
+    bdir = tmp_path / ".akcli" / "backups"
+    assert (bdir / "board.kicad_sch.bak").exists()
+    assert (bdir / "board.kicad_sch.bak2").exists()
+    assert (bdir / "board.kicad_sch.bak3").exists()
+    assert not (bdir / "board.kicad_sch.bak4").exists()
     # newest-first ordering: file=D, .bak=C, .bak2=B, .bak3=A
     assert '"MPN-D"' in tgt.read_text()
-    assert '"MPN-C"' in (tmp_path / "board.kicad_sch.bak").read_text()
-    assert '"MPN-B"' in (tmp_path / "board.kicad_sch.bak2").read_text()
-    assert '"MPN-A"' in (tmp_path / "board.kicad_sch.bak3").read_text()
+    assert '"MPN-C"' in (bdir / "board.kicad_sch.bak").read_text()
+    assert '"MPN-B"' in (bdir / "board.kicad_sch.bak2").read_text()
+    assert '"MPN-A"' in (bdir / "board.kicad_sch.bak3").read_text()
 
 
 # --------------------------------------------------------------------------- #
@@ -225,7 +227,7 @@ def test_backup_stack_survives_a_level_gap(tmp_path, capsys):
     tgt = _copy_v8(tmp_path)
     for mpn in ("MPN-A", "MPN-B", "MPN-C"):
         _apply_mpn(tmp_path, tgt, mpn)
-    bak1 = tmp_path / (tgt.name + ".bak")
+    bak1 = tmp_path / ".akcli" / "backups" / (tgt.name + ".bak")
     assert bak1.exists()
     bak1.unlink()                                    # simulate the gap
     assert main(["undo", str(tgt), "--list"]) == EXIT["OK"]
@@ -233,6 +235,20 @@ def test_backup_stack_survives_a_level_gap(tmp_path, capsys):
     assert ".bak2" in out and "no backups" not in out
     assert main(["undo", str(tgt), "--apply"]) == EXIT["OK"]
     assert '"MPN-A"' in tgt.read_text()              # restored from .bak2
+
+
+def test_undo_finds_legacy_backups_beside_the_file(tmp_path, capsys):
+    # Pre-0.12 stacks lived NEXT TO the file; with no .akcli/backups/ stack
+    # for this target, undo must still see and restore them.
+    tgt = _copy_v8(tmp_path)
+    _apply_mpn(tmp_path, tgt, "MPN-A")
+    bdir = tmp_path / ".akcli" / "backups"
+    legacy = tmp_path / (tgt.name + ".bak")
+    (bdir / (tgt.name + ".bak")).rename(legacy)      # simulate an old workspace
+    assert main(["undo", str(tgt), "--list"]) == EXIT["OK"]
+    assert "no backups" not in capsys.readouterr().out
+    assert main(["undo", str(tgt), "--apply"]) == EXIT["OK"]
+    assert '"MPN-A"' not in tgt.read_text()          # restored the original
 
 
 def test_config_backup_depth_key_is_accepted(tmp_path):

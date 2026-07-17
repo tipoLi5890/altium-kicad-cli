@@ -43,7 +43,7 @@ def test_plan_and_draw_record_entries(board: Path, capsys):
     assert ("draw", "applied") in cmds
     applied = next(e for e in entries if e["status"] == "applied")
     assert applied["ops_sha256"] and applied["op_count"] == 1
-    assert applied["backup"] == "board.kicad_sch.bak"
+    assert applied["backup"] == ".akcli/backups/board.kicad_sch.bak"
     assert applied["net_diff"] == {"equivalent": True, "risk": False}
 
 
@@ -81,6 +81,28 @@ def test_log_filters_by_file_and_cmd(board: Path, capsys):
     assert main(["log", str(board), "--cmd", "draw", "--json"]) == EXIT["OK"]
     doc = json.loads(capsys.readouterr().out)
     assert {e["cmd"] for e in doc["entries"]} == {"draw"}
+
+
+def test_note_records_design_intent(board: Path, capsys):
+    # --note records the WHY (design intent) next to the WHAT; `akcli log`
+    # prints it under the entry.
+    ops = str(board.parent / "ops.json")
+    assert main(["draw", str(board), "--ops", ops, "--apply",
+                 "--note", "add hello text"]) == EXIT["OK"]
+    capsys.readouterr()
+    entry = journal.read_entries(board)[-1]
+    assert entry["note"] == "add hello text"
+
+    assert main(["log", str(board.parent)]) == EXIT["OK"]
+    assert "note: add hello text" in capsys.readouterr().out
+
+
+def test_no_note_leaves_entries_unstamped(board: Path, capsys):
+    ops = str(board.parent / "ops.json")
+    main(["plan", str(board), "--ops", ops])
+    capsys.readouterr()
+    entry = journal.read_entries(board)[-1]
+    assert "note" not in entry
 
 
 def test_journal_env_off(board: Path, monkeypatch, capsys):

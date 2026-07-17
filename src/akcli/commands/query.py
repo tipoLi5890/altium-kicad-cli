@@ -568,6 +568,7 @@ def _cmd_groups_frame(args: argparse.Namespace, path) -> int:
     if not ops_list:
         _emit("no functional groups to frame")
         return EXIT["OK"]
+    from .. import journal as _journal_mod
     from ..writers import kicad as kwriter
     oplist = {"protocol_version": 1, "target_format": "kicad",
               "target_file": path.name, "ops": ops_list}
@@ -576,15 +577,16 @@ def _cmd_groups_frame(args: argparse.Namespace, path) -> int:
     results = kwriter.apply(
         oplist, str(path), apply=do_apply,
         sources=_draw_symbol_sources(args, cfg), verify_out=findings,
-        backup_dir=(path.parent if do_apply else None),
+        backup_dir=(_journal_mod.backups_dir(path) if do_apply else None),
         allow_open=bool(getattr(args, "allow_open", False)))
     from ..errors import EXIT as _EXIT
     ok = (all(r.status == "ok" for r in results)
           and not any(f.severity.value in ("error", "critical") for f in findings))
     if do_apply and ok:
-        from .. import journal as _journal
-        _journal.record(path, "groups-frame", "applied",
-                        op_count=len(ops_list), backup=f"{path.name}.bak")
+        _journal_mod.record(
+            path, "groups-frame", "applied", op_count=len(ops_list),
+            backup=f"{_journal_mod.DIR_NAME}/{_journal_mod.BACKUP_DIR_NAME}/"
+                   f"{path.name}.bak")
     frames = len(ops_list) // 2
     if args.json:
         _emit(_dumps(_stamp({

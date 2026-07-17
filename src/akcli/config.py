@@ -29,7 +29,15 @@ DEFAULT_GRID_NM: int = 50 * units.NM_PER_MIL
 
 # Allowed top-level tables/keys and their allowed sub-keys.
 _TOP_KEYS: frozenset[str] = frozenset(
-    {"project", "rail", "paths", "erc_waiver", "waiver", "check", "bom"}
+    {"project", "rail", "paths", "erc_waiver", "waiver", "check", "bom",
+     "arrange"}
+)
+# [arrange] — project-pinned group-layout policy (mils), the per-invocation
+# flags override: group_margin (inside a group), group_gap (between group
+# blocks, both axes), row_width (bundle-shelf wrap), page_width (group-block
+# wrap; setting it turns on 2D side-by-side packing).
+_ARRANGE_KEYS: frozenset[str] = frozenset(
+    {"group_margin", "group_gap", "row_width", "page_width"}
 )
 _BOM_KEYS: frozenset[str] = frozenset(
     {"coverage_floor", "coverage_min_parts", "min_stock", "classes",
@@ -37,7 +45,7 @@ _BOM_KEYS: frozenset[str] = frozenset(
 )
 _BOM_CLASSES_KEYS: frozenset[str] = frozenset({"no_part"})
 _CHECK_KEYS: frozenset[str] = frozenset(
-    {"pairs", "pair_suffixes", "bus_min_family"}
+    {"pairs", "pair_suffixes", "bus_min_family", "group_clearance"}
 )
 _PROJECT_KEYS: frozenset[str] = frozenset({"mcu_designator", "grid", "backup_depth"})
 _RAIL_KEYS: frozenset[str] = frozenset({"name", "voltage", "tolerance_pct"})
@@ -69,6 +77,7 @@ class Config:
     backup_depth: int | None = None    # [project] backup_depth; None = writer default
     check: dict = field(default_factory=dict)  # [check] table (pairs, pair_suffixes, ...)
     bom: dict = field(default_factory=dict)    # [bom] table (coverage_floor, classes, ...)
+    arrange: dict = field(default_factory=dict)  # [arrange] table (group_gap, page_width, ...)
 
 
 def _parse_grid(value: object) -> int:
@@ -209,6 +218,22 @@ def load_config(path: Path | str) -> Config:
         bmf = check_tbl["bus_min_family"]
         if not isinstance(bmf, int) or isinstance(bmf, bool) or bmf < 2:
             fail("BAD_CONFIG", "[check].bus_min_family must be an integer >= 2")
+    if "group_clearance" in check_tbl:
+        gc = check_tbl["group_clearance"]
+        if isinstance(gc, bool) or not isinstance(gc, (int, float)) or gc < 0:
+            fail("BAD_CONFIG",
+                 "[check].group_clearance must be a number >= 0 (mils; 0 = off)")
+
+    arrange_tbl = data.get("arrange", {})
+    if not isinstance(arrange_tbl, dict):
+        fail("BAD_CONFIG", "[arrange] must be a table")
+    _reject_unknown(arrange_tbl, _ARRANGE_KEYS, "[arrange]")
+    for key in _ARRANGE_KEYS:
+        if key in arrange_tbl:
+            v = arrange_tbl[key]
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or v <= 0:
+                fail("BAD_CONFIG",
+                     f"[arrange].{key} must be a positive number (mils)")
 
     bom_tbl = data.get("bom", {})
     if not isinstance(bom_tbl, dict):
@@ -251,4 +276,5 @@ def load_config(path: Path | str) -> Config:
         backup_depth=backup_depth,
         check=dict(check_tbl),
         bom=dict(bom_tbl),
+        arrange=dict(arrange_tbl),
     )

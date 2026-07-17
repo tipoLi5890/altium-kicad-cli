@@ -217,7 +217,8 @@ LOOK at the result before `--apply`.
 2. `akcli draw <target> --ops ops.json` — **dry-run by default**: per-op
    results plus the connectivity verification plus the same net diff.
 3. `... --apply` — atomic snapshot → temp → verify-on-temp → `os.replace`,
-   with a `<target>.bak` alongside. Any op error or connectivity ERROR
+   with a rotated `<target>.bak` under `.akcli/backups/`. Any op error or
+   connectivity ERROR
    (`DANGLING_ENDPOINT`, `DANGLING_BUS_ENTRY`, `DUPLICATE_UUID`,
    `UNRESOLVED_LIB_ID`, ...) refuses the write (exit 6). Add `--strict-nets`
    to also refuse when the net diff shows a split/merge touching a **named**

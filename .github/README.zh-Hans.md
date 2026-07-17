@@ -325,8 +325,8 @@ JLCPCB/LCSC 元件搜索 + BOM 可购性 + **规格书抓取**、60 个附标准
 
 - `check`/`diff`/`pinmap` findings 的正式 JSON Schema；查无结果的机器可判别化。
 - 完整 **ERC 引脚类型冲突矩阵**（schematic-vs-PCB 同步检查现已以 `akcli verify` 形式提供）。
-- 纯标准库的 **SVG 原理图渲染**与自动生成的 pinout book。
-- 为原理图 PR 把关的 GitHub **Action**（check + diff + intent + sim 断言）。
+- 为原理图 PR 把关的 GitHub **Action**（check + diff + intent + sim 断言）；
+  纯标准库的 SVG 渲染（`akcli render`）与 pinout book（`akcli doc`）均已交付。
 - *可选、按需推进：* Altium 轨道——二进制 `.SchLib` 解码器、其余 `.PcbDoc` 段、
   Windows **即时驱动**（scaffold 待验证）。
 - 原生 **MCP 服务器**（按决策暂缓；目前代理直接驱动 CLI）。

@@ -48,8 +48,9 @@ Steps (use the Bash tool; `akcli` is on PATH, else `PYTHONPATH=src python3 -m ak
 
 4. **Apply only when the user explicitly asked to write:**
    `akcli draw <board.kicad_sch> --ops ops.json --apply [--symbols <path>]`.
-   The write is atomic (snapshot → temp → verify-on-temp → `os.replace`) and writes a `<target>.bak`
-   copy, and is rejected if connectivity verification fails — so the original is never corrupted.
+   The write is atomic (snapshot → temp → verify-on-temp → `os.replace`) and writes a rotated
+   `<target>.bak` copy under the workspace's `.akcli/backups/` (walked by `akcli undo`), and is
+   rejected if connectivity verification fails — so the original is never corrupted.
 
 5. **Verify after writing:** re-read with `akcli read <board.kicad_sch>` / `akcli net ...` to
    confirm the result matches intent; `akcli check` covers the group layout lints

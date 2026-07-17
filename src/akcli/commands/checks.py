@@ -46,7 +46,8 @@ def _run_check(name: str, sch, cfg, args: argparse.Namespace) -> list:
         return bom.run(sch, cfg)
     if name == "layout":
         from ..checks import layout
-        return layout.run(args.path)
+        clearance = (getattr(cfg, "check", None) or {}).get("group_clearance", 0)
+        return layout.run(args.path, group_clearance_mil=float(clearance or 0))
     if name == "nets":
         from ..checks import nets
         out = nets.run(sch, cfg)

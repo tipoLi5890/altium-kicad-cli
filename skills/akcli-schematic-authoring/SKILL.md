@@ -295,9 +295,14 @@ file open (a `~<name>.lck` lock file). After confirming it is safe, use
 `remediation` field saying what to do next. On `OP_UNSUPPORTED`,
 `PROTOCOL_MISMATCH`, or geometry errors: stop and report, do not retry
 blindly. After a successful `--apply`, `akcli render board.kicad_sch` gives
-you an SVG to *look at* what you placed, and `akcli log .` shows the write
-journal (every plan/draw/undo with its op-list hash and net-diff verdict). Do not pass `--dry-run` — it is accepted but inert; omitting
-`--apply` already is the dry run.
+you an SVG to *look at* what you placed, `akcli doc board.kicad_sch` builds
+the Markdown pinout book (pin→net tables + rails + BOM) for human hand-off,
+and `akcli log .` shows the write journal (every plan/draw/undo with its
+op-list hash and net-diff verdict). Pass `--note "why"` on writes so the
+journal carries the design intent, not just the mechanics — resuming a
+session starts from `akcli log .` + `akcli read` + `akcli check --intent`,
+never from memory (see docs/agent-state.md). Do not pass `--dry-run` — it is
+accepted but inert; omitting `--apply` already is the dry run.
 
 **Read the "Net changes" block on every plan/draw** — the before/after
 netlists are diffed by pin membership:
