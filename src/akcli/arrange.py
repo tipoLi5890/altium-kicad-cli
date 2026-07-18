@@ -326,8 +326,8 @@ def plan_groups(path: str | Path, groups: dict[str, list[str]], *,
 
     # pass 2 — place the blocks: a single column by default, or a 2D shelf
     # (wrap past page_width) with group_gap guaranteed on BOTH axes.
-    moves: list[Move] = []
     group_report: list[dict] = []
+    finals: list[tuple[SymInfo, tuple[float, float]]] = []
     gx, gy = ox, oy
     row_bottom = oy
     for blk in blocks:
@@ -335,9 +335,7 @@ def plan_groups(path: str | Path, groups: dict[str, list[str]], *,
             gx = ox                                        # wrap to the next band
             gy = row_bottom + group_gap
         for m, dx, dy in blk["rel"]:
-            to = (m.at[0] + dx + gx, m.at[1] + dy + gy)
-            if (round(to[0]), round(to[1])) != (round(m.at[0]), round(m.at[1])):
-                moves.append(Move(ref=m.ref, frm=m.at, to=to))
+            finals.append((m, (m.at[0] + dx + gx, m.at[1] + dy + gy)))
         group_report.append({"group": blk["group"], "anchors": blk["anchors"],
                              "at": [gx, gy], "size": [blk["w"], blk["h"]]})
         row_bottom = max(row_bottom, gy + blk["h"])
@@ -345,6 +343,25 @@ def plan_groups(path: str | Path, groups: dict[str, list[str]], *,
             gx += blk["w"] + group_gap
         else:
             gy = gy + blk["h"] + group_gap
+
+    # pass 3 — emit TWO-PHASE moves through a staging band below everything.
+    # Applied sequentially, direct moves can land an early bundle's slot on a
+    # not-yet-moved bundle's pin coordinates; the later mover then samples its
+    # PRE-move tips and carries the parked bundle's labels away with it. A
+    # uniform shift into empty space first (relative geometry preserved), then
+    # per-bundle placement from there, makes label carrying collision-free.
+    moves: list[Move] = []
+    moved = [(m, to) for m, to in finals
+             if (round(to[0]), round(to[1])) != (round(m.at[0]), round(m.at[1]))]
+    if moved:
+        orig_bot = max(s.box.y1 for s in syms)
+        final_bot = max(to[1] + (m.box.y1 - m.at[1]) for m, to in finals)
+        stage = max(orig_bot, final_bot) - oy + max(group_gap, margin)
+        for m, _to in moved:
+            moves.append(Move(ref=m.ref, frm=m.at,
+                              to=(m.at[0], m.at[1] + stage)))
+        for m, to in moved:
+            moves.append(Move(ref=m.ref, frm=(m.at[0], m.at[1] + stage), to=to))
 
     return {
         "moves": moves,

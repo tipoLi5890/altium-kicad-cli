@@ -12,7 +12,7 @@ Windows live bridge into a running Altium instance) — not a symmetric conversi
 repositioning (2026-07) reshaped this roadmap: the Altium-interop items that earlier milestones
 treated as release-critical now live in a demand-driven optional track.
 
-## Where we are (v0.12.0)
+## Where we are (v0.13.0)
 
 Shipped and working today (details per release in [CHANGELOG.md](CHANGELOG.md)):
 
@@ -84,7 +84,11 @@ Shipped and working today (details per release in [CHANGELOG.md](CHANGELOG.md)):
   state root (journal + rotated undo backups + `--note` design-intent records,
   [docs/agent-state.md](docs/agent-state.md)), 2D side-by-side group packing
   (`arrange --groups --page-width`, `[arrange]` policy, `[check] group_clearance`), and the
-  enforced net-preservation gate on `arrange --groups --apply`.
+  enforced net-preservation gate on `arrange --groups --apply`. 0.13.0 additions:
+  `arrange --groups --propose-labels` (the refusal -> label-on-pin repair-draft loop, proven on a
+  real 88-part board now in the corpus), collision-free two-phase group moves, bare
+  `check --intent` via `[paths] intent`, the `doctor` workspace probe, config-surface/schema-table
+  conformance gates, and agent-eval task 07 (safe re-pack post-check).
 - **Quality gates:** ~2 600 tests (parser fuzzing, round-trip netlist properties, live ngspice in
   CI, Windows/macOS/Linux × Python 3.11–3.14), ruff + mypy (parts/ + calc/), a
   **docs-conformance gate** (every documented command line and count claim is executed/asserted in
@@ -242,7 +246,7 @@ a tunable rule engine reaching across artifacts.
 - [x] Sim deepening — `AKCLI_OPAMP` + `AKCLI_NMOS_SW`/`AKCLI_PMOS_SW` (engine-validated in
       CI), the `SIM_ZERO_PASSIVE`/`SIM_STIMULUS_SHORTED` solver-trap warnings, and
       **`review testbench`** — **shipped in 0.9.0**; the waveform panel in the `view`
-      dashboard moves to v0.10 (M)
+      dashboard is deferred by decision (2026-07) (M)
 
 - [x] `--json` machine-readable failure envelope on every exit path (code recovery from
       wrapped errors, remediation for every code incl. EXIT pseudo-codes) — **shipped in 0.9.0** (M)
@@ -250,7 +254,7 @@ a tunable rule engine reaching across artifacts.
       mechanically (AST scan) in CI — **shipped in 0.9.0** (S)
 - [x] Review-rule calibration baseline replayed in CI (`tools/corpus_replay.py` +
       `tests/golden/corpus_replay_baseline.json`) — **shipped in 0.9.0** (S)
-- [x] Agent-loop eval harness (`tools/agent_eval/` — five ground-truthed design tasks, scored
+- [x] Agent-loop eval harness (`tools/agent_eval/` — seven ground-truthed design tasks, scored
       through the real safety rails; references CI-pinned at 100%) — **shipped in 0.9.0** (M)
 
 **Exit criterion:** a schematic PR can be gated end-to-end (check + review + diff + intent + sim
@@ -264,16 +268,13 @@ Goal: humans reviewing agent work get visuals and documents, not just JSON.
       junctions, labels) for install-free before/after review — **shipped in 0.9.0 as
       `akcli render`** (connectivity-true, synthesized bodies, per-sheet blocks, deterministic);
       pixel-faithful symbol artwork and a `view live` integration stay open (L)
-- [ ] GitHub Action: run `check`/`review` on changed `.kicad_sch`/`.SchDoc`, `diff` against the
-      base ref, post SARIF annotations (carried over from v0.9 — the CLI side of the gate is
-      complete) (M)
-- [ ] Waveform panel in the `view` dashboard (the open half of v0.9's sim deepening) (M)
 - [x] `akcli doc <file> -o book.md`: pinout book composing per-IC/connector pin tables, rail
       summary (from `review tree`), and BOM — **shipped in 0.12.0** (deterministic Markdown +
       `--json`; `--refs` widens the pin-table set) (M)
+- GitHub Action and the `view` waveform panel — **deferred by decision (2026-07)**, see below.
 
-**Exit criterion:** `/circuit-draw` can show a human what it placed without any EDA install, and a
-design review can start from a generated pinout book.
+**Exit criterion (met in 0.12.0):** `/circuit-draw` can show a human what it placed without any
+EDA install (`render` + `doc`), and a design review can start from a generated pinout book.
 
 ### v1.0 — Contracts frozen, released
 
@@ -314,15 +315,20 @@ repositioning they proceed only if real usage pulls them:
 
 - **MCP server** (`akcli mcp`) — the plain CLI + plugin skills serve agents today; revisit on demand.
 - **PyPI publishing** — see v1.0; the mechanism is built, the decision is deliberate.
+- **GitHub Action** (2026-07) — check/review/diff + SARIF on schematic PRs. The CLI side (SARIF
+  output, exit codes, `--fail-on`) is complete; a workflow YAML can be added the day a repo
+  actually gates PRs. Shelved until then.
+- **`view` waveform panel** (2026-07) — sim runs and assertions work headless; the dashboard
+  visualization is deferred until interactive waveform inspection is actually needed.
 
 ## Theme tracks
 
 | Track | v0.8 (shipped) | v0.9–v0.10 | v1.0 / optional |
 |---|---|---|---|
 | **KiCad authoring & safety** | `arrange --groups`, `move_component` carry, `check-lock` | PreToolUse hook, honest flags | contract freeze |
-| **Verification & checks** | `findings.schema.json`, sch↔PCB `verify` | diff/pinmap schemas, ERC matrix, diff-pairs, golden corpus, GitHub Action | frozen contracts in CI |
+| **Verification & checks** | `findings.schema.json`, sch↔PCB `verify` | diff/pinmap schemas, ERC matrix, diff-pairs, golden corpus | frozen contracts in CI; GitHub Action (deferred) |
 | **Design review** | full engine M1–M9 (signal/validation/pcb/emc/domain/gerber, facts, propose/diff/tree, validate, `--review-policy`) | more domain families, PDN/EMC depth | lifecycle drivers |
-| **Simulation** | — | behavioral models, waveform panel, review testbenches | — |
+| **Simulation** | — | behavioral models, review testbenches | waveform panel (deferred) |
 | **Review UX** | `review tree`, markdown/SARIF reports | stdlib SVG render, pinout book | — |
 | **Parts & manufacturing** | facts store from `jlc datasheet` | `/circuit-parts` command | — |
 | **Altium import** | `.PcbLib` reading | — | optional track (SchLib decoder, PcbDoc sections, live bridge) |

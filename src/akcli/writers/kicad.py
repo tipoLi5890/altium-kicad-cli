@@ -1791,6 +1791,19 @@ def _op_move_component(doc, op, idx, src_libs, path, ctx) -> list[str]:
 
     carried_labels = carried_wires = 0
     if pins and (dx or dy):
+        # Pin-tip COINCIDENCE disambiguation: when another instance's pin sits
+        # on one of the mover's tips, a label there names BOTH pins — the
+        # mover must leave one label behind per foreign pin (else it carries
+        # the stayer's name away and the stayer's net silently splits). With
+        # the label-on-pin discipline (one label per member pin) every pin
+        # keeps exactly one name through any move order.
+        leave_at: dict = {}
+        foreign_syms = [s for s in _placed_symbols(doc)
+                        if _symbol_reference(s) != ref]
+        for fsym in foreign_syms:
+            for tip in _instance_pin_points_nm(doc, ctx, fsym):
+                if tip in pins:
+                    leave_at[tip] = leave_at.get(tip, 0) + 1
         for c in doc.children or []:
             if not c.is_list or not (c.children or []):
                 continue
@@ -1798,6 +1811,10 @@ def _op_move_component(doc, op, idx, src_libs, path, ctx) -> list[str]:
             if carry_labels and head in _CARRY_LABEL_TAGS:
                 a = c.find("at")
                 if a is not None and _at_nm(a) in pins:
+                    pos = _at_nm(a)
+                    if leave_at.get(pos, 0) > 0:
+                        leave_at[pos] -= 1       # the stayer keeps this one
+                        continue
                     _translate_at(c, dx, dy)
                     carried_labels += 1
             elif carry_wires and head in ("wire", "bus"):

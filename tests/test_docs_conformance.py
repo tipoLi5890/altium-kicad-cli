@@ -226,3 +226,51 @@ def test_documented_counts_match_registry(
         f"{rel}:{lineno}: doc claims {claimed} {kind}, "
         f"registry has {expected}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# config-surface gate: every accepted top-level akcli.toml table must be
+# documented in SPEC §3.11 AND exercised by examples/akcli.toml.example —
+# a new config table cannot ship undocumented.
+# --------------------------------------------------------------------------- #
+def _toml_tables(text: str) -> set[str]:
+    out: set[str] = set()
+    for line in text.splitlines():
+        m = re.match(r"\s*\[\[?([a-z_]+)", line)
+        if m:
+            out.add(m.group(1))
+    return out
+
+
+def test_config_tables_documented_in_spec_and_example() -> None:
+    from akcli.config import _TOP_KEYS, load_config
+
+    spec = (_ROOT / "docs" / "SPEC.md").read_text(encoding="utf-8")
+    m = re.search(r"### 3\.11 Config schema.*?```toml\n(.*?)```", spec, re.S)
+    assert m, "SPEC.md lost its §3.11 config schema toml block"
+    spec_tables = _toml_tables(m.group(1))
+
+    example_path = _ROOT / "examples" / "akcli.toml.example"
+    example_tables = _toml_tables(example_path.read_text(encoding="utf-8"))
+
+    missing_spec = set(_TOP_KEYS) - spec_tables
+    missing_example = set(_TOP_KEYS) - example_tables
+    assert not missing_spec, \
+        f"config tables absent from SPEC §3.11: {sorted(missing_spec)}"
+    assert not missing_example, \
+        f"config tables absent from examples/akcli.toml.example: {sorted(missing_example)}"
+    # and the example must actually parse under the real validator
+    load_config(example_path)
+
+
+# --------------------------------------------------------------------------- #
+# schema-table gate: every published schemas/*.json appears in SPEC §3.12.
+# --------------------------------------------------------------------------- #
+def test_schema_files_listed_in_spec() -> None:
+    spec = (_ROOT / "docs" / "SPEC.md").read_text(encoding="utf-8")
+    m = re.search(r"### 3\.12 Schemas.*?(?=\n## |\n---)", spec, re.S)
+    assert m, "SPEC.md lost its §3.12 schema section"
+    section = m.group(0)
+    published = sorted(f.name for f in (_ROOT / "schemas").glob("*.json"))
+    missing = [name for name in published if f"`{name}`" not in section]
+    assert not missing, f"schemas absent from SPEC §3.12 table: {missing}"

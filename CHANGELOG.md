@@ -30,6 +30,41 @@ All notable changes to `akcli` are documented here. The format is based on
 
 When in doubt, prefer additive, backwards-compatible changes and leave the version contracts untouched.
 
+## [0.13.0] - 2026-07-18
+
+### Added — repair loop, contract gates, real-board corpus
+- **`arrange --groups --propose-labels OUT.json`** — turns a net-preservation
+  refusal into a repair draft: `add_net_label` on every member pin of each
+  named multi-bundle net, `delete_object` for the wire clusters those labels
+  make redundant, and re-seating of stranded `#` satellites (PWR_FLAG,
+  mid-wire ports) onto a pin of their net. Never touches the file — the
+  draft goes back through `plan`/`draw`. Proven end-to-end on the real
+  88-part/10-group insole pod board, now a committed corpus fixture
+  (`tests/fixtures/corpus/pod_insole.kicad_sch` + `tests/test_corpus_pod.py`).
+- **`check --intent` (bare)** falls back to `[paths] intent` in `akcli.toml`
+  — the project's standing intent contract.
+- **`akcli doctor` workspace probe** — flags legacy beside-the-file backup
+  stacks, leftover KiCad `~*.lck` lock files, and an un-gitignored `.akcli/`
+  (advisory; never `--require`-gatable).
+- **Agent-eval task 07 (safe re-pack)** + a `postcheck_arrange.json` harness
+  hook: the drawn sheet must survive `arrange --groups --apply` (the
+  net-preservation gate) with the ground-truth nets intact.
+- **Config-surface + schema-table conformance gates**: every accepted
+  `akcli.toml` top-level table must appear in SPEC §3.11 AND
+  `examples/akcli.toml.example` (which must load); every `schemas/*.json`
+  must appear in SPEC §3.12 — both were stale, both are now gated.
+- **mypy beachhead** extends to `config.py` and `arrange.py`.
+
+### Fixed
+- **`arrange --groups` label carrying is now collision-free**: moves run in
+  two phases through a staging band (a later mover's original pins can no
+  longer capture labels an earlier mover parked at its final slot), and at
+  genuinely coincident pin tips the writer leaves one label behind per
+  staying pin — both failure modes were observed on the real pod board.
+- SPEC §3.11/§3.12 and `examples/akcli.toml.example` caught up with the
+  actual config surface (`[check]`, `[bom]`, `[[waiver]]`, `[arrange]`,
+  `grid`, `backup_depth`) and the 12 published schemas.
+
 ## [0.12.0] - 2026-07-17
 
 ### Added — group layout: 2D packing + clearance policy

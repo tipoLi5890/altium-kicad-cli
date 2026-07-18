@@ -9,5 +9,28 @@
     "codes": [
       "REVIEW_RC_CUTOFF"
     ]
+  },
+  "pod_insole.kicad_sch": {
+    "fingerprints": [
+      "0a4ffdc8460e69518d736ded8e32501d",
+      "1263fcdd392062085741287b56985c0c",
+      "32150da953bd0db7fbdc3c30c54f636e",
+      "8fb96b97a67e56ed57903e160e6b8597",
+      "a827ca83be43d4676bb6c5628b606cfa",
+      "adac07eac6c84b1eb5b6d2288f27381a",
+      "c255310b9f30b3e6172dd72ba6dc1831",
+      "ca11aa7f7fd8dbe22362d2fc28a480e2",
+      "caba728eb30f768dbba07065e399e16a",
+      "e694efce3b51ed6ddb4b21426b7674f0",
+      "f4bd2062b42db69894de8994fa89510f"
+    ],
+    "severity_hist": {
+      "info": 1,
+      "warning": 10
+    },
+    "codes": [
+      "REVIEW_CONN_UNPROTECTED",
+      "REVIEW_RC_CUTOFF"
+    ]
   }
 }

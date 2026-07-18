@@ -87,6 +87,55 @@ def _check_schemas() -> tuple[bool, str, str]:
                 "reinstall akcli — package data appears incomplete")
 
 
+def _check_workspace() -> tuple[bool, str, str]:
+    """Hygiene of the CURRENT directory as an akcli schematic workspace.
+
+    Advisory (never CI-gating): flags legacy pre-0.12 beside-the-file backup
+    stacks, leftover KiCad GUI lock files, and an untracked-state `.akcli/`
+    that no reachable .gitignore excludes.
+    """
+    from pathlib import Path
+    cwd = Path.cwd()
+    issues: list[str] = []
+    hints: list[str] = []
+
+    legacy = sorted(p.name for p in cwd.glob("*.kicad_sch.bak*"))
+    if legacy:
+        issues.append(f"{len(legacy)} legacy beside-the-file backup(s) "
+                      f"(e.g. {legacy[0]})")
+        hints.append("new backups live in .akcli/backups/ — `akcli undo "
+                     "--list` still finds the legacy stack; delete it once "
+                     "that history is no longer needed")
+
+    locks = sorted(p.name for p in cwd.glob("~*.lck"))
+    if locks:
+        issues.append(f"{len(locks)} KiCad GUI lock file(s) "
+                      f"(e.g. {locks[0]})")
+        hints.append("close KiCad, or delete the ~*.lck if no KiCad is "
+                     "running (a stale lock makes writes demand --allow-open)")
+
+    if (cwd / ".akcli").is_dir():
+        ignored = False
+        for d in [cwd, *cwd.parents]:
+            gi = d / ".gitignore"
+            try:
+                if gi.is_file() and ".akcli" in gi.read_text(encoding="utf-8"):
+                    ignored = True
+                    break
+            except OSError:
+                pass
+            if (d / ".git").exists():
+                break
+        if not ignored:
+            issues.append(".akcli/ not covered by any reachable .gitignore")
+            hints.append("add `.akcli/` to .gitignore — journal and undo "
+                         "backups are derived state, not design sources")
+
+    if not issues:
+        return True, "clean workspace", ""
+    return False, "; ".join(issues), "; ".join(hints)
+
+
 def _check_network() -> tuple[bool, str, str]:
     import urllib.error
     import urllib.request
@@ -114,6 +163,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         "kicad-cli": _check_kicad_cli(),
         "ngspice": _check_ngspice(),
         "config": _check_config(),
+        "workspace": _check_workspace(),
     }
     if getattr(args, "network", False):
         checks["network"] = _check_network()

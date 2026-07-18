@@ -371,11 +371,12 @@ differential-pair/bus continuity rules, pure-stdlib **SVG schematic rendering** 
 and version-tolerant Altium/KiCad readers. The forward plan (v0.9 → v1.0, with exit criteria)
 lives in **[ROADMAP.md](ROADMAP.md)**. Headline items still ahead:
 
-- A GitHub **Action** gating schematic PRs (check + review + diff + intent + sim assertions);
-  the pinout book (`akcli doc`) and SVG rendering (`akcli render`) already ship.
+- The **contract freeze audit** toward v1.0 — the pinout book (`akcli doc`) and SVG rendering
+  (`akcli render`) already ship.
 - *Optional, demand-driven:* the Altium track — binary `.SchLib` decoder, remaining `.PcbDoc`
   sections, and the Windows **live driver** (scaffold pending validation).
-- A native **MCP server** (deferred by decision; the plain CLI serves agents today).
+- *Deferred by decision:* a GitHub **Action** gating schematic PRs, the `view` waveform panel,
+  and a native **MCP server** (the plain CLI serves agents today).
 
 ---
 

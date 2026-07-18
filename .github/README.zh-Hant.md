@@ -328,11 +328,12 @@ ngspice 上的 SPICE deck、斷言、角點掃描、規格書擬合模型）、J
 
 - `check`／`diff`／`pinmap` findings 的正式 JSON Schema；查無結果的機器可判別化。
 - 完整 **ERC pin 型別衝突矩陣**（schematic-vs-PCB 同步檢查現已以 `akcli verify` 形式提供）。
-- 為電路圖 PR 把關的 GitHub **Action**（check + diff + intent + sim 斷言）；
-  純標準函式庫的 SVG 渲染（`akcli render`）與 pinout book（`akcli doc`）均已出貨。
+- 通往 v1.0 的 **contract freeze audit**；純標準函式庫的 SVG 渲染（`akcli render`）
+  與 pinout book（`akcli doc`）均已出貨。
 - *選配、依需求推進：* Altium 軌道——二進位 `.SchLib` 解碼器、其餘 `.PcbDoc` 區段、
   Windows **即時驅動**（scaffold 待驗證）。
-- 原生 **MCP server**（依決策暫緩；目前代理直接驅動 CLI）。
+- *依決策暫緩：* 為電路圖 PR 把關的 GitHub **Action**、`view` 波形面板、
+  原生 **MCP server**（目前代理直接驅動 CLI）。
 
 ---
 

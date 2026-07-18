@@ -87,6 +87,14 @@ def _cmd_check(args: argparse.Namespace) -> int:
     if getattr(args, "pairs", False):
         which.append("pairs")
     intent_file = getattr(args, "intent", None)
+    if intent_file == "@config":
+        # bare `--intent`: the project's standing intent contract from config
+        intent_file = cfg.paths.get("intent")
+        if not intent_file:
+            raise _ExitWith(
+                EXIT["USAGE"],
+                "ERROR: --intent given without a file and no [paths] intent "
+                "in akcli.toml — pass --intent FILE or add the config key")
     contract_file = getattr(args, "contract", None)
     if not which and not intent_file and not contract_file:
         # --intent/--contract alone are pure assertions, like any other selector.
@@ -460,9 +468,10 @@ def register(sub, common) -> None:
     p.add_argument("--pairs", action="store_true",
                    help="run differential-pair / bus-continuity checks "
                         "(_P/_N, D+/D-, CAN_H/_L partners; D0..D7 index gaps)")
-    p.add_argument("--intent", metavar="FILE",
+    p.add_argument("--intent", metavar="FILE", nargs="?", const="@config",
                    help="assert a JSON design-intent file (see `akcli nets "
-                        "--intent-snapshot`) against the built netlist")
+                        "--intent-snapshot`) against the built netlist; bare "
+                        "--intent uses [paths] intent from akcli.toml")
     p.add_argument("--contract", metavar="FILE",
                    help="assert a TOML design-contract file (require/forbid "
                         "pin-net, pin-pair topology, values, NC, approved "

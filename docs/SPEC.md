@@ -575,6 +575,8 @@ neither copied nor consulted.
 ```toml
 [project]
 mcu_designator = "U3"
+grid = "50mil"          # schematic pin grid: bare number = mils, or "Nmil"/"Nmm"
+backup_depth = 3        # rotated .akcli/backups/ depth, 1..99
 
 [[rail]]
 name = "V3V3"
@@ -585,16 +587,49 @@ tolerance_pct = 5
 schematic = "hardware/main.SchDoc"   # resolved relative to THIS file's dir
 dts       = "firmware/board.dts"
 pinout_md = "docs/pinout.md"
+intent    = "intent.json"            # default for `check --intent` (flag overrides)
 
-[[erc_waiver]]
+[[erc_waiver]]                       # legacy ERC-only waiver (back-compat alias)
 net    = "LED1_GPIO_RD"
 rule   = "driver_conflict"
 reason = "LED1 shares MCP73831 open-drain STAT (P0.25) by design; FW reads it as input"
+
+[[waiver]]                           # checker-agnostic waiver (report.apply_waivers)
+code     = "PAIR_INCOMPLETE"         # finding code or fnmatch glob
+refs     = ["USB_D_P"]               # optional ref filter (string or list)
+severity = "off"                     # note | info | off
+reason   = "single-ended debug tap by design"
+
+[check]
+pairs = true                         # diff-pair/bus continuity in the default set
+pair_suffixes = [["_P", "_N"]]       # replaces the suffix table
+bus_min_family = 4                   # BUS_GAP threshold
+group_clearance = 1000               # mils; LAYOUT_GROUP_CLEARANCE floor (0 = off)
+
+[bom]
+coverage_floor = 0.9                 # 0..1; jlc bom coverage gate
+coverage_min_parts = 5
+min_stock = 100
+extended_fee = 3.0
+[bom.classes]
+no_part = ["TP", "FID", "MH"]        # structural refdes prefixes, never sourced
+
+[arrange]                            # group-layout policy (mils); flags override
+group_margin = 200                   # clearance between bundles inside a group
+group_gap = 1000                     # channel between group blocks, both axes
+row_width = 4000                     # wrap a group's internal shelf
+page_width = 20000                   # 2D side-by-side packing wrap (omit = single column)
 ```
 
 `config.load_config` rejects unknown keys → `BAD_CONFIG`; discovery walks up from cwd; `-C/--config` overrides.
+Every top-level config table is asserted present in this block AND in `examples/akcli.toml.example`
+by the config-surface gate in `tests/test_docs_conformance.py`, so a new table cannot ship undocumented.
 
 ### 3.12 Schemas (`schemas/`)
+
+Mirrored byte-identically into `src/akcli/schemas/` (wheel-packaged); the mirror and this
+table are gated — every `schemas/*.json` file must appear here (`tests/test_docs_conformance.py`)
+and in the packaged mirror (`tests/test_schema_exports.py`).
 
 | File | Purpose |
 |---|---|
@@ -602,6 +637,14 @@ reason = "LED1 shares MCP73831 open-drain STAT (P0.25) by design; FW reads it as
 | `ops.capabilities.json` | per-op executor support matrix (KiCad writer vs Altium live) |
 | `schematic.schema.json` | `Schematic` export shape + `schema_version` |
 | `netlist.schema.json` | net membership + Altium net-naming rules (same-name merge, priority, single-pin gating) |
+| `diff.schema.json` | `akcli diff --json` findings envelope |
+| `pinmap.schema.json` | `akcli pinmap --json` findings envelope (pin→net rows + expected-table mismatches) |
+| `draw-result.schema.json` | `plan`/`draw --json` per-op results + connectivity + net diff |
+| `findings.schema.json` | `review analyze --json` confidence-graded findings + evidence envelope |
+| `datasheet-facts.schema.json` | facts store: PDF sha256+page-pinned component facts |
+| `proposals.schema.json` | `review propose --json` fix drafts (op-list/contract/sim) |
+| `sim.schema.json` | `akcli sim` assertion document + result envelope |
+| `doc.schema.json` | `akcli doc --json` pinout book (pin tables + rails + BOM) |
 
 ---
 

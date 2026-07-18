@@ -7,6 +7,10 @@
 [project]
 # Designator of the MCU whose pin->net mapping `akcli pinmap` reports.
 mcu_designator = "U3"
+# Schematic pin grid the net checks measure against: bare number = mils, or "Nmil"/"Nmm".
+grid = "50mil"
+# Rotated undo-backup depth under .akcli/backups/ (1..99; default 3).
+backup_depth = 3
 
 # One [[rail]] table per power rail. `akcli power` enumerates rails and sanity-checks voltages;
 # `akcli check` uses rail names for net-name-based power/ground detection.
@@ -20,6 +24,8 @@ tolerance_pct = 5
 schematic = "hardware/altium/main.SchDoc"
 dts       = "firmware/boards/mcu/board.dts"
 pinout_md = "hardware/docs/pinout.md"
+# Design-intent snapshot `akcli check --intent` falls back to when the flag has no value.
+intent    = "intent.json"
 
 # ERC waivers suppress a specific rule on a specific net, with a recorded reason. Each waiver is a
 # [[erc_waiver]] table. Waived findings are downgraded to NOTE and tagged with the reason.
@@ -38,3 +44,25 @@ extended_fee = 3.0          # per-Extended-line feeder fee estimate (USD)
 
 [bom.classes]
 no_part = ["TP", "FID", "MH", "H", "LOGO"]
+
+# Checker-agnostic waivers, applied centrally to EVERY checker's findings. `code` is a finding
+# code or fnmatch glob; `severity` downgrades to note/info or drops with "off".
+[[waiver]]
+code     = "PAIR_INCOMPLETE"
+refs     = ["USB_D_P"]
+severity = "off"
+reason   = "single-ended debug tap by design"
+
+# Check-family tuning: diff-pair/bus continuity and the group-clearance layout floor.
+[check]
+pairs = true                       # keep `--pairs` in the default check set
+pair_suffixes = [["_P", "_N"]]     # replaces the built-in suffix table
+bus_min_family = 4                 # BUS_GAP fires for families >= this size
+group_clearance = 1000             # mils between functional groups (0 = off)
+
+# Group-layout policy for `arrange --groups` (mils; per-invocation flags override).
+[arrange]
+group_margin = 200                 # clearance between bundles inside a group
+group_gap = 1000                   # channel between group blocks, both axes
+row_width = 4000                   # wrap a group's internal shelf past this width
+page_width = 20000                 # pack blocks side by side, wrapping past this width

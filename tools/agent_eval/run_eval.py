@@ -126,6 +126,29 @@ def score_ops(task_dir: Path, ops_path: Path) -> dict:
                 f"{(draw.stderr or draw.stdout).strip()[:500]}")
             return result
 
+        # Optional post-check: tasks that teach the SAFE-RE-PACK discipline
+        # ship a postcheck_arrange.json; the drawn sheet must survive an
+        # `arrange --groups --apply` (the net-preservation gate refuses a
+        # sheet whose cross-block connectivity is not label-on-pin), and the
+        # ground-truth nets are compared AFTER the re-pack.
+        post = task_dir / "postcheck_arrange.json"
+        if post.is_file():
+            params = json.loads(post.read_text())
+            argv = ["arrange", str(sheet), "--groups", "--apply",
+                    *(a for s in SYMBOLS for a in ("--symbols", str(s)))]
+            for flag in ("group-gap", "page-width", "row-width", "margin"):
+                key = flag.replace("-", "_")
+                if key in params:
+                    argv += [f"--{flag}", str(params[key])]
+            arr = _akcli(argv)
+            result["arranged"] = arr.returncode == 0
+            if not result["arranged"]:
+                result["errors"].append(
+                    f"postcheck arrange --groups failed (exit "
+                    f"{arr.returncode}): the re-pack must be net-preserving "
+                    f"— {(arr.stderr or arr.stdout).strip()[:400]}")
+                return result
+
         nets = _akcli(["nets", str(sheet), "--json"])
         doc = json.loads(nets.stdout)
         observed = {n["name"]: frozenset(n["members"])

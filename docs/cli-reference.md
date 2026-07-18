@@ -204,7 +204,10 @@ Run the design checks (ERC-lite + power + BOM hygiene + nets + layout) and print
   behind the type-confidence demotion like every type-based rule, so a
   mostly-Passive import degrades to NOTEs instead of emitting garbage.
 - `--intent FILE` asserts a **design-intent JSON** file (written by
-  `akcli nets --intent-snapshot`, or by hand) against the built netlist:
+  `akcli nets --intent-snapshot`, or by hand) against the built netlist.
+  Bare `--intent` (no value) uses the project's standing contract from
+  `akcli.toml` `[paths] intent` — the "which intent applies to this board"
+  question answered by config instead of convention:
 
   ```json
   {"protocol_version": 1,
@@ -353,6 +356,22 @@ a temp copy and the before/after netlists must be equivalent, otherwise the
 write is REFUSED (exit `6`) with the split/merge lines on stderr — a sheet
 wired *across* group boundaries cannot move rigidly (connect groups with
 label-on-pin nets instead). `--allow-net-changes` is the explicit override.
+The moves themselves run in **two phases through a staging band** (uniform
+shift below the sheet, then per-bundle placement), so carried labels can
+never be captured by a later mover whose original pins overlap an earlier
+mover's slot; at genuinely coincident pin tips the writer leaves one label
+behind per staying pin.
+
+**`--propose-labels OUT.json` turns a refusal into a repair draft**: every
+named net touching ≥ 2 grouped components gets an `add_net_label` on each
+member pin (connectivity becomes name-backed and move-invariant), wire
+clusters those labels make redundant are deleted (`delete_object` — stretched
+cross-bundle wires are the failure mode, not a feature), and stranded `#`
+satellites (PWR_FLAG, mid-wire ports) are re-seated onto a pin of their net.
+The draft never touches the file: `akcli plan`/`draw` it, then re-run the
+arrange. Unnamed multi-bundle nets are reported — they need a human-chosen
+name first. Proven end-to-end on a real 88-part/10-group board
+(`tests/test_corpus_pod.py`).
 `--frames` redraws each group's border + title after packing (keyed uuids
 replace stale frames; one `undo` reverts the arrange together with its
 frames).
@@ -783,8 +802,9 @@ environment probing (which optional tools are actually installed here) is `akcli
 One-shot environment report. Probes — the same way the features themselves discover them —
 **python** (>= 3.11), the **akcli** install (version + mode), packaged **schemas**,
 **kicad-cli** (`KICAD_CLI` env → PATH → known install locations), **ngspice**
-(`AKCLI_NGSPICE` honored; KiCad's bundled libngspice found automatically), and **config**
-discovery. `--network` additionally probes the `jlc` endpoint (doctor is offline by default).
+(`AKCLI_NGSPICE` honored; KiCad's bundled libngspice found automatically), **config**
+discovery, and **workspace** hygiene (legacy beside-the-file backup stacks, leftover KiCad
+`~*.lck` lock files, an un-gitignored `.akcli/` — advisory, never `--require`-gatable). `--network` additionally probes the `jlc` endpoint (doctor is offline by default).
 Every missing item prints a remediation hint; only python is a hard requirement.
 `--require kicad-cli,ngspice,...` turns the report into a CI gate: exit `1` when a named
 capability is missing (unknown capability names exit `2`). `--json` emits

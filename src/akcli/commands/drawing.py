@@ -163,6 +163,209 @@ def _cmd_arrange(args: argparse.Namespace) -> int:
     return code
 
 
+def _propose_group_labels(target, groups: dict, out_path: str) -> None:
+    """Emit a label-on-pin op-list draft that makes a re-pack net-safe.
+
+    ``arrange --groups`` moves every bundle (component + its power
+    satellites) rigidly but INDEPENDENTLY — so any net that relies on
+    geometry BETWEEN two bundles (a connecting wire, pin-tip coincidence)
+    can split when they move, same group or not. The fix is the label-on-pin
+    discipline: every NAMED net touching >= 2 grouped components gets an
+    ``add_net_label`` on each grouped member pin, making connectivity
+    name-backed and move-invariant (the exact property the net-preservation
+    gate demands). The draft NEVER touches the file — apply it with
+    ``plan``/``draw`` like any op-list, then re-run ``arrange --groups``.
+    Unnamed multi-bundle nets are reported (they need a human-chosen name).
+    """
+    from .doc import _natkey
+    from ..readers import kicad as kreader
+    sch = kreader.read_sch(str(target))
+    ref_group: dict[str, str] = {}
+    for gname, refs in groups.items():
+        for ref in refs:
+            if not ref.startswith("#"):
+                ref_group[ref] = gname
+    label_ops: list[dict] = []
+    unnamed: list[str] = []
+    spanning = 0
+    for net in sorted(sch.nets, key=lambda n: n.name or ""):
+        grouped = [(r, p) for r, p in net.members if r in ref_group]
+        if len({r for r, _p in grouped}) < 2:   # single-bundle nets are safe
+            continue
+        if not net.is_named or not net.name:
+            ref, pin = grouped[0]
+            unnamed.append(net.name or f"<unnamed@{ref}.{pin}>")
+            continue
+        spanning += 1
+        for r, pin in sorted(grouped, key=lambda m: (_natkey(m[0]), _natkey(m[1]))):
+            label_ops.append({"op": "add_net_label", "name": net.name,
+                              "at": f"{r}.{pin}"})
+    labeled_nets = {op["name"] for op in label_ops}
+    delete_ops = _redundant_wire_deletes(target, sch, ref_group, labeled_nets)
+    doc = {"protocol_version": 1, "target_format": "kicad",
+           "target_file": target.name, "ops": label_ops + delete_ops}
+    Path(out_path).write_text(_dumps(doc) + "\n", encoding="utf-8",
+                              newline="\n")
+    sys.stderr.write(
+        f"propose-labels: {len(label_ops)} label op(s) for {spanning} "
+        f"multi-bundle net(s) + {len(delete_ops)} wire/junction/satellite "
+        f"fix op(s) -> {out_path}\n")
+    if unnamed:
+        sys.stderr.write(
+            "propose-labels: NOT covered (unnamed multi-bundle nets — name "
+            "them first): " + ", ".join(unnamed) + "\n")
+
+
+def _redundant_wire_deletes(target, sch, ref_group: dict, labeled: set) -> list:
+    """``delete_object`` ops for wire clusters the new labels make redundant.
+
+    A stretched wire is the remaining hazard after labeling: rigid bundle
+    moves drag cross-bundle wires into diagonals that can sweep across
+    unrelated pins and MERGE nets. A wire cluster (segments transitively
+    connected by shared endpoints, tee-touches and junctions) is deleted only
+    when it is provably redundant: every component pin it touches sits on a
+    net that just received pin labels — so removing the copper cannot lose
+    connectivity, it can only remove the failure mode. Junctions inside a
+    deleted cluster go with it.
+    """
+    from ..readers import sexpr as _sexpr
+
+    def key(x: float, y: float) -> tuple:
+        return (round(x * 10), round(y * 10))
+
+    # pin position -> (ref, pin_number); (ref, pin) -> net name
+    pos_pin: dict = {}
+    for c in sch.components:
+        for pin in c.pins:
+            pos_pin[key(pin.x_mil, pin.y_mil)] = (c.designator, pin.number)
+    pin_net: dict = {}
+    for net in sch.nets:
+        for r, p in net.members:
+            pin_net[(r, p)] = net.name if net.is_named else None
+
+    root = _sexpr.parse(target.read_text(encoding="utf-8", errors="replace"))
+    segs: list = []          # (uuid, (x0,y0), (x1,y1))
+    for wire in root.find_all("wire"):
+        pts = wire.find("pts")
+        un = wire.find("uuid")
+        if pts is None or un is None or len(un.children or []) < 2:
+            continue
+        xy = pts.find_all("xy")
+        if len(xy) < 2:
+            continue
+        from ..checks.layout import _mil
+        p0 = (_mil(xy[0], 1), _mil(xy[0], 2))
+        p1 = (_mil(xy[-1], 1), _mil(xy[-1], 2))
+        segs.append((str(un.children[1].value), p0, p1))
+
+    # union-find over segments: shared endpoints AND endpoint-on-segment tees
+    parent = list(range(len(segs)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(a: int, b: int) -> None:
+        parent[find(a)] = find(b)
+
+    def on_seg(pt: tuple, a: tuple, b: tuple) -> bool:
+        (px, py), (ax, ay), (bx, by) = pt, a, b
+        cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax)
+        if abs(cross) > 0.5:                     # not collinear (0.05 mil·mil)
+            return False
+        dot = (px - ax) * (bx - ax) + (py - ay) * (by - ay)
+        return 0 <= dot <= (bx - ax) ** 2 + (by - ay) ** 2
+
+    by_point: dict = {}
+    for i, (_u, p0, p1) in enumerate(segs):
+        for pt in (p0, p1):
+            by_point.setdefault(key(*pt), []).append(i)
+    for indices in by_point.values():
+        for i in indices[1:]:
+            union(indices[0], i)
+    for i, (_u, p0, p1) in enumerate(segs):
+        for j, (_u2, q0, q1) in enumerate(segs):
+            if i != j and (on_seg(q0, p0, p1) or on_seg(q1, p0, p1)):
+                union(i, j)
+
+    clusters: dict = {}
+    for i in range(len(segs)):
+        clusters.setdefault(find(i), []).append(i)
+
+    junctions: list = []     # (uuid, keyed position)
+    for jn in root.find_all("junction"):
+        at, un = jn.find("at"), jn.find("uuid")
+        if at is None or un is None or len(un.children or []) < 2:
+            continue
+        from ..checks.layout import _mil
+        junctions.append((str(un.children[1].value), key(_mil(at, 1), _mil(at, 2))))
+
+    deletes: list = []
+    deleted_idx: set = set()
+    for members in clusters.values():
+        touched = []
+        pts: set = set()
+        for i in members:
+            _u, p0, p1 = segs[i]
+            pts.add(key(*p0))
+            pts.add(key(*p1))
+        for pk in pts:
+            if pk in pos_pin:
+                touched.append(pos_pin[pk])
+        real = [(r, p) for r, p in touched if not r.startswith("#")]
+        if len({r for r, _p in real}) < 2:
+            continue                             # intra-bundle copper stays
+        if any(pin_net.get(t) not in labeled for t in real):
+            continue                             # some pin is NOT name-backed
+        for i in sorted(members, key=lambda n: segs[n][0]):
+            deletes.append({"op": "delete_object", "uuid": segs[i][0]})
+            deleted_idx.add(i)
+        for juuid, jpos in junctions:
+            if jpos in pts:
+                deletes.append({"op": "delete_object", "uuid": juuid})
+
+    # `#` satellites (PWR_FLAG, mid-wire power ports) connect by TOUCH. One
+    # that neither sits on a real pin nor TERMINATES a surviving wire (it
+    # rides mid-segment, or its copper is being deleted) will strand when
+    # bundles move — relocate it onto the first real pin of its net, where
+    # pin-tip coincidence makes it ride that host's bundle through any
+    # re-pack. Endpoint-terminating ports stay: moving them would leave the
+    # wire dangling.
+    sat_moves: list = []
+    real_tips = {key(q.x_mil, q.y_mil)
+                 for c in sch.components if not c.designator.startswith("#")
+                 for q in c.pins}
+    real_pin_pos = {(c.designator, q.number): (q.x_mil, q.y_mil)
+                    for c in sch.components
+                    if not c.designator.startswith("#") for q in c.pins}
+    surviving_ends = {key(*pt)
+                      for i, (_u, p0, p1) in enumerate(segs)
+                      if i not in deleted_idx for pt in (p0, p1)}
+    for net in sch.nets:
+        real = sorted((m for m in net.members if m in real_pin_pos),
+                      key=lambda m: (m[0], m[1]))
+        if not real:
+            continue
+        for r, p in net.members:
+            if not r.startswith("#"):
+                continue
+            comp = next(c for c in sch.components if c.designator == r)
+            pin = next((q for q in comp.pins if q.number == p), None)
+            if pin is None:
+                continue
+            tip = key(pin.x_mil, pin.y_mil)
+            if tip in real_tips or tip in surviving_ends:
+                continue          # pin-coincident, or it anchors a live wire
+            hx, hy = real_pin_pos[real[0]]
+            sat_moves.append({
+                "op": "move_component", "designator": r,
+                "x_mil": comp.x_mil + (hx - pin.x_mil),
+                "y_mil": comp.y_mil + (hy - pin.y_mil)})
+    return sat_moves + deletes
+
+
 def _cmd_arrange_groups(args: argparse.Namespace, target) -> int:
     """`arrange --groups <file>` — relocate functional blocks into tidy regions.
 
@@ -184,6 +387,8 @@ def _cmd_arrange_groups(args: argparse.Namespace, target) -> int:
                 "--groups FILE or place components with a group tag first")
     else:
         groups = _load_groups_file(args.groups)
+    if getattr(args, "propose_labels", None):
+        _propose_group_labels(target, groups, args.propose_labels)
     cfg = _load_cfg(args, target)
     # layout policy: explicit flag > [arrange] config > built-in default
     arr = getattr(cfg, "arrange", None) or {}
@@ -254,7 +459,8 @@ def _cmd_arrange_groups(args: argparse.Namespace, target) -> int:
             EXIT["OPLIST"],
             "REFUSED: arrange --groups would change the netlist (see the "
             "lines above); nothing written. Wires crossing group boundaries "
-            "cannot move rigidly — connect groups with label-on-pin nets, "
+            "cannot move rigidly — generate a label-on-pin fix with "
+            "`--propose-labels OUT.json` (then plan/draw it and re-run), "
             "fix the group map, or pass --allow-net-changes to accept")
 
     findings: list = []
@@ -1065,6 +1271,12 @@ def register(sub, common) -> None:
                    help="with --groups --apply: write even when the rigid "
                         "re-layout would change net membership (default: "
                         "refuse — the re-layout must be net-preserving)")
+    p.add_argument("--propose-labels", dest="propose_labels",
+                   metavar="OUT.json",
+                   help="with --groups: write a label-on-pin op-list draft "
+                        "covering every named net that spans groups, so the "
+                        "re-pack stops depending on cross-group wires (apply "
+                        "it via plan/draw, then re-run arrange)")
     p.add_argument("--grid", type=float, metavar="MIL",
                    help="nudge step in mils (default 100)")
     p.add_argument("--margin", type=float, metavar="MIL",

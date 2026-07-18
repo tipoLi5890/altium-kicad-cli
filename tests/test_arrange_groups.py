@@ -232,3 +232,71 @@ def test_apply_refuses_a_net_changing_regroup(tmp_path, capsys):
     assert cli.main(["arrange", str(tgt), "--groups", str(gf), "--apply",
                      "--allow-net-changes"]) == 0
     assert tgt.read_bytes() != before
+
+
+# --------------------------------------------------------------------------- #
+# --propose-labels: the REFUSED -> repair-draft -> re-run loop
+# --------------------------------------------------------------------------- #
+def _seed_named_bridge(tmp_path: Path) -> Path:
+    """Coincident R1.2/R2.1 tips carrying net MID via a label on R1.2 only."""
+    tgt = tmp_path / "board.kicad_sch"
+    tgt.write_text('(kicad_sch (version 20231120) (generator "akcli") '
+                   '(uuid "33333333-4444-5555-6666-777777777777") (paper "A4"))\n')
+    rs = kw.apply(_oplist(
+        {"op": "place_component", "lib_id": "Device:R", "designator": "R1",
+         "x_mil": 2000, "y_mil": 1000, "value": "1k"},
+        {"op": "place_component", "lib_id": "Device:R", "designator": "R2",
+         "x_mil": 2000, "y_mil": 1300, "value": "1k"},
+        {"op": "add_net_label", "name": "VIN", "at": "R1.1"},
+        {"op": "add_net_label", "name": "MID", "at": "R1.2"},
+        {"op": "add_net_label", "name": "GND", "at": "R2.2"},
+    ), str(tgt), apply=True, sources=[str(DEVICE)])
+    assert all(r.status == "ok" for r in rs), [r.message for r in rs]
+    return tgt
+
+
+def test_propose_labels_repairs_a_refused_regroup(tmp_path, capsys):
+    tgt = _seed_named_bridge(tmp_path)
+    gf = tmp_path / "groups.toml"
+    gf.write_text('[groups]\nblock_a = ["R1"]\nblock_b = ["R2"]\n')
+
+    # the coincidence-held MID net makes a direct re-pack unsafe -> REFUSED
+    capsys.readouterr()
+    assert cli.main(["arrange", str(tgt), "--groups", str(gf), "--apply"]) == 6
+    assert "REFUSED" in capsys.readouterr().err
+
+    # the draft: one MID label per grouped member pin (VIN/GND are
+    # single-bundle and stay out of it)
+    draft = tmp_path / "labels.json"
+    assert cli.main(["arrange", str(tgt), "--groups", str(gf),
+                     "--propose-labels", str(draft)]) == 0
+    doc = json.loads(draft.read_text(encoding="utf-8"))
+    labels = [o for o in doc["ops"] if o["op"] == "add_net_label"]
+    assert {(o["name"], o["at"]) for o in labels} == \
+        {("MID", "R1.2"), ("MID", "R2.1")}
+
+    # apply the draft, then the SAME re-pack goes through net-preserved
+    capsys.readouterr()
+    assert cli.main(["draw", str(tgt), "--ops", str(draft), "--apply"]) == 0
+    before = _nets(tgt)
+    assert cli.main(["arrange", str(tgt), "--groups", str(gf),
+                     "--apply"]) == 0
+    assert netdiff.diff(before, _nets(tgt)).equivalent
+
+
+def test_coincident_label_stays_with_the_stayer(tmp_path):
+    # writer rule: at a shared pin tip with one label per pin, a carried move
+    # takes only its own share — the staying pin keeps its name.
+    tgt = _seed_named_bridge(tmp_path)
+    rs = kw.apply(_oplist(
+        {"op": "add_net_label", "name": "MID", "at": "R2.1"},
+    ), str(tgt), apply=True, sources=[str(DEVICE)])
+    assert all(r.status == "ok" for r in rs)
+    rs = kw.apply(_oplist(
+        {"op": "move_component", "designator": "R1", "x_mil": 6000,
+         "y_mil": 1000, "carry_labels": True, "carry_wires": True},
+    ), str(tgt), apply=True, sources=[str(DEVICE)])
+    assert all(r.status == "ok" for r in rs)
+    nets = {n.name: sorted(map(tuple, n.members))
+            for n in _nets(tgt) if n.name == "MID"}
+    assert nets["MID"] == [("R1", "2"), ("R2", "1")]   # both still named MID
