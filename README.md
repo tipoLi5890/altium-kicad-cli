@@ -26,17 +26,16 @@ read-only — an on-ramp into the KiCad flow, which is where all development hap
 
 ## Install
 
-Not on PyPI yet — install from source. Zero runtime dependencies; needs **Python ≥ 3.11** (for stdlib
-`tomllib`):
+Zero runtime dependencies; needs **Python ≥ 3.11** (for stdlib `tomllib`). The distribution is
+`akcli-kicad`; the command is `akcli`:
 
 ```bash
-# run from a clone, no install
+pipx install akcli-kicad        # or: pip install akcli-kicad
+akcli --version
+
+# or run straight from a clone, no install
 git clone https://github.com/tipoLi5890/akcli
 ./akcli/bin/akcli --help        # wrapper auto-selects a Python ≥ 3.11
-
-# or put the CLI on your PATH with pipx
-pipx install git+https://github.com/tipoLi5890/akcli
-akcli --version
 ```
 
 Claude Code plugin (marketplace name `akcli`):
@@ -154,17 +153,19 @@ by the core loop:
 
 ## Roadmap
 
-**Shipped (v0.13.x):** KiCad write/draw from a 22-op + 10-macro vocabulary (hierarchical `add_sheet`,
+**Shipped (v0.15.0):** KiCad write/draw from a 22-op + 10-macro vocabulary (hierarchical `add_sheet`,
 net-diff safety rails, `new` / multi-level `undo`), net-preserving `arrange --groups` re-layout, the
-advisory `akcli review` engine (six detector families, a datasheet facts store, `propose` / `tree` /
-`validate`), ERC / power / BOM / diff / pinmap / intent / contract checks with waivers and SARIF,
-schematic ↔ PCB `verify`, a project `library` workspace, versioned `fab` profiles, a `release
-preflight` gate, `akcli sim` on KiCad's bundled ngspice, JLCPCB/LCSC sourcing with datasheet fetch,
-60 standards-cited calculators, pure-stdlib SVG rendering, and version-tolerant Altium/KiCad readers.
+advisory `akcli review` engine (six detector families, now including power-entry protection, plus a
+datasheet facts store, `propose` / `tree` / `validate`), ERC / power / BOM / diff / pinmap / intent /
+contract checks with waivers and SARIF, schematic ↔ PCB `verify`, a project `library` workspace,
+versioned `fab` profiles, a `release preflight` gate, `akcli sim` on KiCad's bundled ngspice,
+JLCPCB/LCSC sourcing with datasheet fetch, 60 standards-cited calculators, pure-stdlib SVG rendering,
+and version-tolerant Altium/KiCad readers.
 
-**Ahead (→ v1.0):** the contract-freeze audit. *Deferred by decision:* a GitHub Action gating
-schematic PRs, the `view` waveform panel, and a native MCP server (the plain CLI serves agents today).
-Full plan with exit criteria in [ROADMAP.md](ROADMAP.md).
+**Ahead (→ v1.0):** the contract-freeze audit. The first PyPI release (`pip install akcli-kicad`) shipped in 0.15.0.
+*Deferred by decision:* a GitHub Action gating schematic PRs, the `view` waveform panel, and a native
+MCP server (the plain CLI serves agents today). Full plan with exit criteria in
+[ROADMAP.md](ROADMAP.md).
 
 ## Acknowledgments
 

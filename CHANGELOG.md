@@ -30,6 +30,24 @@ All notable changes to `akcli` are documented here. The format is based on
 
 When in doubt, prefer additive, backwards-compatible changes and leave the version contracts untouched.
 
+## [0.15.0] - 2026-07-22
+
+### Added
+- **First PyPI release — `pip install akcli-kicad`.** The distribution is named
+  `akcli-kicad`; the import package and CLI command stay `akcli`, so you install
+  `akcli-kicad` but run `akcli`. Publishing uses OIDC trusted publishing (no API
+  token) via the `publish-pypi` job in `.github/workflows/release.yml`, gated on
+  the `PYPI_TRUSTED_PUBLISHING` **repository** variable (a job-level `if:` is
+  evaluated before the job's environment resolves, so an environment-scoped
+  variable would leave the job silently skipped) and bound to the `pypi` GitHub
+  Environment for OIDC. GitHub Releases continue to attach the sdist + wheel on
+  every tag regardless.
+
+### Changed
+- Documentation refreshed across the READMEs (×3), `INSTALL.md`, `ROADMAP.md`,
+  `CLAUDE.md`, and `docs/` for the `akcli-kicad` distribution name and current
+  project status.
+
 ## [0.14.0] - 2026-07-22
 
 ### Added

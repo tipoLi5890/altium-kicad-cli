@@ -14,7 +14,7 @@ read-only on-ramp into the KiCad flow, not a symmetric conversion peer. That rep
 release-critical now live in a demand-driven optional track, and the experimental Windows live
 bridge is **shelved indefinitely**.
 
-## Where we are (v0.13.0)
+## Where we are (v0.15.0)
 
 Shipped and working today (details per release in [CHANGELOG.md](CHANGELOG.md)):
 
@@ -90,7 +90,11 @@ Shipped and working today (details per release in [CHANGELOG.md](CHANGELOG.md)):
   `arrange --groups --propose-labels` (the refusal -> label-on-pin repair-draft loop, proven on a
   real 88-part board now in the corpus), collision-free two-phase group moves, bare
   `check --intent` via `[paths] intent`, the `doctor` workspace probe, config-surface/schema-table
-  conformance gates, and agent-eval task 07 (safe re-pack post-check).
+  conformance gates, and agent-eval task 07 (safe re-pack post-check). 0.14.0 additions: an
+  output-placement policy (SPEC §10) classifying every written file state/cache/deliverable,
+  self-ignoring `.akcli/` state roots (a dropped `*` `.gitignore`, legacy roots self-heal),
+  `[paths].parts_dir` for `jlc add`/`library import-altium` output, and bare `akcli view`
+  auto-discovering the single `.kicad_sch` in the current directory.
 - **Quality gates:** ~2 600 tests (parser fuzzing, round-trip netlist properties, live ngspice in
   CI, Windows/macOS/Linux × Python 3.11–3.14), ruff + mypy (parts/ + calc/), a
   **docs-conformance gate** (every documented command line and count claim is executed/asserted in
@@ -115,10 +119,10 @@ Honest limitations:
 - **PDN impedance / anti-resonance is not built** — the EMC review is a pre-compliance risk
   analyzer (never a compliance verdict). Stdlib SVG rendering shipped in 0.9.0 as
   `akcli render` and draws faithful symbol artwork from the embedded `lib_symbols` on KiCad
-  sources (post-0.13); Altium sources and multi-unit parts fall back to synthesized bodies,
+  sources (0.14.0); Altium sources and multi-unit parts fall back to synthesized bodies,
   and `view live`'s canvas still renders through the optional `kicad-cli`.
-- **Not on PyPI — by decision** (2026-07): distribution is GitHub Releases; the release workflow
-  already supports PyPI trusted publishing whenever that decision changes.
+- **PyPI:** distributed as `akcli-kicad`; `pip install akcli-kicad`.
+  GitHub Releases still attach the sdist + wheel on every tag.
 - **MCP server: deferred by decision** — agents drive the plain CLI today.
 
 ## Guiding principles
@@ -172,7 +176,7 @@ in 0.8.0. Per-rule specification and provenance: [docs/review-rules.md](docs/rev
       mismatch), RC cutoff (via `calc rc`), crystal load caps, connector ESD/TVS coverage,
       op-amp gain topology (non-inverting/inverting/buffer/open-loop) — five fixture classes each,
       KiCad+Altium format-agnostic contract (the fuse-sizing / reverse-polarity backlog
-      closed post-0.13 as `signal.power_protect`)
+      closed in 0.14.0 as `signal.power_protect`)
 - [x] **M3 — validation detectors + BOM:** I²C pull-up window (missing/strong/weak/
       mismatch via `calc i2c-pullup`), cross-voltage-domain signals (level-shifter aware),
       floating enable pins; MPN-coverage sourcing audit into `check --bom` (backlog: SPI/UART
@@ -273,7 +277,7 @@ Goal: humans reviewing agent work get visuals and documents, not just JSON.
 - [x] Pure-stdlib SVG schematic rendering from the normalized model (components, pin tips, wires,
       junctions, labels) for stdlib-only before/after review — **shipped in 0.9.0 as
       `akcli render`** (connectivity-true, per-sheet blocks, deterministic); **faithful symbol
-      artwork shipped post-0.13** (`render_art` walks the embedded `lib_symbols` graphics through
+      artwork shipped in 0.14.0** (`render_art` walks the embedded `lib_symbols` graphics through
       the net engine's own transform chain; synthesized-body fallback for Altium/multi-unit); a
       `view live` integration stays open (L)
 - [x] `akcli doc <file> -o book.md`: pinout book composing per-IC/connector pin tables, rail
@@ -290,8 +294,12 @@ Goal: the public surface is stable enough to promise.
 
 - [ ] Contract freeze audit: `schema_version`/`protocol_version` review, deprecation policy
       documented; extend the docs-conformance gate to the frozen contracts (S)
-- [ ] First PyPI release (`pip install akcli`) — **gated on reversing the standing "GitHub
-      Releases only" decision**; the tag-driven workflow already supports trusted publishing (S)
+- [x] First PyPI release (`pip install akcli-kicad`) — **shipped in 0.15.0**; dist name is `akcli-kicad`; PyPI publishing opted in 2026-07-22 via the
+      `publish-pypi` job in `release.yml`, gated on the **repository** variable
+      `PYPI_TRUSTED_PUBLISHING` (must be repo-scoped, not environment-scoped — a job-level `if:`
+      resolves before the job's own environment does, so an environment-scoped variable would leave
+      it silently skipped); the `pypi` GitHub Environment must still exist, since trusted publishing
+      binds OIDC to that environment name. No release has landed on PyPI yet (S)
 
 **Exit criterion:** every documented command, flag, exit code, and schema is covered by a test
 that fails on drift — and installation is a one-liner on the chosen channel.
@@ -304,7 +312,7 @@ Extensions to the shipped review engine, pulled in when real boards need them:
 - [ ] PDN impedance / anti-resonance and plane-void EMC rules (need zone polygons / SPICE).
 - [ ] Lifecycle/obsolescence audit via optional DigiKey/Mouser drivers (`jlc bom` covers LCSC today).
 - [ ] Additional signal/validation rules: SPI CS counts, UART voltage-domain pairing, full
-      power-sequencing analysis. (Fuse sizing + reverse-polarity shipped post-0.13 as
+      power-sequencing analysis. (Fuse sizing + reverse-polarity shipped in 0.14.0 as
       `signal.power_protect` — `calc fuse-derating`-backed sizing, entry-chain walk,
       calibrated on the `power_entry` corpus board.)
 
@@ -328,7 +336,7 @@ repositioning they proceed only if real usage pulls them:
   stay in the tree as a record, but graduation work is not planned and the feature is not
   promoted; KiCad is the sole development line.
 - **MCP server** (`akcli mcp`) — the plain CLI + plugin skills serve agents today; revisit on demand.
-- **PyPI publishing** — see v1.0; the mechanism is built, the decision is deliberate.
+- **PyPI publishing** — shipped in 0.15.0 (distributed as `akcli-kicad`; see v1.0).
 - **GitHub Action** (2026-07) — check/review/diff + SARIF on schematic PRs. The CLI side (SARIF
   output, exit codes, `--fail-on`) is complete; a workflow YAML can be added the day a repo
   actually gates PRs. Shelved until then.

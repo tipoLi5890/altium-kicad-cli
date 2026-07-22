@@ -107,6 +107,6 @@ summarize the rails"* — Codex should reach for the `akcli-circuit-design` skil
 
 ## Keeping the two manifests in sync
 
-`name` (`akcli`) and `version` (`0.8.0`) are duplicated across
+`name` (`akcli`) and `version` (`0.15.0`) are duplicated across
 `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. When you bump the version or
 edit shared metadata, update **both** so Claude Code and Codex agree.

@@ -53,7 +53,13 @@ Follow `docs/releasing.md`. Order is load-bearing: bump versions
 `git tag vX.Y.Z && git push origin vX.Y.Z` (the tag triggers the Release
 workflow immediately — it does not wait for CI). Release commits are squashed
 feature batches, exactly the payload most likely to hide a Windows-only bug.
-No PyPI publishing — GitHub Releases only.
+PyPI dist name is `akcli-kicad` (import package and CLI stay `akcli`). PyPI publishing uses trusted publishing (OIDC, no token), gated on the `PYPI_TRUSTED_PUBLISHING`
+**repository** variable (Settings → Secrets and variables → Actions →
+Variables — not an Environment variable: the job's `if:` is evaluated before
+its environment resolves, so an environment-scoped variable there is silently
+skipped); the `pypi` GitHub Environment must still exist for OIDC trusted
+publishing to bind to (see `docs/releasing.md`). GitHub Releases publish
+regardless.
 
 ## Op-vocabulary lockstep (adding/changing an op or macro)
 

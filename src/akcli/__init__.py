@@ -3,8 +3,9 @@
 Zero-runtime-dependency Python package (stdlib only). This top-level module exposes
 the package version and the analysis/protocol version constants used across the CLI.
 
-Name cascade (LOCKED): PyPI dist = ``akcli``; import package =
-``akcli``; CLI = ``akcli``.
+Name cascade (LOCKED): PyPI dist = ``akcli-kicad`` (the ``akcli`` name is
+taken on PyPI by an unrelated project); import package = ``akcli``; CLI =
+``akcli``.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from importlib.metadata import PackageNotFoundError, version as _pkg_version
 def _resolve_version() -> str:
     """Report the version of the code actually running, dev checkout or install.
 
-    A co-located ``pyproject.toml`` (``project.name == "akcli"``) means we are
+    A co-located ``pyproject.toml`` (``project.name == "akcli-kicad"``) means we are
     executing FROM the source tree; that file is the freshest truth and WINS —
     an editable or older install otherwise pins stale metadata, so bumping the
     working tree would not move ``akcli --version`` and a real update reads as
@@ -30,12 +31,12 @@ def _resolve_version() -> str:
         pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
         with pyproject.open("rb") as fh:
             project = tomllib.load(fh).get("project", {})
-        if project.get("name") == "akcli" and project.get("version"):
+        if project.get("name") == "akcli-kicad" and project.get("version"):
             return project["version"]
     except Exception:
         pass
     try:
-        return _pkg_version("akcli")
+        return _pkg_version("akcli-kicad")
     except PackageNotFoundError:
         return "0.0.0"
 

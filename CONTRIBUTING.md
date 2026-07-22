@@ -11,9 +11,9 @@ By participating you agree to abide by the [Code of Conduct](CODE_OF_CONDUCT.md)
   `tomllib`). Test/build tooling lives in the optional `dev` extra; never add a runtime
   dependency. If you think you need one, open an issue first.
 - **Python ≥ 3.11.**
-- **Altium is read-only offline.** The tool never writes Altium files without the optional
-  Windows live driver. KiCad writes go through the atomic snapshot → temp → verify → replace
-  pipeline with the pure-Python connectivity gate.
+- **Altium is import-only.** It's a read-only on-ramp into the KiCad flow; the tool never writes
+  Altium files without the optional Windows live driver. KiCad writes go through the atomic
+  snapshot → temp → verify → replace pipeline, gated by the pure-Python connectivity checker.
 - **Untrusted input is bounded.** Parsers must stay within the caps in `safety.py` (depth,
   allocation, sector/atom/node limits) and fail with a structured `errors.py` code — never
   hang, crash the interpreter, or read outside the workspace. See [SECURITY.md](SECURITY.md).
@@ -47,8 +47,9 @@ python tools/sync_version.py --check      # version-sync drift (manifests vs pyp
 - Add or update tests for any behavior change — fixtures are **synthetic** (no proprietary
   or third-party board data; generators live under `tests/fixtures/_gen/`).
 - Keep changes focused; match the surrounding code style.
-- New CLI subcommands/flags must be reflected in `docs/cli-reference.md`; new ops in the
-  `schemas/` files.
+- New CLI subcommands/flags must be reflected in `docs/cli-reference.md`. New ops or macros touch
+  several files in lockstep (vocabulary tables, `schemas/`, the writer handler, doc count gates) —
+  see [docs/op-list-authoring.md](docs/op-list-authoring.md) before adding one.
 
 ## Pull request process
 

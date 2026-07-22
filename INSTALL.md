@@ -8,8 +8,9 @@ the optional integrations (`akcli doctor` lists them).
 - CLI command: `akcli`
 - Claude Code plugin / marketplace name: `akcli`
 
-> **Not on PyPI yet** — install from source with one of the options below. Once a release is published,
-> `pipx install akcli` / `pip install akcli` will also work.
+> `pipx install akcli-kicad` (or `pip install akcli-kicad`) puts the `akcli` command on your PATH.
+> The distribution is `akcli-kicad`; the command you run is `akcli`.
+> The from-source options below (clone / pipx-from-git / dev) also work.
 
 ## Requirements
 
@@ -32,7 +33,7 @@ cd akcli
 Add it to your PATH if you like:
 
 ```bash
-export PATH="$PWD/bin:$PATH"        # exposes both `akcli` and `akcli`
+export PATH="$PWD/bin:$PATH"        # exposes `akcli`
 ```
 
 Or invoke the module directly with any Python ≥ 3.11:
@@ -48,8 +49,8 @@ PYTHONPATH=src python3.12 -m akcli --help
 ```bash
 pipx install git+https://github.com/tipoLi5890/akcli
 akcli --version          # package + protocol version
-pipx upgrade akcli
-pipx uninstall akcli
+pipx upgrade akcli-kicad
+pipx uninstall akcli-kicad
 ```
 
 ## Option C — pip from git (into a venv)

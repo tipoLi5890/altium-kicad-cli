@@ -4,7 +4,7 @@
 > reviews. Every CRITICAL/HIGH fix is incorporated. Where reviewers disagreed, the decision and
 > rationale are stated inline. Build each file from this document with **no further design decisions**.
 >
-> **Name cascade (LOCKED):** repo + PyPI dist = `akcli`; import package = `akcli`;
+> **Name cascade (LOCKED):** repo = `akcli`; PyPI dist = `akcli-kicad`; import package = `akcli`;
 > CLI = `akcli`; plugin name = `akcli`; marketplace name = `akcli`.
 > Python ≥ 3.11, zero **runtime** deps (stdlib only, incl. `tomllib`). Dev/test deps allowed via an extra.
 
@@ -733,7 +733,7 @@ for c in python3.13 python3.12 python3.11 python3; do
     PY="$c"; break
   fi
 done
-[ -n "$PY" ] || { echo "akcli requires Python >=3.11 (none found). Install python@3.11+ or: pipx install akcli" >&2; exit 1; }
+[ -n "$PY" ] || { echo "akcli requires Python >=3.11 (none found). Install python@3.11+ or: pipx install akcli-kicad" >&2; exit 1; }
 export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 exec "$PY" -m akcli "$@"
 ```

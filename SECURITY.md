@@ -1,7 +1,7 @@
 # Security Policy
 
-`akcli` parses **untrusted binary and text input** (Altium `.SchDoc`/`.SchLib`/`.PcbDoc`
-OLE2 containers and KiCad S-expression files) and can **write** KiCad schematics. The threat model and
+`akcli` parses **untrusted binary and text input** — Altium `.SchDoc`/`.SchLib`/`.PcbDoc` OLE2
+containers and KiCad S-expression files — and can **write** KiCad schematics. The threat model and
 the enforced safety limits below are first-class design requirements, not afterthoughts.
 
 ## Reporting a vulnerability
@@ -105,5 +105,5 @@ A `protocol_version` handshake (`altium_ping`) rejects mismatched peers → `PRO
 
 ## Supported versions
 
-Pre-1.0: only the latest commit on `main` receives fixes. Once releases begin, the latest minor series
-is supported.
+Pre-1.0: only the latest commit on `main` (and, by extension, the most recently tagged release)
+receives fixes. Once 1.0 ships, the latest minor series will be supported.

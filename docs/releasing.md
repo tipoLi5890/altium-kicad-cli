@@ -51,16 +51,28 @@ Run it locally with `python -m pytest tests/test_docs_conformance.py -q`.
 
 ## PyPI publishing
 
+The package is published to PyPI under the distribution name `akcli-kicad`
+(so `pip install akcli-kicad` is the correct invocation — the import package and the
+`akcli` CLI command itself are unaffected).
+
 PyPI publishing is opt-in and uses
 [trusted publishing](https://docs.pypi.org/trusted-publishers/), so no PyPI
 API token is stored in this repo. To enable it, one time:
 
-1. On PyPI, add a trusted publisher for this project pointing at this GitHub
-   repo, workflow file `release.yml`, and environment `pypi`.
+1. On PyPI, add a trusted publisher for this project: owner `tipoLi5890`,
+   repo `akcli`, workflow file `release.yml`, and environment `pypi`.
 2. In GitHub repo Settings > Environments, create an environment named `pypi`
-   (optionally with required reviewers for extra safety).
-3. Add an environment variable `PYPI_TRUSTED_PUBLISHING` set to `true` on that
-   `pypi` environment.
+   (optionally with required reviewers for extra safety) — this is required
+   because PyPI trusted publishing binds its OIDC token to that environment
+   name.
+3. In GitHub repo Settings > Secrets and variables > Actions > **Variables**
+   (the repository-level tab, not the `pypi` environment's own variables tab),
+   add a repository variable `PYPI_TRUSTED_PUBLISHING` set to `true`.
+   **This must be a repository variable, not an environment variable on
+   `pypi`.** The `publish-pypi` job's `if:` condition is evaluated before the
+   job's environment is resolved, so an environment-scoped variable is
+   invisible at that point and the job would be silently skipped even though
+   everything else is configured correctly.
 
 Until that's done, the `publish-pypi` job's `if:` condition evaluates false
 and the job is skipped — the release itself never fails because PyPI isn't

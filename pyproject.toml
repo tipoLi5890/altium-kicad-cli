@@ -4,8 +4,11 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "akcli"
-version = "0.14.0"
+# PyPI dist name: the distribution ships as `akcli-kicad` while the import
+# package and CLI stay `akcli` (see src/akcli/__init__.py name cascade);
+# keep the three in lockstep.
+name = "akcli-kicad"
+version = "0.15.0"
 description = "AI-native schematic design agent, purpose-built for KiCad: draw and edit .kicad_sch from JSON op-lists with net-diff safety rails, run ERC/design/intent checks, simulate on bundled ngspice, source parts, and import Altium .SchDoc/.PcbDoc read-only into the KiCad flow."
 requires-python = ">=3.11"
 readme = "README.md"
