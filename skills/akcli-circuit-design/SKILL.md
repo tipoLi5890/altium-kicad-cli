@@ -18,7 +18,7 @@ description: >-
 `akcli` is a zero-dependency Python ≥3.11 CLI that reads
 **Altium binary** `.SchDoc` / `.SchLib` / `.PcbDoc` and **KiCad** `.kicad_sch` / `.kicad_sym` /
 `.kicad_pcb` into one normalized model, runs design checks, diffs revisions, and writes KiCad
-schematics from an op-list — with **no Altium or KiCad installed**. It is **not** an
+schematics from an op-list — no Altium or KiCad install needed. It is **not** an
 Altium-to-KiCad converter.
 
 When the plugin is installed, `akcli` is on `PATH`. Run it with the `Bash` tool. From a raw
@@ -54,7 +54,7 @@ akcli nets <file> --match 'VDD*' --json  # filtered net listing (--limit N caps 
 akcli net  <file> [name] --json   # netlist: nets -> pin members, aliases, source names
                                   # (a named miss exits 8 with {"found": false})
 akcli component <file> <REF>      # one component's pin -> net (e.g. U3); omit REF to list all
-akcli render <file> -o out.svg    # install-free SVG — LOOK at the sheet (works on .SchDoc too)
+akcli render <file> -o out.svg    # pure-stdlib SVG — LOOK at the sheet (works on .SchDoc too)
 akcli doc <file> -o book.md       # pinout book: pin->net tables + power rails + BOM (human hand-off)
 akcli log <dir-or-file>           # workspace write journal: what plan/draw/undo did here
 ```

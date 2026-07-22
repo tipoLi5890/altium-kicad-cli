@@ -60,7 +60,8 @@ class Config:
     """Parsed project configuration.
 
     ``rails``, ``erc_waivers`` and ``waivers`` are lists of plain dicts; ``paths``
-    maps a name (``schematic``/``dts``/``pinout_md``/...) to an absolute path
+    maps a name (``schematic``/``dts``/``pinout_md``/``parts_dir``/...) to an
+    absolute path
     string. ``grid_nm`` is the schematic pin grid in integer nanometres.
     ``waivers`` are the generic ``[[waiver]]`` entries applied centrally to every
     checker's findings (:func:`report.apply_waivers`); ``erc_waivers`` is the

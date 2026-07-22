@@ -59,7 +59,9 @@ time. A model-authored run should be compared against `--reference` (always
   exact-match on membership; an electrically-equivalent-but-relabeled answer
   scores as a miss. This deliberately tests instruction-following + tool use,
   not topology isomorphism.
-- Five small analog tasks; grow the corpus (hierarchy, buses, multi-unit
+- Eight tasks: six small analog blocks, the safe re-pack discipline (07,
+  label-on-pin across groups) and the protected power entry (08, fuse +
+  reverse-polarity diode); grow the corpus (hierarchy, buses, multi-unit
   parts) as skills cover more ground.
 - The harness scores the *artifact* (op-list), not the conversation — an
   agent that needed ten retries scores the same as one that nailed it. Wrap

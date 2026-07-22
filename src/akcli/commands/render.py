@@ -3,7 +3,9 @@
 The visual feedback channel for agents and reviewers: after a `draw --apply`,
 render the sheet and *look* at it (a multimodal agent reads the image
 directly) — no KiCad install, works on Altium `.SchDoc` too, deterministic
-output. Connectivity-true, not pixel-faithful: see :mod:`akcli.render_svg`.
+output. Connectivity-true with faithful `lib_symbols` artwork on KiCad
+sources (synthesized-body fallback elsewhere): see :mod:`akcli.render_svg`
+and :mod:`akcli.render_art`.
 """
 
 from __future__ import annotations
@@ -22,13 +24,19 @@ def _cmd_render(args: argparse.Namespace) -> int:
 
     path = _require_path(args.path)
     sch = _load_schematic(path)
+    art = None
     if sch.source_format == "kicad":
+        from ..render_art import SymbolArt
         prims = kreader.read_primitives(str(path))
+        library = kreader.read_embedded_library(str(path))
+        if library is not None:
+            art = SymbolArt(library)
     else:
         from ..readers import altium_sch
         prims = altium_sch.read_primitives(str(path))
 
-    svg = render_svg.render(sch, prims, grid=bool(getattr(args, "grid", False)))
+    svg = render_svg.render(sch, prims, grid=bool(getattr(args, "grid", False)),
+                            art=art)
 
     out_arg = getattr(args, "output", None)
     if out_arg == "-":

@@ -1,123 +1,154 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4600 2350" data-akcli-render="1.0">
-<style>text{font-family:monospace}.wire{stroke:#0a7d2c;stroke-width:6;fill:none;stroke-linecap:round}.bus{stroke:#00489e;stroke-width:16;fill:none;stroke-linecap:round}.busentry{stroke:#00489e;stroke-width:6;fill:none}.body{fill:#fff3d6;stroke:#8b1a1a;stroke-width:5}.pin{fill:#8b1a1a}.junction{fill:#0a7d2c}.label{fill:#003b8e;font-size:50px}.label-global{fill:#7a0d7a;font-size:50px}.label-power{fill:#8b1a1a;font-size:45px}.refdes{fill:#333;font-size:55px;font-weight:bold}.value{fill:#555;font-size:45px}.sheet-title{fill:#000;font-size:70px;font-weight:bold}.noerc{stroke:#c00;stroke-width:6}.frame{fill:none;stroke:#bbb;stroke-width:3;stroke-dasharray:20,20}.grid{stroke:#d5d5e0;stroke-width:2;stroke-dasharray:8,16}.gridlabel{fill:#9a9ab0;font-size:38px}.origin{stroke:#c08;stroke-width:5}</style>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4690 2374.9" data-akcli-render="1.0">
+<style>text{font-family:monospace}.wire{stroke:#0a7d2c;stroke-width:6;fill:none;stroke-linecap:round}.bus{stroke:#00489e;stroke-width:16;fill:none;stroke-linecap:round}.busentry{stroke:#00489e;stroke-width:6;fill:none}.body{fill:#fff3d6;stroke:#8b1a1a;stroke-width:5}.sym{fill:none;stroke:#8b1a1a;stroke-width:5;stroke-linejoin:round}.sym-fill{fill:#fff3d6}.pinstub{stroke:#8b1a1a;stroke-width:4}.pinnum{fill:#a04a1a;font-size:35px}.pinname{fill:#0a6b6b;font-size:40px}.symtext{fill:#555;font-size:45px}.pin{fill:#8b1a1a}.junction{fill:#0a7d2c}.label{fill:#003b8e;font-size:50px}.label-global{fill:#7a0d7a;font-size:50px}.label-power{fill:#8b1a1a;font-size:45px}.refdes{fill:#333;font-size:55px;font-weight:bold}.value{fill:#555;font-size:45px}.sheet-title{fill:#000;font-size:70px;font-weight:bold}.noerc{stroke:#c00;stroke-width:6}.frame{fill:none;stroke:#bbb;stroke-width:3;stroke-dasharray:20,20}.grid{stroke:#d5d5e0;stroke-width:2;stroke-dasharray:8,16}.gridlabel{fill:#9a9ab0;font-size:38px}.origin{stroke:#c08;stroke-width:5}</style>
 <rect width="100%" height="100%" fill="#fdfdf8"/>
 <g data-sheet="/">
-<line class="wire" x1="200" y1="200" x2="550" y2="200"/>
-<line class="wire" x1="850" y1="200" x2="1200" y2="200"/>
+<line class="wire" x1="250" y1="224.9" x2="600" y2="224.9"/>
+<line class="wire" x1="900" y1="224.9" x2="1250" y2="224.9"/>
 <g data-ref="C1">
-<rect class="body" x="170" y="275" width="60" height="150" rx="10"/>
-<circle class="pin" cx="200" cy="200" r="8"/>
-<circle class="pin" cx="200" cy="500" r="8"/>
-<text class="refdes" x="170" y="255">C1</text>
-<text class="value" x="170" y="480">10u</text>
+<polyline class="sym" points="200,304.9 230,304.9"/>
+<polyline class="sym" points="215,289.9 215,319.9"/>
+<line class="pinstub" x1="250" y1="224.9" x2="250" y2="334.9"/>
+<line class="pinstub" x1="250" y1="524.9" x2="250" y2="414.9"/>
+<circle class="pin" cx="250" cy="224.9" r="8"/>
+<circle class="pin" cx="250" cy="524.9" r="8"/>
+<text class="refdes" x="200" y="269.9">C1</text>
+<text class="value" x="200" y="374.9">10u</text>
 </g>
 <g data-ref="C2">
-<rect class="body" x="1170" y="275" width="60" height="150" rx="10"/>
-<circle class="pin" cx="1200" cy="200" r="8"/>
-<circle class="pin" cx="1200" cy="500" r="8"/>
-<text class="refdes" x="1170" y="255">C2</text>
-<text class="value" x="1170" y="480">10u</text>
+<polyline class="sym" points="1170,404.9 1330,404.9"/>
+<polyline class="sym" points="1170,344.9 1330,344.9"/>
+<line class="pinstub" x1="1250" y1="224.9" x2="1250" y2="334.9"/>
+<line class="pinstub" x1="1250" y1="524.9" x2="1250" y2="414.9"/>
+<circle class="pin" cx="1250" cy="224.9" r="8"/>
+<circle class="pin" cx="1250" cy="524.9" r="8"/>
+<text class="refdes" x="1170" y="324.9">C2</text>
+<text class="value" x="1170" y="459.9">10u</text>
 </g>
 <g data-ref="C3">
-<rect class="body" x="2170" y="325" width="60" height="150" rx="10"/>
-<circle class="pin" cx="2200" cy="250" r="8"/>
-<circle class="pin" cx="2200" cy="550" r="8"/>
-<text class="refdes" x="2170" y="305">C3</text>
-<text class="value" x="2170" y="530">100n</text>
+<polyline class="sym" points="2170,454.9 2330,454.9"/>
+<polyline class="sym" points="2170,394.9 2330,394.9"/>
+<line class="pinstub" x1="2250" y1="274.9" x2="2250" y2="384.9"/>
+<line class="pinstub" x1="2250" y1="574.9" x2="2250" y2="464.9"/>
+<circle class="pin" cx="2250" cy="274.9" r="8"/>
+<circle class="pin" cx="2250" cy="574.9" r="8"/>
+<text class="refdes" x="2170" y="374.9">C3</text>
+<text class="value" x="2170" y="509.9">100n</text>
 </g>
 <g data-ref="C4">
-<rect class="body" x="2770" y="325" width="60" height="150" rx="10"/>
-<circle class="pin" cx="2800" cy="250" r="8"/>
-<circle class="pin" cx="2800" cy="550" r="8"/>
-<text class="refdes" x="2770" y="305">C4</text>
-<text class="value" x="2770" y="530">100n</text>
+<polyline class="sym" points="2770,454.9 2930,454.9"/>
+<polyline class="sym" points="2770,394.9 2930,394.9"/>
+<line class="pinstub" x1="2850" y1="274.9" x2="2850" y2="384.9"/>
+<line class="pinstub" x1="2850" y1="574.9" x2="2850" y2="464.9"/>
+<circle class="pin" cx="2850" cy="274.9" r="8"/>
+<circle class="pin" cx="2850" cy="574.9" r="8"/>
+<text class="refdes" x="2770" y="374.9">C4</text>
+<text class="value" x="2770" y="509.9">100n</text>
 </g>
 <g data-ref="C5">
-<rect class="body" x="2970" y="1925" width="60" height="150" rx="10"/>
-<circle class="pin" cx="3000" cy="1850" r="8"/>
-<circle class="pin" cx="3000" cy="2150" r="8"/>
-<text class="refdes" x="2970" y="1905">C5</text>
-<text class="value" x="2970" y="2130">10n</text>
+<polyline class="sym" points="2970,2054.9 3130,2054.9"/>
+<polyline class="sym" points="2970,1994.9 3130,1994.9"/>
+<line class="pinstub" x1="3050" y1="1874.9" x2="3050" y2="1984.9"/>
+<line class="pinstub" x1="3050" y1="2174.9" x2="3050" y2="2064.9"/>
+<circle class="pin" cx="3050" cy="1874.9" r="8"/>
+<circle class="pin" cx="3050" cy="2174.9" r="8"/>
+<text class="refdes" x="2970" y="1974.9">C5</text>
+<text class="value" x="2970" y="2109.9">10n</text>
 </g>
 <g data-ref="L1">
-<rect class="body" x="625" y="170" width="150" height="60" rx="10"/>
-<circle class="pin" cx="550" cy="200" r="8"/>
-<circle class="pin" cx="850" cy="200" r="8"/>
-<text class="refdes" x="625" y="150">L1</text>
-<text class="value" x="625" y="285">10uH</text>
+<path class="sym" d="M 850 224.9 A 25 25 0 0 0 800 224.9"/>
+<line class="pinstub" x1="600" y1="224.9" x2="650" y2="224.9"/>
+<line class="pinstub" x1="900" y1="224.9" x2="850" y2="224.9"/>
+<circle class="pin" cx="600" cy="224.9" r="8"/>
+<circle class="pin" cx="900" cy="224.9" r="8"/>
+<text class="refdes" x="800" y="180">L1</text>
+<text class="value" x="800" y="279.9">10uH</text>
 </g>
 <g data-ref="R1">
-<rect class="body" x="370" y="1525" width="60" height="150" rx="10"/>
-<circle class="pin" cx="400" cy="1450" r="8"/>
-<circle class="pin" cx="400" cy="1750" r="8"/>
-<text class="refdes" x="370" y="1505">R1</text>
-<text class="value" x="370" y="1730">10k</text>
+<rect class="sym" x="410" y="1524.9" width="80" height="200"/>
+<line class="pinstub" x1="450" y1="1474.9" x2="450" y2="1524.9"/>
+<line class="pinstub" x1="450" y1="1774.9" x2="450" y2="1724.9"/>
+<circle class="pin" cx="450" cy="1474.9" r="8"/>
+<circle class="pin" cx="450" cy="1774.9" r="8"/>
+<text class="refdes" x="410" y="1504.9">R1</text>
+<text class="value" x="410" y="1779.9">10k</text>
 </g>
 <g data-ref="R2">
-<rect class="body" x="370" y="1925" width="60" height="150" rx="10"/>
-<circle class="pin" cx="400" cy="1850" r="8"/>
-<circle class="pin" cx="400" cy="2150" r="8"/>
-<text class="refdes" x="370" y="1905">R2</text>
-<text class="value" x="370" y="2130">10k</text>
+<rect class="sym" x="410" y="1924.9" width="80" height="200"/>
+<line class="pinstub" x1="450" y1="1874.9" x2="450" y2="1924.9"/>
+<line class="pinstub" x1="450" y1="2174.9" x2="450" y2="2124.9"/>
+<circle class="pin" cx="450" cy="1874.9" r="8"/>
+<circle class="pin" cx="450" cy="2174.9" r="8"/>
+<text class="refdes" x="410" y="1904.9">R2</text>
+<text class="value" x="410" y="2179.9">10k</text>
 </g>
 <g data-ref="R3">
-<rect class="body" x="3770" y="325" width="60" height="150" rx="10"/>
-<circle class="pin" cx="3800" cy="250" r="8"/>
-<circle class="pin" cx="3800" cy="550" r="8"/>
-<text class="refdes" x="3770" y="305">R3</text>
-<text class="value" x="3770" y="530">4.7k</text>
+<rect class="sym" x="3810" y="324.9" width="80" height="200"/>
+<line class="pinstub" x1="3850" y1="274.9" x2="3850" y2="324.9"/>
+<line class="pinstub" x1="3850" y1="574.9" x2="3850" y2="524.9"/>
+<circle class="pin" cx="3850" cy="274.9" r="8"/>
+<circle class="pin" cx="3850" cy="574.9" r="8"/>
+<text class="refdes" x="3810" y="304.9">R3</text>
+<text class="value" x="3810" y="579.9">4.7k</text>
 </g>
 <g data-ref="R4">
-<rect class="body" x="4370" y="325" width="60" height="150" rx="10"/>
-<circle class="pin" cx="4400" cy="250" r="8"/>
-<circle class="pin" cx="4400" cy="550" r="8"/>
-<text class="refdes" x="4370" y="305">R4</text>
-<text class="value" x="4370" y="530">4.7k</text>
+<rect class="sym" x="4410" y="324.9" width="80" height="200"/>
+<line class="pinstub" x1="4450" y1="274.9" x2="4450" y2="324.9"/>
+<line class="pinstub" x1="4450" y1="574.9" x2="4450" y2="524.9"/>
+<circle class="pin" cx="4450" cy="274.9" r="8"/>
+<circle class="pin" cx="4450" cy="574.9" r="8"/>
+<text class="refdes" x="4410" y="304.9">R4</text>
+<text class="value" x="4410" y="579.9">4.7k</text>
 </g>
 <g data-ref="R5">
-<rect class="body" x="2970" y="1525" width="60" height="150" rx="10"/>
-<circle class="pin" cx="3000" cy="1450" r="8"/>
-<circle class="pin" cx="3000" cy="1750" r="8"/>
-<text class="refdes" x="2970" y="1505">R5</text>
-<text class="value" x="2970" y="1730">1k</text>
+<rect class="sym" x="3010" y="1524.9" width="80" height="200"/>
+<line class="pinstub" x1="3050" y1="1474.9" x2="3050" y2="1524.9"/>
+<line class="pinstub" x1="3050" y1="1774.9" x2="3050" y2="1724.9"/>
+<circle class="pin" cx="3050" cy="1474.9" r="8"/>
+<circle class="pin" cx="3050" cy="1774.9" r="8"/>
+<text class="refdes" x="3010" y="1504.9">R5</text>
+<text class="value" x="3010" y="1779.9">1k</text>
 </g>
 <g data-ref="R6">
-<rect class="body" x="1570" y="1525" width="60" height="150" rx="10"/>
-<circle class="pin" cx="1600" cy="1450" r="8"/>
-<circle class="pin" cx="1600" cy="1750" r="8"/>
-<text class="refdes" x="1570" y="1505">R6</text>
-<text class="value" x="1570" y="1730">100k</text>
+<rect class="sym" x="1610" y="1524.9" width="80" height="200"/>
+<line class="pinstub" x1="1650" y1="1474.9" x2="1650" y2="1524.9"/>
+<line class="pinstub" x1="1650" y1="1774.9" x2="1650" y2="1724.9"/>
+<circle class="pin" cx="1650" cy="1474.9" r="8"/>
+<circle class="pin" cx="1650" cy="1774.9" r="8"/>
+<text class="refdes" x="1610" y="1504.9">R6</text>
+<text class="value" x="1610" y="1779.9">100k</text>
 </g>
 <g data-ref="R7">
-<rect class="body" x="1570" y="1925" width="60" height="150" rx="10"/>
-<circle class="pin" cx="1600" cy="1850" r="8"/>
-<circle class="pin" cx="1600" cy="2150" r="8"/>
-<text class="refdes" x="1570" y="1905">R7</text>
-<text class="value" x="1570" y="2130">22k</text>
+<rect class="sym" x="1610" y="1924.9" width="80" height="200"/>
+<line class="pinstub" x1="1650" y1="1874.9" x2="1650" y2="1924.9"/>
+<line class="pinstub" x1="1650" y1="2174.9" x2="1650" y2="2124.9"/>
+<circle class="pin" cx="1650" cy="1874.9" r="8"/>
+<circle class="pin" cx="1650" cy="2174.9" r="8"/>
+<text class="refdes" x="1610" y="1904.9">R7</text>
+<text class="value" x="1610" y="2179.9">22k</text>
 </g>
-<text class="label" x="215" y="485">GND</text>
-<text class="label" x="415" y="185">VIN</text>
-<text class="label" x="415" y="1435">3V3</text>
-<text class="label" x="415" y="1735">VREF</text>
-<text class="label" x="415" y="1835">VREF</text>
-<text class="label" x="415" y="2135">GND</text>
-<text class="label" x="1015" y="185">3V3</text>
-<text class="label" x="1215" y="485">GND</text>
-<text class="label" x="1615" y="1435">VIN</text>
-<text class="label" x="1615" y="1735">SENSE</text>
-<text class="label" x="1615" y="1835">SENSE</text>
-<text class="label" x="1615" y="2135">GND</text>
-<text class="label" x="2215" y="235">3V3</text>
-<text class="label" x="2215" y="535">GND</text>
-<text class="label" x="2815" y="235">3V3</text>
-<text class="label" x="2815" y="535">GND</text>
-<text class="label" x="3015" y="1435">SENSE</text>
-<text class="label" x="3015" y="1735">ADC_IN</text>
-<text class="label" x="3015" y="1835">ADC_IN</text>
-<text class="label" x="3015" y="2135">GND</text>
-<text class="label" x="3815" y="235">3V3</text>
-<text class="label" x="3815" y="535">SDA</text>
-<text class="label" x="4415" y="235">3V3</text>
-<text class="label" x="4415" y="535">SCL</text>
+<text class="label" x="265" y="509.9">GND</text>
+<text class="label" x="465" y="209.9">VIN</text>
+<text class="label" x="465" y="1459.9">3V3</text>
+<text class="label" x="465" y="1759.9">VREF</text>
+<text class="label" x="465" y="1859.9">VREF</text>
+<text class="label" x="465" y="2159.9">GND</text>
+<text class="label" x="1065" y="209.9">3V3</text>
+<text class="label" x="1265" y="509.9">GND</text>
+<text class="label" x="1665" y="1459.9">VIN</text>
+<text class="label" x="1665" y="1759.9">SENSE</text>
+<text class="label" x="1665" y="1859.9">SENSE</text>
+<text class="label" x="1665" y="2159.9">GND</text>
+<text class="label" x="2265" y="259.9">3V3</text>
+<text class="label" x="2265" y="559.9">GND</text>
+<text class="label" x="2865" y="259.9">3V3</text>
+<text class="label" x="2865" y="559.9">GND</text>
+<text class="label" x="3065" y="1459.9">SENSE</text>
+<text class="label" x="3065" y="1759.9">ADC_IN</text>
+<text class="label" x="3065" y="1859.9">ADC_IN</text>
+<text class="label" x="3065" y="2159.9">GND</text>
+<text class="label" x="3865" y="259.9">3V3</text>
+<text class="label" x="3865" y="559.9">SDA</text>
+<text class="label" x="4465" y="259.9">3V3</text>
+<text class="label" x="4465" y="559.9">SCL</text>
 </g>
 </svg>

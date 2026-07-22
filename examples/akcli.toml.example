@@ -26,6 +26,9 @@ dts       = "firmware/boards/mcu/board.dts"
 pinout_md = "hardware/docs/pinout.md"
 # Design-intent snapshot `akcli check --intent` falls back to when the flag has no value.
 intent    = "intent.json"
+# Where `jlc add` / `library import-altium` place converted libraries when --out
+# is not given (a committed asset dir; default without this key: ./akcli-parts).
+parts_dir = "hardware/libs"
 
 # ERC waivers suppress a specific rule on a specific net, with a recorded reason. Each waiver is a
 # [[erc_waiver]] table. Waived findings are downgraded to NOTE and tagged with the reason.

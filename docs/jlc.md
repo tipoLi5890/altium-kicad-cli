@@ -1,8 +1,10 @@
 # `akcli jlc` — JLCPCB / LCSC part search
 
 Search the JLCPCB / LCSC component catalog from the command line. This is the
-**only networked feature** in akcli; every other command is fully
-offline and zero-dependency.
+**only networked feature** in akcli; every other command is fully offline.
+(akcli's "zero-dependency" claim means zero Python *package* dependencies —
+stdlib only; `sim` and the advisory ERC second opinion optionally use local
+`kicad-cli`/libngspice, never the network.)
 
 > **Needs network.** `jlc` calls the public **jlcsearch** service
 > (`https://jlcsearch.tscircuit.com`; override with `AKCLI_JLC_BASE_URL` for a
@@ -177,7 +179,7 @@ akcli jlc add C2040 --footprint-lib proj_jlc --3d-path relative   # match your f
 akcli jlc add C25804 --place --designator R1 --at 2000 1000   # + one-op place.json
 ```
 
-Output layout under `--out` (default `./akcli-parts/<C-number>/`):
+Output layout under `--out` (default `<[paths].parts_dir or ./akcli-parts>/<C-number>/`):
 `symbol/<lib-name>.kicad_sym`, `<footprint-lib>/<name>.kicad_mod`, and with `--3d`
 `<footprint-lib>/packages3d/<name>.step`. `--place` writes `place.json` (a one-op
 `place_component` op-list with `lib_id` read from the produced `.kicad_sym` and

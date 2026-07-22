@@ -6,7 +6,8 @@ Altium binary `.SchDoc`/`.SchLib`/`.PcbDoc`/`.PcbLib` and KiCad
 design-contract assertions), diffs revisions, verifies schematic ↔ PCB equivalence, audits and
 repairs project library workspaces, gates manufacturing against versioned fab profiles, draws KiCad
 schematics with a before/after net-connectivity diff, and provides 60 standards-cited engineering
-calculators (`akcli calc`) — with no Altium or KiCad install required.
+calculators (`akcli calc`) — a pure-stdlib toolchain purpose-built for KiCad, with read-only
+Altium import as the on-ramp.
 
 > This reference is the contract for the CLI surface. It tracks the subcommands and flags defined in
 > `src/akcli/cli.py`.
@@ -307,7 +308,8 @@ Engineering design review: advisory findings with explicit confidence and eviden
   [--dir DIR] [--method manual|pdftotext|llm] [--set KEY=VAL@pN ...]` binds a fact to its source
   PDF by sha256; `facts verify [MPN] [--dir DIR] [--exit-zero]` audits the store (schema, PDF
   staleness, page bounds, quotes); `facts lookup MPN [KEY] [--dir DIR]` prints one MPN's audited
-  facts.
+  facts. `--dir` defaults to the project-local `./datasheets` — the store is a committed
+  team asset (deliverable-class, SPEC §10): review it in PRs and it survives handoff.
 - `akcli review report <findings.json> [--format text|json|sarif|junit|markdown]` — re-renders a
   findings file (from `analyze --out`) in another format.
 - `akcli review explain <CODE>` — prints one review rule: what it checks, the formula, and its
@@ -631,14 +633,16 @@ calculator name gets a did-you-mean suggestion.
   failure; the hook also warns (never blocks) when the workspace journal shows
   no prior `plan`/dry-run for that exact op-list.
 
-### `akcli view <calc|live|SCH> [PATH] [--port N] [--no-browser] [--state-dir DIR] [--max-steps N]`
+### `akcli view [calc|live|SCH] [PATH] [--port N] [--no-browser] [--state-dir DIR] [--max-steps N]`
 ONE local dashboard server for both pages (127.0.0.1 only, zero dependencies,
 HTML bundled in the package). Default port `8765`, auto-incrementing when
 busy. `/` is the **hub** — the entry page the browser opens on launch, with
 one card per dashboard (the live card shows the watched file, step count and
 latest ERC state in real time; `C`/`L` jump straight in).
-`view <sch.kicad_sch>` is shorthand for `view live <sch>`; `view calc`
-serves `/calc` alone.
+Bare `akcli view` needs no file: it serves the hub with `/live` idle.
+`view <sch.kicad_sch>` is shorthand for `view live <sch>`; `view live` with
+no path watches the single `.kicad_sch` in the current directory (none or
+several → explicit usage error, exit 2); `view calc` serves `/calc` alone.
 - `/calc` — the calculator bench: home launcher + grouped sidebar with fuzzy
   filter, ⌘K command palette, forms that auto-compute as you type with live
   engineering-notation parse hints (defaults shown in typed-back notation,
@@ -742,11 +746,15 @@ run** printing the op-list unless `--write`, which commits through the KiCad wri
 `.bak`). This closes the datasheet → model loop with [`jlc datasheet`](jlc.md).
 
 ### `akcli render <file> [-o FILE] [--grid]`
-Render a schematic to **SVG with no EDA install** — the same normalized model every check runs
-on, so an Altium `.SchDoc` renders as readily as a `.kicad_sch`. **Connectivity-true, not
-pixel-faithful**: wires, buses, bus entries, junctions, labels (scope-colored), No-ERC marks,
-pin tips, and synthesized component bodies (from pin geometry — the model carries pin tips, not
-symbol artwork) with refdes/value. Hierarchical designs render one titled block per sheet.
+Render a schematic to **SVG with the pure-stdlib renderer** — the same normalized model every check runs
+on, so an Altium `.SchDoc` renders as readily as a `.kicad_sch`. **Connectivity-true, with
+faithful symbol artwork on KiCad sources**: wires, buses, bus entries, junctions, labels
+(scope-colored), No-ERC marks, pin tips, and component bodies drawn from the sheet's embedded
+`lib_symbols` graphics (rectangles/polylines/circles/arcs, pin stubs, pin names/numbers unless the
+symbol hides them) through the same transform chain the net engine uses — so artwork can never
+disagree with connectivity. Components the artwork path cannot draw (Altium sources, multi-unit
+parts, symbols missing from `lib_symbols`) fall back to the synthesized pin-box body with
+refdes/value. Hierarchical designs render one titled block per sheet.
 Deterministic output (same input bytes → same SVG bytes). `-o -` writes to stdout; default
 output is `<input>.svg` next to the input. `--json` emits
 `{render_version, source, output, components, wires, labels, junctions, bytes}`. The
@@ -757,7 +765,7 @@ previews always include it).
 
 ### `akcli doc <file> [-o FILE] [--refs GLOBS]`
 Generate the **pinout book** — a human-readable Markdown design document composed from the
-normalized model (works on `.kicad_sch` and Altium `.SchDoc`, no EDA install):
+normalized model (works on `.kicad_sch` and imported Altium `.SchDoc` alike):
 - **Pin tables** per IC/connector (default refs `U*,J*,CN*,P*`; override with a comma-separated
   `--refs` glob list): pin number, name, electrical type, and the net each pin *actually landed
   on* — the as-drawn pinout a reviewer checks against the datasheet.

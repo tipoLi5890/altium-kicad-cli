@@ -115,21 +115,27 @@ def _check_workspace() -> tuple[bool, str, str]:
                      "running (a stale lock makes writes demand --allow-open)")
 
     if (cwd / ".akcli").is_dir():
-        ignored = False
-        for d in [cwd, *cwd.parents]:
-            gi = d / ".gitignore"
-            try:
-                if gi.is_file() and ".akcli" in gi.read_text(encoding="utf-8"):
-                    ignored = True
-                    break
-            except OSError:
-                pass
-            if (d / ".git").exists():
-                break
+        # 0.14+ state roots self-ignore via .akcli/.gitignore; the walk-up
+        # check only matters for legacy roots created before that.
+        ignored = (cwd / ".akcli" / ".gitignore").is_file()
         if not ignored:
-            issues.append(".akcli/ not covered by any reachable .gitignore")
-            hints.append("add `.akcli/` to .gitignore — journal and undo "
-                         "backups are derived state, not design sources")
+            for d in [cwd, *cwd.parents]:
+                gi = d / ".gitignore"
+                try:
+                    if gi.is_file() and ".akcli" in gi.read_text(encoding="utf-8"):
+                        ignored = True
+                        break
+                except OSError:
+                    pass
+                if (d / ".git").exists():
+                    break
+        if not ignored:
+            issues.append(".akcli/ not covered by any .gitignore "
+                          "(pre-0.14 state root)")
+            hints.append("any akcli write command now drops a self-ignoring "
+                         ".akcli/.gitignore; or add `.akcli/` to .gitignore — "
+                         "journal and undo backups are derived state, not "
+                         "design sources")
 
     if not issues:
         return True, "clean workspace", ""

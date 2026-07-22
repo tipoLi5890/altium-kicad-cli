@@ -62,6 +62,31 @@ def is_tvs(comp: Component) -> bool:
     return any(k in hay for k in tables.TVS_KEYWORDS)
 
 
+def is_fuse(comp: Component) -> bool:
+    hay = f"{_lib(comp)} {(comp.value or '').lower()}"
+    return (ref_prefix(comp.designator) in tables.FUSE_PREFIXES
+            or any(k in hay for k in tables.FUSE_KEYWORDS))
+
+
+def is_diode(comp: Component) -> bool:
+    """Rectifier/Schottky diode — excludes TVS parts and LEDs (both often
+    carry the D prefix but are shunt clamps / indicators, not a series
+    reverse-polarity element)."""
+    lib = _lib(comp)
+    if is_tvs(comp) or "led" in lib:
+        return False
+    hay = f"{lib} {(comp.value or '').lower()}"
+    return (ref_prefix(comp.designator) in tables.DIODE_PREFIXES
+            or lib.endswith(":d") or ":d_" in lib
+            or any(k in hay for k in tables.DIODE_KEYWORDS))
+
+
+def is_inductor(comp: Component) -> bool:
+    return (ref_prefix(comp.designator) in {"L", "FB"}
+            or _lib(comp).endswith(":l") or ":l_" in _lib(comp)
+            or "inductor" in _lib(comp) or "ferrite" in _lib(comp))
+
+
 def is_power_symbol(comp: Component) -> bool:
     """Power ports / PWR_FLAG pseudo-components (``#``-prefixed references)."""
     return (comp.designator or "").startswith("#")

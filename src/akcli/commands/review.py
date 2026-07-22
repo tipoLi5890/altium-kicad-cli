@@ -65,6 +65,20 @@ def _facts_root(args: argparse.Namespace, target: Path):
     return None
 
 
+def _facts_store_root(args: argparse.Namespace) -> Path:
+    """The facts store the ``review facts`` subcommands read/write.
+
+    Explicit ``--dir`` wins; the default is the project-local ``./datasheets``.
+    Facts are DELIVERABLE-class output (SPEC "Output placement policy"): a
+    committed, code-reviewed team asset that survives handoff and feeds CI —
+    deliberately NOT a personal cache, so two people reviewing the same design
+    always read the same numbers. (Fetched PDFs, by contrast, stay in the
+    shared cache; ``jlc datasheet --out datasheets`` co-locates them here.)
+    """
+    explicit = getattr(args, "dir", None)
+    return Path(explicit) if explicit else Path("datasheets")
+
+
 def _cmd_review_analyze(args: argparse.Namespace) -> int:
     target = _require_path(args.path, "schematic (.kicad_sch / .SchDoc)")
     sch = _read_schematic(target)
@@ -187,7 +201,7 @@ def _cmd_facts_add(args: argparse.Namespace) -> int:
     mpn = getattr(args, "mpn", None)
     if not mpn:
         raise _ExitWith(EXIT["USAGE"], "ERROR: review facts add needs an MPN")
-    root = Path(getattr(args, "dir", None) or "datasheets")
+    root = _facts_store_root(args)
     pdf_arg = getattr(args, "pdf", None)
     if not pdf_arg:
         raise _ExitWith(EXIT["USAGE"],
@@ -252,7 +266,7 @@ def _cmd_facts_verify(args: argparse.Namespace) -> int:
     """`review facts verify [MPN]` — audit the store; exit 1 on findings."""
     from ..review import facts as fx
 
-    root = Path(getattr(args, "dir", None) or "datasheets")
+    root = _facts_store_root(args)
     store = fx.load_store(root)
     mpn = getattr(args, "mpn", None)
     targets = ([store.lookup(mpn)] if mpn else
@@ -281,7 +295,7 @@ def _cmd_facts_lookup(args: argparse.Namespace) -> int:
     mpn = getattr(args, "mpn", None)
     if not mpn:
         raise _ExitWith(EXIT["USAGE"], "ERROR: review facts lookup needs an MPN")
-    root = Path(getattr(args, "dir", None) or "datasheets")
+    root = _facts_store_root(args)
     store = fx.load_store(root)
     facts = store.lookup(mpn)
     if facts is None:
@@ -572,8 +586,9 @@ def register(sub, common) -> None:
     pfa.add_argument("mpn", nargs="?", help="exact manufacturer part number")
     pfa.add_argument("--pdf", metavar="FILE", required=False,
                      help="the source datasheet PDF (required)")
-    pfa.add_argument("--dir", metavar="DIR", default="datasheets",
-                     help="datasheets dir (default: ./datasheets)")
+    pfa.add_argument("--dir", metavar="DIR", default=None,
+                     help="facts store (default: ./datasheets — a committed "
+                          "team asset)")
     pfa.add_argument("--method", choices=("manual", "pdftotext", "llm"),
                      default="manual", help="how the numbers were extracted")
     pfa.add_argument("--set", metavar="KEY=VAL@pN", action="append",
@@ -586,8 +601,9 @@ def register(sub, common) -> None:
         help="audit the store: schema, PDF sha256 staleness, page bounds, "
              "quotes (via optional pdftotext)")
     pfv.add_argument("mpn", nargs="?", help="verify one MPN (default: all)")
-    pfv.add_argument("--dir", metavar="DIR", default="datasheets",
-                     help="datasheets dir (default: ./datasheets)")
+    pfv.add_argument("--dir", metavar="DIR", default=None,
+                     help="facts store (default: ./datasheets — a committed "
+                          "team asset)")
     pfv.add_argument("--exit-zero", action="store_true",
                      help="always exit 0 (report mode)")
     pfv.set_defaults(handler=_cmd_facts_verify)
@@ -597,8 +613,9 @@ def register(sub, common) -> None:
         help="print one MPN's audited facts")
     pfl.add_argument("mpn", nargs="?", help="exact manufacturer part number")
     pfl.add_argument("key", nargs="?", help="one fact key (default: all)")
-    pfl.add_argument("--dir", metavar="DIR", default="datasheets",
-                     help="datasheets dir (default: ./datasheets)")
+    pfl.add_argument("--dir", metavar="DIR", default=None,
+                     help="facts store (default: ./datasheets — a committed "
+                          "team asset)")
     pfl.set_defaults(handler=_cmd_facts_lookup)
 
     pr = rev.add_parser(

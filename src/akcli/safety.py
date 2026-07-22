@@ -103,6 +103,11 @@ def atomic_write_with_backup(
     if backup_dir is not None and path.exists():
         bd = Path(backup_dir)
         bd.mkdir(parents=True, exist_ok=True)
+        if bd.parent.name == ".akcli":
+            # every `.akcli/` creation path self-ignores the state root, so
+            # the user's .gitignore never needs an entry (journal.py contract)
+            from . import journal
+            journal.ensure_self_ignore(bd.parent)
         shutil.copy2(path, bd / (path.name + ".bak"))
 
     directory = path.parent if str(path.parent) else Path(".")

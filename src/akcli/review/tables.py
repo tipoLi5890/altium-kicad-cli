@@ -41,6 +41,30 @@ TVS_KEYWORDS: tuple[str, ...] = (
 # Connector designator prefixes (industry convention).
 CONNECTOR_PREFIXES: frozenset[str] = frozenset({"J", "P", "CN", "X", "USB"})
 
+# Fuse / resettable-PTC classification: designator prefix + lib/value keywords
+# (IEC 60617 reference designator "F"; "polyfuse"/"ptc" per resettable-fuse
+# vendor naming). "FB" (ferrite bead) does NOT match — the prefix is the full
+# leading letter run.
+FUSE_PREFIXES: frozenset[str] = frozenset({"F"})
+FUSE_KEYWORDS: tuple[str, ...] = ("fuse", "polyfuse", "ptc")
+
+# Rectifier/Schottky diode classification (reverse-polarity protection).
+# TVS parts and LEDs also carry the D prefix and are excluded by keyword.
+DIODE_PREFIXES: frozenset[str] = frozenset({"D", "CR"})
+DIODE_KEYWORDS: tuple[str, ...] = ("diode", "schottky", "d_schottky")
+
+# Power-entry net-name tokens: rails that arrive from OUTSIDE the board
+# (battery, DC jack, USB VBUS) and therefore deserve fuse + reverse-polarity
+# protection. Matched as delimited tokens inside the net name; deliberately
+# excludes post-protection names (VSYS, VDD, +3V3 …).
+POWER_ENTRY_RX_TOKENS: str = (
+    r"(V?BATT?|VIN|VBUS|VDC|DCIN|PWR_?IN|VSUPPLY|VEXT)")
+
+# Series elements the power-entry chain walk may cross (fuse / diode /
+# inductor-ferrite); the walk never crosses capacitors or resistors, so it
+# cannot wander into dividers or decoupling. Chain length is bounded.
+POWER_CHAIN_MAX_NETS: int = 6
+
 # Resistor/capacitor/crystal classification: designator prefixes.
 RESISTOR_PREFIXES: frozenset[str] = frozenset({"R"})
 CAPACITOR_PREFIXES: frozenset[str] = frozenset({"C"})

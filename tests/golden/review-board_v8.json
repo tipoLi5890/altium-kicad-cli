@@ -15,6 +15,7 @@
       "signal.crystal",
       "signal.divider",
       "signal.opamp",
+      "signal.power_protect",
       "signal.protection",
       "signal.rc_filter",
       "validation.enable_pin",

@@ -115,3 +115,63 @@ def test_grid_overlay_lines_labels_origin():
     assert 'class="gridlabel"' in grid and ">1000<" in grid
     # deterministic: same input, same bytes
     assert grid == render_svg.render(sch, NetPrimitives(), grid=True)
+
+
+# --------------------------------------------------------------------------- #
+# faithful symbol artwork (render_art)
+# --------------------------------------------------------------------------- #
+def _render_cli(path: Path) -> str:
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = main(["render", str(path), "-o", "-"])
+    assert rc == EXIT["OK"]
+    return buf.getvalue()
+
+
+def test_kicad_render_draws_library_artwork():
+    svg = _render_cli(KICAD_FIXTURE)
+    # every placed part resolves in the embedded lib_symbols: faithful bodies
+    # (class="sym"/"pinstub"), no synthesized pin-box rect remains
+    assert 'class="sym"' in svg
+    assert 'class="pinstub"' in svg
+    assert '<rect class="body"' not in svg
+    # the GND power symbol's real artwork (the 3-line chevron polyline), not
+    # a box — and power symbols draw no pin name/number text
+    assert 'class="pinname"' not in svg
+    root = ET.fromstring(svg)
+    gnd = next(g for g in root.iter(f"{_SVG_NS}g")
+               if g.get("data-ref") == "#PWR02")
+    assert any(e.tag == f"{_SVG_NS}polyline" for e in gnd)
+
+
+def test_render_artwork_agrees_with_pin_geometry():
+    # a pin stub's tip endpoint must coincide with the model's world pin —
+    # same transform chain, so artwork can never disagree with connectivity
+    svg = _render_cli(KICAD_FIXTURE)
+    root = ET.fromstring(svg)
+    sch = kreader.read_sch(str(KICAD_FIXTURE))
+    for g in root.iter(f"{_SVG_NS}g"):
+        ref = g.get("data-ref")
+        if not ref:
+            continue
+        comp = next(c for c in sch.components if c.designator == ref)
+        tips = {(float(p.get("cx")), float(p.get("cy")))
+                for p in g.iter(f"{_SVG_NS}circle")
+                if p.get("class") == "pin"}
+        for line in g.iter(f"{_SVG_NS}line"):
+            if line.get("class") != "pinstub":
+                continue
+            a = (float(line.get("x1")), float(line.get("y1")))
+            b = (float(line.get("x2")), float(line.get("y2")))
+            assert a in tips or b in tips, (ref, a, b)
+        assert len(tips) == len(comp.pins)
+
+
+def test_altium_render_falls_back_to_synthesized_bodies():
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = main(["render", str(ALTIUM_FIXTURE), "-o", "-"])
+    assert rc == EXIT["OK"]
+    svg = buf.getvalue()
+    assert '<rect class="body"' in svg      # no KiCad artwork: synthesized
+    assert 'class="pinstub"' not in svg

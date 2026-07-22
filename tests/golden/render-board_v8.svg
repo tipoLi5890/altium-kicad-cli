@@ -1,50 +1,59 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1500" data-akcli-render="1.0">
-<style>text{font-family:monospace}.wire{stroke:#0a7d2c;stroke-width:6;fill:none;stroke-linecap:round}.bus{stroke:#00489e;stroke-width:16;fill:none;stroke-linecap:round}.busentry{stroke:#00489e;stroke-width:6;fill:none}.body{fill:#fff3d6;stroke:#8b1a1a;stroke-width:5}.pin{fill:#8b1a1a}.junction{fill:#0a7d2c}.label{fill:#003b8e;font-size:50px}.label-global{fill:#7a0d7a;font-size:50px}.label-power{fill:#8b1a1a;font-size:45px}.refdes{fill:#333;font-size:55px;font-weight:bold}.value{fill:#555;font-size:45px}.sheet-title{fill:#000;font-size:70px;font-weight:bold}.noerc{stroke:#c00;stroke-width:6}.frame{fill:none;stroke:#bbb;stroke-width:3;stroke-dasharray:20,20}.grid{stroke:#d5d5e0;stroke-width:2;stroke-dasharray:8,16}.gridlabel{fill:#9a9ab0;font-size:38px}.origin{stroke:#c08;stroke-width:5}</style>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 1700" data-akcli-render="1.0">
+<style>text{font-family:monospace}.wire{stroke:#0a7d2c;stroke-width:6;fill:none;stroke-linecap:round}.bus{stroke:#00489e;stroke-width:16;fill:none;stroke-linecap:round}.busentry{stroke:#00489e;stroke-width:6;fill:none}.body{fill:#fff3d6;stroke:#8b1a1a;stroke-width:5}.sym{fill:none;stroke:#8b1a1a;stroke-width:5;stroke-linejoin:round}.sym-fill{fill:#fff3d6}.pinstub{stroke:#8b1a1a;stroke-width:4}.pinnum{fill:#a04a1a;font-size:35px}.pinname{fill:#0a6b6b;font-size:40px}.symtext{fill:#555;font-size:45px}.pin{fill:#8b1a1a}.junction{fill:#0a7d2c}.label{fill:#003b8e;font-size:50px}.label-global{fill:#7a0d7a;font-size:50px}.label-power{fill:#8b1a1a;font-size:45px}.refdes{fill:#333;font-size:55px;font-weight:bold}.value{fill:#555;font-size:45px}.sheet-title{fill:#000;font-size:70px;font-weight:bold}.noerc{stroke:#c00;stroke-width:6}.frame{fill:none;stroke:#bbb;stroke-width:3;stroke-dasharray:20,20}.grid{stroke:#d5d5e0;stroke-width:2;stroke-dasharray:8,16}.gridlabel{fill:#9a9ab0;font-size:38px}.origin{stroke:#c08;stroke-width:5}</style>
 <rect width="100%" height="100%" fill="#fdfdf8"/>
 <g data-sheet="/">
-<line class="wire" x1="200" y1="200" x2="200" y2="350"/>
-<line class="wire" x1="200" y1="650" x2="200" y2="850"/>
-<line class="wire" x1="200" y1="850" x2="800" y2="850"/>
-<line class="wire" x1="200" y1="1150" x2="800" y2="1150"/>
-<line class="wire" x1="500" y1="1150" x2="500" y2="1300"/>
+<line class="wire" x1="240" y1="300" x2="240" y2="450"/>
+<line class="wire" x1="240" y1="750" x2="240" y2="950"/>
+<line class="wire" x1="240" y1="950" x2="840" y2="950"/>
+<line class="wire" x1="240" y1="1250" x2="840" y2="1250"/>
+<line class="wire" x1="540" y1="1250" x2="540" y2="1400"/>
 <g data-ref="#PWR01">
-<rect class="body" x="170" y="170" width="60" height="60" rx="10"/>
-<circle class="pin" cx="200" cy="200" r="8"/>
-<text class="refdes" x="170" y="150">#PWR01</text>
-<text class="value" x="170" y="285">+3V3</text>
+<polyline class="sym" points="210,250 240,200"/>
+<polyline class="sym" points="240,300 240,200"/>
+<polyline class="sym" points="240,200 270,250"/>
+<circle class="pin" cx="240" cy="300" r="8"/>
+<text class="refdes" x="210" y="180">#PWR01</text>
+<text class="value" x="210" y="355">+3V3</text>
 </g>
 <g data-ref="#PWR02">
-<rect class="body" x="470" y="1270" width="60" height="60" rx="10"/>
-<circle class="pin" cx="500" cy="1300" r="8"/>
-<text class="refdes" x="470" y="1250">#PWR02</text>
-<text class="value" x="470" y="1385">GND</text>
+<polyline class="sym" points="540,1400 540,1450 590,1450 540,1500 490,1450 540,1450"/>
+<circle class="pin" cx="540" cy="1400" r="8"/>
+<text class="refdes" x="490" y="1380">#PWR02</text>
+<text class="value" x="490" y="1555">GND</text>
 </g>
 <g data-ref="C1">
-<rect class="body" x="770" y="925" width="60" height="150" rx="10"/>
-<circle class="pin" cx="800" cy="850" r="8"/>
-<circle class="pin" cx="800" cy="1150" r="8"/>
-<text class="refdes" x="770" y="905">C1</text>
-<text class="value" x="770" y="1130">100n</text>
+<polyline class="sym" points="760,1130 920,1130"/>
+<polyline class="sym" points="760,1070 920,1070"/>
+<line class="pinstub" x1="840" y1="950" x2="840" y2="1060"/>
+<line class="pinstub" x1="840" y1="1250" x2="840" y2="1140"/>
+<circle class="pin" cx="840" cy="950" r="8"/>
+<circle class="pin" cx="840" cy="1250" r="8"/>
+<text class="refdes" x="760" y="1050">C1</text>
+<text class="value" x="760" y="1185">100n</text>
 </g>
 <g data-ref="R1">
-<rect class="body" x="170" y="425" width="60" height="150" rx="10"/>
-<circle class="pin" cx="200" cy="350" r="8"/>
-<circle class="pin" cx="200" cy="650" r="8"/>
-<text class="refdes" x="170" y="405">R1</text>
-<text class="value" x="170" y="630">10k</text>
+<rect class="sym" x="200" y="500" width="80" height="200"/>
+<line class="pinstub" x1="240" y1="450" x2="240" y2="500"/>
+<line class="pinstub" x1="240" y1="750" x2="240" y2="700"/>
+<circle class="pin" cx="240" cy="450" r="8"/>
+<circle class="pin" cx="240" cy="750" r="8"/>
+<text class="refdes" x="200" y="480">R1</text>
+<text class="value" x="200" y="755">10k</text>
 </g>
 <g data-ref="R2">
-<rect class="body" x="170" y="925" width="60" height="150" rx="10"/>
-<circle class="pin" cx="200" cy="850" r="8"/>
-<circle class="pin" cx="200" cy="1150" r="8"/>
-<text class="refdes" x="170" y="905">R2</text>
-<text class="value" x="170" y="1130">10k</text>
+<rect class="sym" x="200" y="1000" width="80" height="200"/>
+<line class="pinstub" x1="240" y1="950" x2="240" y2="1000"/>
+<line class="pinstub" x1="240" y1="1250" x2="240" y2="1200"/>
+<circle class="pin" cx="240" cy="950" r="8"/>
+<circle class="pin" cx="240" cy="1250" r="8"/>
+<text class="refdes" x="200" y="980">R2</text>
+<text class="value" x="200" y="1255">10k</text>
 </g>
-<circle class="junction" cx="200" cy="850" r="15"/>
-<circle class="junction" cx="500" cy="1150" r="15"/>
-<text class="label-power" x="215" y="185">+3V3</text>
-<text class="label" x="215" y="735">MID</text>
-<text class="label-power" x="515" y="1285">GND</text>
-<text class="label-global" x="815" y="835">VOUT</text>
+<circle class="junction" cx="240" cy="950" r="15"/>
+<circle class="junction" cx="540" cy="1250" r="15"/>
+<text class="label-power" x="255" y="285">+3V3</text>
+<text class="label" x="255" y="835">MID</text>
+<text class="label-power" x="555" y="1385">GND</text>
+<text class="label-global" x="855" y="935">VOUT</text>
 </g>
 </svg>

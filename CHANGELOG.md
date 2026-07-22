@@ -30,6 +30,71 @@ All notable changes to `akcli` are documented here. The format is based on
 
 When in doubt, prefer additive, backwards-compatible changes and leave the version contracts untouched.
 
+## [0.14.0] - 2026-07-22
+
+### Added
+- **Power-entry protection review (`signal.power_protect`, 5 rules — 44 total).**
+  Nets named as board inputs (`VBAT`/`VIN`/`VBUS`/`DCIN`… as the WHOLE name, or
+  rail-classified) seed a series chain walk (crossing only fuses/diodes/
+  inductors, never into ground) judged for a series fuse
+  (`REVIEW_FUSE_MISSING`) and reverse-polarity protection
+  (`REVIEW_REVPOL_UNPROTECTED`; a shunt crowbar without its series fuse →
+  `REVIEW_REVPOL_SHUNT_NO_FUSE`). Fuse sizing goes through
+  `calc fuse-derating` and only with a facts-store `i_load`
+  (`REVIEW_FUSE_UNDERSIZED`, datasheet_backed); an unparseable rating is
+  `REVIEW_FUSE_UNRATED` (insufficient_evidence). Closes the M2/M3
+  fuse-sizing + reverse-polarity backlog.
+- **Faithful symbol artwork in `akcli render`** (`render_art.SymbolArt`): KiCad
+  sources now draw the real embedded `lib_symbols` graphics — rectangles,
+  polylines, circles, three-point arcs, beziers, pin stubs and (when the
+  symbol doesn't hide them) pin names/numbers — every point through the net
+  engine's own Y-flip + rotate-then-mirror transform, so artwork can never
+  disagree with connectivity. Altium sources, multi-unit parts and unresolved
+  symbols fall back to the synthesized pin-box body. New reader entry point
+  `readers.kicad.read_embedded_library()`; render goldens regenerated.
+- **Corpus board #2: `power_entry`** — akcli-authored calibration pair
+  (protected VBAT: 500 mA fuse → series diode → bulk + decoupling; deliberately
+  unprotected VBUS sense branch), with census/behavior pins in
+  `tests/test_corpus_power_entry.py`, golden `nets/check/review/render`
+  snapshots, and the replay baseline extended (the groups board honestly gains
+  `REVIEW_FUSE_MISSING`/`REVIEW_REVPOL_UNPROTECTED` on its unfused VBAT).
+- **Agent-eval task 08 (`protected-power-entry`)** — draws the fuse + series
+  diode entry discipline through the real safety rails; fixture symbol
+  library gains `Device:D` (pin 1 = K, pin 2 = A) and `Device:Fuse`.
+  References stay CI-pinned at 100 % (8/8).
+- **Output placement policy (SPEC §10)** — every file akcli writes is classified
+  state / cache / deliverable, with an enforcement gate in
+  `tests/test_output_policy.py` (state-root self-ignore, cache-defaults-outside-CWD,
+  facts-store resolution, CWD-default literal census).
+- `.akcli/` state roots are now **self-ignoring**: creating one drops a
+  `.gitignore` containing `*` inside it, so the user's `.gitignore` never needs
+  an entry and `git status` stays clean. Legacy roots self-heal on the next
+  journaled write; `doctor` recognizes the internal ignore.
+- `[paths].parts_dir` in `akcli.toml` — default output root for `jlc add`
+  and `library import-altium` converted libraries (`--out` still wins;
+  fallback default stays `./akcli-parts` / `<name>.pretty`).
+- **Bare `akcli view`** — the dashboard no longer requires a file: `akcli view`
+  alone serves the hub (calculators available, `/live` idle), and `view live`
+  with no path auto-discovers the single `.kicad_sch` in the current directory
+  (none or several candidates → explicit usage error, exit 2). CLI-layer
+  contract in `tests/test_view_cli.py`.
+
+### Changed
+- **KiCad-first repositioning (docs + metadata).** READMEs, ROADMAP, SPEC
+  mirrors, and all plugin/package descriptions now lead with "AI-native
+  schematic design, purpose-built for KiCad"; "no EDA install" framing is
+  dropped (the facts live in the READMEs' "Optional external tools" section),
+  Altium is framed as read-only import into the KiCad flow, and the Windows
+  Altium live bridge is **shelved indefinitely** (recorded under ROADMAP
+  "Deferred by decision").
+- The datasheet facts store is formally classified **deliverable** (not cache):
+  `review facts` keeps its project-local `./datasheets` default — facts are a
+  committed, code-reviewed team asset that survives handoff and feeds CI —
+  with resolution centralized in one documented choke point, and review/release
+  are gated (by test) from ever silently reading a personal XDG cache. Fetched
+  PDFs remain cache-class (`~/.cache/akcli/datasheets`; `jlc datasheet --out
+  datasheets` co-locates them with an in-repo store).
+
 ## [0.13.0] - 2026-07-18
 
 ### Added — repair loop, contract gates, real-board corpus
@@ -39,8 +104,8 @@ When in doubt, prefer additive, backwards-compatible changes and leave the versi
   make redundant, and re-seating of stranded `#` satellites (PWR_FLAG,
   mid-wire ports) onto a pin of their net. Never touches the file — the
   draft goes back through `plan`/`draw`. Proven end-to-end on the real
-  88-part/10-group insole pod board, now a committed corpus fixture
-  (`tests/fixtures/corpus/pod_insole.kicad_sch` + `tests/test_corpus_pod.py`).
+  88-part/10-group production board, now a committed corpus fixture
+  (`tests/fixtures/corpus/groups_board.kicad_sch` + `tests/test_corpus_groups.py`).
 - **`check --intent` (bare)** falls back to `[paths] intent` in `akcli.toml`
   — the project's standing intent contract.
 - **`akcli doctor` workspace probe** — flags legacy beside-the-file backup

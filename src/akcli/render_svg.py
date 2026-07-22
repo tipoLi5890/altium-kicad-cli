@@ -4,9 +4,11 @@ Draws a **reviewable, connectivity-true** picture — component bodies with
 refdes/value, pin tips, wires, buses, junctions, labels, power ports and
 No-ERC marks — from the same normalized model every check runs on, so an
 Altium ``.SchDoc`` renders as readily as a ``.kicad_sch``, with **no KiCad
-install**. Deliberately NOT a reproduction of either tool's canvas: symbol
-bodies are synthesized from pin geometry (the model carries pin tips, not
-symbol artwork). Hierarchical designs render one titled block per sheet.
+install**. With an :mod:`akcli.render_art` provider (KiCad sources),
+component bodies are the real library artwork; otherwise they are
+synthesized from pin geometry. Not a reproduction of either tool's canvas
+(fonts, exact text metrics, sheet decorations). Hierarchical designs render
+one titled block per sheet.
 
 Coordinates are canonical mils (origin top-left, +Y down) which is exactly
 SVG's frame, so geometry maps 1:1. Output is deterministic: same input bytes,
@@ -17,9 +19,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 from xml.sax.saxutils import escape
 
 from .model import Component, NetPrimitives, Schematic
+
+if TYPE_CHECKING:                        # no runtime KiCad dependency
+    from .render_art import SymbolArt
 
 RENDER_VERSION = "1.0"
 
@@ -37,6 +43,12 @@ _STYLE = (
     ".bus{stroke:#00489e;stroke-width:16;fill:none;stroke-linecap:round}"
     ".busentry{stroke:#00489e;stroke-width:6;fill:none}"
     ".body{fill:#fff3d6;stroke:#8b1a1a;stroke-width:5}"
+    ".sym{fill:none;stroke:#8b1a1a;stroke-width:5;stroke-linejoin:round}"
+    ".sym-fill{fill:#fff3d6}"
+    ".pinstub{stroke:#8b1a1a;stroke-width:4}"
+    ".pinnum{fill:#a04a1a;font-size:35px}"
+    ".pinname{fill:#0a6b6b;font-size:40px}"
+    ".symtext{fill:#555;font-size:45px}"
     ".pin{fill:#8b1a1a}"
     ".junction{fill:#0a7d2c}"
     ".label{fill:#003b8e;font-size:50px}"
@@ -96,11 +108,15 @@ class _SheetScene:
     prims: NetPrimitives = field(default_factory=NetPrimitives)
     bounds: _Bounds = field(default_factory=_Bounds)
 
-    def measure(self) -> None:
+    def measure(self, art: "SymbolArt | None" = None) -> None:
         for c in self.components:
             self.bounds.add(c.x_mil, c.y_mil)
             for p in c.pins:
                 self.bounds.add(p.x_mil, p.y_mil)
+            box = art.world_bbox(c) if art is not None else None
+            if box is not None:
+                self.bounds.add(box[0], box[1])
+                self.bounds.add(box[2], box[3])
         for w in list(self.prims.wires) + list(self.prims.buses):
             self.bounds.add(*w.a)
             self.bounds.add(*w.b)
@@ -115,7 +131,8 @@ class _SheetScene:
             self.bounds.add(*pt)
 
 
-def _split_sheets(sch: Schematic, prims: NetPrimitives) -> list[_SheetScene]:
+def _split_sheets(sch: Schematic, prims: NetPrimitives,
+                  art: "SymbolArt | None" = None) -> list[_SheetScene]:
     names: list[str] = []
     seen: set[str] = set()
     for obj_sheet in ([c.sheet for c in sch.components]
@@ -146,7 +163,7 @@ def _split_sheets(sch: Schematic, prims: NetPrimitives) -> list[_SheetScene]:
 
     ordered = [scenes[n] for n in sorted(names)]
     for s in ordered:
-        s.measure()
+        s.measure(art)
     return [s for s in ordered if not s.bounds.empty] or ordered[:1]
 
 
@@ -216,7 +233,8 @@ def _render_grid(scene: _SheetScene, x: Callable[[float], str],
 
 
 def _render_sheet(scene: _SheetScene, dx: float, dy: float,
-                  out: list[str], *, grid: bool = False) -> None:
+                  out: list[str], *, grid: bool = False,
+                  art: "SymbolArt | None" = None) -> None:
     def x(v: float) -> str:
         return _fmt(v + dx)
 
@@ -244,10 +262,17 @@ def _render_sheet(scene: _SheetScene, dx: float, dy: float,
                    f'x2="{x(w.b[0])}" y2="{y(w.b[1])}"/>')
 
     for c in sorted(scene.components, key=lambda c: c.designator):
-        bx, by, bw, bh = _body_rect(c)
         out.append(f'<g data-ref="{escape(c.designator, {chr(34): "&quot;"})}">')
-        out.append(f'<rect class="body" x="{x(bx)}" y="{y(by)}" '
-                   f'width="{_fmt(bw)}" height="{_fmt(bh)}" rx="10"/>')
+        frags = art.emit(c, x, y, _fmt) if art is not None else None
+        if art is not None and frags is not None:
+            out.extend(frags)
+            box = art.world_bbox(c)
+            bx, by = (box[0], box[1]) if box else (c.x_mil, c.y_mil)
+            bh = (box[3] - box[1]) if box else 0.0
+        else:
+            bx, by, bw, bh = _body_rect(c)
+            out.append(f'<rect class="body" x="{x(bx)}" y="{y(by)}" '
+                       f'width="{_fmt(bw)}" height="{_fmt(bh)}" rx="10"/>')
         for p in c.pins:
             out.append(f'<circle class="pin" cx="{x(p.x_mil)}" '
                        f'cy="{y(p.y_mil)}" r="{_fmt(_PIN_DOT_R)}"/>')
@@ -274,13 +299,17 @@ def _render_sheet(scene: _SheetScene, dx: float, dy: float,
     out.append("</g>")
 
 
-def render(sch: Schematic, prims: NetPrimitives, *, grid: bool = False) -> str:
+def render(sch: Schematic, prims: NetPrimitives, *, grid: bool = False,
+           art: "SymbolArt | None" = None) -> str:
     """Render the schematic + its primitives to an SVG document string.
 
     ``grid=True`` overlays world-mil gridlines, coordinate captions and an
     origin cross (see :func:`_render_grid`) — for coordinate-driven review.
+    ``art`` is an optional :class:`akcli.render_art.SymbolArt`: components it
+    can draw get their faithful library artwork; everything else falls back
+    to the synthesized pin-box body.
     """
-    scenes = _split_sheets(sch, prims)
+    scenes = _split_sheets(sch, prims, art)
 
     total_w = max((s.bounds.width for s in scenes), default=0.0)
     offsets: list[tuple[float, float]] = []
@@ -295,7 +324,7 @@ def render(sch: Schematic, prims: NetPrimitives, *, grid: bool = False) -> str:
 
     body: list[str] = []
     for scene, (dx, dy) in zip(scenes, offsets):
-        _render_sheet(scene, dx, dy, body, grid=grid)
+        _render_sheet(scene, dx, dy, body, grid=grid, art=art)
 
     return "\n".join([
         f'<svg xmlns="http://www.w3.org/2000/svg" '

@@ -1,0 +1,70 @@
+{
+  "schema_version": "1",
+  "source": "tests/fixtures/corpus/power_entry.kicad_sch",
+  "total": 7,
+  "matched": 7,
+  "returned": 7,
+  "truncated": false,
+  "nets": [
+    {
+      "name": "GND",
+      "stable_id": "net_0def45fece87",
+      "members": [
+        "C1.2",
+        "C2.2",
+        "C3.2",
+        "C4.2",
+        "R2.2"
+      ]
+    },
+    {
+      "name": "VBAT",
+      "stable_id": "net_f27e4d8e5a49",
+      "members": [
+        "F1.1"
+      ]
+    },
+    {
+      "name": "VBAT_F",
+      "stable_id": "net_7a4f1075941c",
+      "members": [
+        "D1.2",
+        "F1.2"
+      ]
+    },
+    {
+      "name": "VBUS",
+      "stable_id": "net_da7352aec182",
+      "members": [
+        "C3.1",
+        "R1.1"
+      ]
+    },
+    {
+      "name": "VBUS_ADC",
+      "stable_id": "net_bfb57b4206a6",
+      "members": [
+        "C4.1",
+        "R3.2"
+      ]
+    },
+    {
+      "name": "VBUS_SENSE",
+      "stable_id": "net_3410d1cb8b2a",
+      "members": [
+        "R1.2",
+        "R2.1",
+        "R3.1"
+      ]
+    },
+    {
+      "name": "VSYS",
+      "stable_id": "net_fdd57cbd3d34",
+      "members": [
+        "C1.1",
+        "C2.1",
+        "D1.1"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2630 2200" data-akcli-render="1.0">
+<style>text{font-family:monospace}.wire{stroke:#0a7d2c;stroke-width:6;fill:none;stroke-linecap:round}.bus{stroke:#00489e;stroke-width:16;fill:none;stroke-linecap:round}.busentry{stroke:#00489e;stroke-width:6;fill:none}.body{fill:#fff3d6;stroke:#8b1a1a;stroke-width:5}.sym{fill:none;stroke:#8b1a1a;stroke-width:5;stroke-linejoin:round}.sym-fill{fill:#fff3d6}.pinstub{stroke:#8b1a1a;stroke-width:4}.pinnum{fill:#a04a1a;font-size:35px}.pinname{fill:#0a6b6b;font-size:40px}.symtext{fill:#555;font-size:45px}.pin{fill:#8b1a1a}.junction{fill:#0a7d2c}.label{fill:#003b8e;font-size:50px}.label-global{fill:#7a0d7a;font-size:50px}.label-power{fill:#8b1a1a;font-size:45px}.refdes{fill:#333;font-size:55px;font-weight:bold}.value{fill:#555;font-size:45px}.sheet-title{fill:#000;font-size:70px;font-weight:bold}.noerc{stroke:#c00;stroke-width:6}.frame{fill:none;stroke:#bbb;stroke-width:3;stroke-dasharray:20,20}.grid{stroke:#d5d5e0;stroke-width:2;stroke-dasharray:8,16}.gridlabel{fill:#9a9ab0;font-size:38px}.origin{stroke:#c08;stroke-width:5}</style>
+<rect width="100%" height="100%" fill="#fdfdf8"/>
+<g data-sheet="/">
+<line class="wire" x1="500" y1="250" x2="900" y2="250"/>
+<line class="wire" x1="1200" y1="250" x2="1750" y2="250"/>
+<g data-ref="C1">
+<polyline class="sym" points="1700,330 1730,330"/>
+<polyline class="sym" points="1715,315 1715,345"/>
+<line class="pinstub" x1="1750" y1="250" x2="1750" y2="360"/>
+<line class="pinstub" x1="1750" y1="550" x2="1750" y2="440"/>
+<circle class="pin" cx="1750" cy="250" r="8"/>
+<circle class="pin" cx="1750" cy="550" r="8"/>
+<text class="refdes" x="1700" y="295">C1</text>
+<text class="value" x="1700" y="400">22u</text>
+</g>
+<g data-ref="C2">
+<polyline class="sym" points="2270,430 2430,430"/>
+<polyline class="sym" points="2270,370 2430,370"/>
+<line class="pinstub" x1="2350" y1="250" x2="2350" y2="360"/>
+<line class="pinstub" x1="2350" y1="550" x2="2350" y2="440"/>
+<circle class="pin" cx="2350" cy="250" r="8"/>
+<circle class="pin" cx="2350" cy="550" r="8"/>
+<text class="refdes" x="2270" y="350">C2</text>
+<text class="value" x="2270" y="485">100n</text>
+</g>
+<g data-ref="C3">
+<polyline class="sym" points="270,1580 430,1580"/>
+<polyline class="sym" points="270,1520 430,1520"/>
+<line class="pinstub" x1="350" y1="1400" x2="350" y2="1510"/>
+<line class="pinstub" x1="350" y1="1700" x2="350" y2="1590"/>
+<circle class="pin" cx="350" cy="1400" r="8"/>
+<circle class="pin" cx="350" cy="1700" r="8"/>
+<text class="refdes" x="270" y="1500">C3</text>
+<text class="value" x="270" y="1635">100n</text>
+</g>
+<g data-ref="C4">
+<polyline class="sym" points="2270,1880 2430,1880"/>
+<polyline class="sym" points="2270,1820 2430,1820"/>
+<line class="pinstub" x1="2350" y1="1700" x2="2350" y2="1810"/>
+<line class="pinstub" x1="2350" y1="2000" x2="2350" y2="1890"/>
+<circle class="pin" cx="2350" cy="1700" r="8"/>
+<circle class="pin" cx="2350" cy="2000" r="8"/>
+<text class="refdes" x="2270" y="1800">C4</text>
+<text class="value" x="2270" y="1935">10n</text>
+</g>
+<g data-ref="D1">
+<polyline class="sym" points="1100,300 1100,200"/>
+<polyline class="sym" points="1100,250 1000,300 1000,200 1100,250"/>
+<line class="pinstub" x1="1200" y1="250" x2="1100" y2="250"/>
+<line class="pinstub" x1="900" y1="250" x2="1000" y2="250"/>
+<circle class="pin" cx="1200" cy="250" r="8"/>
+<circle class="pin" cx="900" cy="250" r="8"/>
+<text class="refdes" x="1000" y="180">D1</text>
+<text class="value" x="1000" y="355">SS34</text>
+</g>
+<g data-ref="F1">
+<rect class="sym" x="250" y="220" width="200" height="60"/>
+<polyline class="sym" points="450,250 250,250"/>
+<line class="pinstub" x1="200" y1="250" x2="250" y2="250"/>
+<line class="pinstub" x1="500" y1="250" x2="450" y2="250"/>
+<circle class="pin" cx="200" cy="250" r="8"/>
+<circle class="pin" cx="500" cy="250" r="8"/>
+<text class="refdes" x="250" y="200">F1</text>
+<text class="value" x="250" y="335">500mA</text>
+</g>
+<g data-ref="R1">
+<rect class="sym" x="1110" y="1350" width="80" height="200"/>
+<line class="pinstub" x1="1150" y1="1300" x2="1150" y2="1350"/>
+<line class="pinstub" x1="1150" y1="1600" x2="1150" y2="1550"/>
+<circle class="pin" cx="1150" cy="1300" r="8"/>
+<circle class="pin" cx="1150" cy="1600" r="8"/>
+<text class="refdes" x="1110" y="1330">R1</text>
+<text class="value" x="1110" y="1605">100k</text>
+</g>
+<g data-ref="R2">
+<rect class="sym" x="1110" y="1750" width="80" height="200"/>
+<line class="pinstub" x1="1150" y1="1700" x2="1150" y2="1750"/>
+<line class="pinstub" x1="1150" y1="2000" x2="1150" y2="1950"/>
+<circle class="pin" cx="1150" cy="1700" r="8"/>
+<circle class="pin" cx="1150" cy="2000" r="8"/>
+<text class="refdes" x="1110" y="1730">R2</text>
+<text class="value" x="1110" y="2005">27k</text>
+</g>
+<g data-ref="R3">
+<rect class="sym" x="2310" y="1350" width="80" height="200"/>
+<line class="pinstub" x1="2350" y1="1300" x2="2350" y2="1350"/>
+<line class="pinstub" x1="2350" y1="1600" x2="2350" y2="1550"/>
+<circle class="pin" cx="2350" cy="1300" r="8"/>
+<circle class="pin" cx="2350" cy="1600" r="8"/>
+<text class="refdes" x="2310" y="1330">R3</text>
+<text class="value" x="2310" y="1605">10k</text>
+</g>
+<text class="label" x="215" y="235">VBAT</text>
+<text class="label" x="365" y="1385">VBUS</text>
+<text class="label" x="365" y="1685">GND</text>
+<text class="label" x="715" y="235">VBAT_F</text>
+<text class="label" x="1165" y="1285">VBUS</text>
+<text class="label" x="1165" y="1585">VBUS_SENSE</text>
+<text class="label" x="1165" y="1685">VBUS_SENSE</text>
+<text class="label" x="1165" y="1985">GND</text>
+<text class="label" x="1465" y="235">VSYS</text>
+<text class="label" x="1765" y="535">GND</text>
+<text class="label" x="2365" y="235">VSYS</text>
+<text class="label" x="2365" y="535">GND</text>
+<text class="label" x="2365" y="1285">VBUS_SENSE</text>
+<text class="label" x="2365" y="1585">VBUS_ADC</text>
+<text class="label" x="2365" y="1685">VBUS_ADC</text>
+<text class="label" x="2365" y="1985">GND</text>
+</g>
+</svg>

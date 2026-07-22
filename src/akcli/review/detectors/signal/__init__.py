@@ -1,3 +1,6 @@
-"""Signal-family detectors (M2): divider / RC / crystal / protection / opamp."""
+"""Signal-family detectors (M2): divider / RC / crystal / protection /
+opamp / power-entry protection."""
 
-from . import crystal, divider, opamp, protection, rc_filter  # noqa: F401
+from . import (  # noqa: F401
+    crystal, divider, opamp, power_protect, protection, rc_filter,
+)

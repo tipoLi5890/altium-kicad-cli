@@ -46,9 +46,9 @@ def _frame_records(records: list[dict]) -> bytes:
 def test_read_kicad_sym_text(capsys):
     assert main(["read", F("kicad/symbols/Device.kicad_sym")]) == EXIT["OK"]
     out = capsys.readouterr().out
-    # Device.kicad_sym holds R, C, C_Polarized (extends C), L.
-    assert "symbols: 4" in out
-    for name in ("R ", "C ", "C_Polarized ", "L "):
+    # Device.kicad_sym holds R, C, C_Polarized (extends C), D, Fuse, L.
+    assert "symbols: 6" in out
+    for name in ("R ", "C ", "C_Polarized ", "D ", "Fuse ", "L "):
         assert name in out
 
 
@@ -71,7 +71,7 @@ def test_read_kicad_sym_detected_without_extension(tmp_path, capsys):
     p = tmp_path / "lib_noext"
     p.write_text(Path(F("kicad/symbols/Device.kicad_sym")).read_text(), encoding="utf-8")
     assert main(["read", str(p)]) == EXIT["OK"]
-    assert "symbols: 4" in capsys.readouterr().out
+    assert "symbols: 6" in capsys.readouterr().out
 
 
 # --------------------------------------------------------------------------- #

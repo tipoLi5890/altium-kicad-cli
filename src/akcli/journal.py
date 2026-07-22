@@ -11,6 +11,10 @@ Contract
 * One directory-level journal per workspace: ``<target-dir>/.akcli/journal.jsonl``.
   The ``.akcli/`` directory is the workspace state root; rotated draw backups
   live under ``.akcli/backups/`` (see :func:`backups_dir`).
+* The state root is **self-ignoring**: whoever creates it (see
+  :func:`ensure_workspace_dir`) drops a ``.gitignore`` containing ``*`` inside
+  it, so the user's own ``.gitignore`` never needs an ``.akcli/`` entry and
+  ``git status`` stays clean without akcli touching any user file.
 * Append-only JSONL; every entry carries ``journal_version``/``ts`` (UTC ISO
   8601)/``cmd``/``target``/``status``. Readers skip corrupt lines.
 * Write commands may attach a free-form ``note`` (``--note``) recording WHY
@@ -51,11 +55,41 @@ def journal_path(target: Path) -> Path:
 def backups_dir(target: Path) -> Path:
     """Rotated-backup directory (``.akcli/backups/``) for ``target``'s workspace.
 
-    Writers create it lazily on the first backed-up apply; readers must
-    tolerate its absence (pre-0.12 workspaces kept ``<name>.bak`` next to the
-    edited file — see the legacy fallback in ``commands/drawing.py``).
+    Writers create it lazily on the first backed-up apply (via
+    :func:`ensure_backups_dir`); readers must tolerate its absence (pre-0.12
+    workspaces kept ``<name>.bak`` next to the edited file — see the legacy
+    fallback in ``commands/drawing.py``).
     """
     return workspace_dir(target) / BACKUP_DIR_NAME
+
+
+def ensure_self_ignore(root: Path) -> None:
+    """Drop a self-ignoring ``.gitignore`` (``*``) into the state root ``root``.
+
+    Best-effort: state-dir hygiene must never fail the parent write command.
+    An existing ``.gitignore`` is left alone (user-managed content wins).
+    """
+    gi = root / ".gitignore"
+    try:
+        if not gi.exists():
+            gi.write_text("*\n", encoding="utf-8", newline="\n")
+    except OSError:
+        pass
+
+
+def ensure_workspace_dir(target: Path) -> Path:
+    """Create (if needed) and return the self-ignored ``.akcli/`` state root."""
+    root = workspace_dir(target)
+    root.mkdir(parents=True, exist_ok=True)
+    ensure_self_ignore(root)
+    return root
+
+
+def ensure_backups_dir(target: Path) -> Path:
+    """Create (if needed) and return ``.akcli/backups/`` for ``target``."""
+    b = ensure_workspace_dir(target) / BACKUP_DIR_NAME
+    b.mkdir(exist_ok=True)
+    return b
 
 
 def enabled() -> bool:
@@ -78,7 +112,7 @@ def record(target: Path, cmd: str, status: str, **fields: object) -> None:
             entry[key] = value
     path = journal_path(target)
     try:
-        path.parent.mkdir(exist_ok=True)
+        ensure_workspace_dir(target)
         try:
             if path.stat().st_size > _MAX_BYTES:
                 os.replace(path, path.with_suffix(".jsonl.1"))

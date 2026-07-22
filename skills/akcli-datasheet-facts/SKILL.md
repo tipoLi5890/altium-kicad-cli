@@ -51,8 +51,11 @@ akcli jlc datasheet C2984661 --fetch --out datasheets          # or one LCSC par
 ```
 
 PDFs land under `--out` (default: `AKCLI_DATASHEET_DIR` or
-`~/.cache/akcli/datasheets` — pass `--out datasheets` to land them where
-`review facts`/`review analyze --facts` auto-discover) named
+`~/.cache/akcli/datasheets` — a personal cache). The facts store itself is
+project-local by design (`review facts` defaults to `./datasheets`): facts
+are a committed team asset that survives handoff, so pass `--out datasheets`
+(as above) to co-locate the PDFs with the store, or leave PDFs in the cache
+and only commit `datasheets/extracted/`. PDFs are named
 `C<lcsc>_<MPN>.pdf`. Without `--fetch`, the command only resolves datasheet
 URLs and does not download anything. A vendor PDF you were given by the user
 works too — put it in `datasheets/` yourself.

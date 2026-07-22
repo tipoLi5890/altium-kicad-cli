@@ -1,0 +1,8 @@
+{
+  "nets": [
+    {"name": "VBAT", "members": ["F1.1"]},
+    {"name": "VBAT_F", "members": ["F1.2", "D1.2"]},
+    {"name": "VSYS", "members": ["D1.1", "C1.1", "R1.1"]},
+    {"name": "GND", "members": ["C1.2", "R1.2"]}
+  ]
+}

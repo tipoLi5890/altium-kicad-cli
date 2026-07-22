@@ -1,16 +1,21 @@
 {
   "analog_frontend.kicad_sch": {
     "fingerprints": [
-      "18301eb502997a56f9deeb7d70e4abb6"
+      "18301eb502997a56f9deeb7d70e4abb6",
+      "bf42b27c982b551121fae1d038bcf52e",
+      "c323f36360cc3edc7095615009cf221f"
     ],
     "severity_hist": {
-      "info": 1
+      "info": 1,
+      "warning": 2
     },
     "codes": [
-      "REVIEW_RC_CUTOFF"
+      "REVIEW_FUSE_MISSING",
+      "REVIEW_RC_CUTOFF",
+      "REVIEW_REVPOL_UNPROTECTED"
     ]
   },
-  "pod_insole.kicad_sch": {
+  "groups_board.kicad_sch": {
     "fingerprints": [
       "0a4ffdc8460e69518d736ded8e32501d",
       "1263fcdd392062085741287b56985c0c",
@@ -18,7 +23,9 @@
       "8fb96b97a67e56ed57903e160e6b8597",
       "a827ca83be43d4676bb6c5628b606cfa",
       "adac07eac6c84b1eb5b6d2288f27381a",
+      "bbb45c6b0a30c1ad334877b9f5bed672",
       "c255310b9f30b3e6172dd72ba6dc1831",
+      "c68e264b8e06e375969028b141962c6a",
       "ca11aa7f7fd8dbe22362d2fc28a480e2",
       "caba728eb30f768dbba07065e399e16a",
       "e694efce3b51ed6ddb4b21426b7674f0",
@@ -26,11 +33,29 @@
     ],
     "severity_hist": {
       "info": 1,
-      "warning": 10
+      "warning": 12
     },
     "codes": [
       "REVIEW_CONN_UNPROTECTED",
-      "REVIEW_RC_CUTOFF"
+      "REVIEW_FUSE_MISSING",
+      "REVIEW_RC_CUTOFF",
+      "REVIEW_REVPOL_UNPROTECTED"
+    ]
+  },
+  "power_entry.kicad_sch": {
+    "fingerprints": [
+      "1a71d9b769e7b5f3416b011330d786b1",
+      "1b620aa1369f0e97b5e3000d7dea8f95",
+      "4f6b24e81ce404e68275be36dde3fc4d"
+    ],
+    "severity_hist": {
+      "info": 1,
+      "warning": 2
+    },
+    "codes": [
+      "REVIEW_FUSE_MISSING",
+      "REVIEW_RC_CUTOFF",
+      "REVIEW_REVPOL_UNPROTECTED"
     ]
   }
 }

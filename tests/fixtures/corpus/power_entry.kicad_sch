@@ -1,0 +1,252 @@
+(kicad_sch
+	(version 20231120)
+	(generator "eeschema")
+	(generator_version "8.0")
+	(uuid "bc713222-9c23-4e6b-998c-7ec65025e263")
+	(paper "A4")
+	(lib_symbols
+		(symbol "Device:Fuse"
+		(pin_numbers (hide yes))
+		(pin_names (offset 1.016) (hide yes))
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "F"
+			(at 2.032 0 90)
+			(effects (font (size 1.27 1.27))))
+		(property "Value" "Fuse"
+			(at -1.905 0 90)
+			(effects (font (size 1.27 1.27))))
+		(property "Footprint" ""
+			(at -1.778 0 90)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "~"
+			(at 0 0 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "Fuse"
+			(at 0 0 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(symbol "Fuse_0_1"
+			(rectangle
+				(start -0.762 -2.54)
+				(end 0.762 2.54)
+				(stroke (width 0.254) (type default))
+				(fill (type none)))
+			(polyline
+				(pts (xy 0 -2.54) (xy 0 2.54))
+				(stroke (width 0.254) (type default))
+				(fill (type none))))
+		(symbol "Fuse_1_1"
+			(pin passive line
+				(at 0 3.81 270)
+				(length 1.27)
+				(name "~" (effects (font (size 1.27 1.27))))
+				(number "1" (effects (font (size 1.27 1.27)))))
+			(pin passive line
+				(at 0 -3.81 90)
+				(length 1.27)
+				(name "~" (effects (font (size 1.27 1.27))))
+				(number "2" (effects (font (size 1.27 1.27)))))))
+		(symbol "Device:D"
+		(pin_numbers (hide yes))
+		(pin_names (offset 1.016) (hide yes))
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "D"
+			(at 0 2.54 0)
+			(effects (font (size 1.27 1.27))))
+		(property "Value" "D"
+			(at 0 -2.54 0)
+			(effects (font (size 1.27 1.27))))
+		(property "Footprint" ""
+			(at 0 0 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "~"
+			(at 0 0 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "Diode"
+			(at 0 0 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(symbol "D_0_1"
+			(polyline
+				(pts (xy -1.27 1.27) (xy -1.27 -1.27))
+				(stroke (width 0.254) (type default))
+				(fill (type none)))
+			(polyline
+				(pts (xy -1.27 0) (xy 1.27 1.27) (xy 1.27 -1.27) (xy -1.27 0))
+				(stroke (width 0.254) (type default))
+				(fill (type none))))
+		(symbol "D_1_1"
+			(pin passive line
+				(at -3.81 0 0)
+				(length 2.54)
+				(name "K" (effects (font (size 1.27 1.27))))
+				(number "1" (effects (font (size 1.27 1.27)))))
+			(pin passive line
+				(at 3.81 0 180)
+				(length 2.54)
+				(name "A" (effects (font (size 1.27 1.27))))
+				(number "2" (effects (font (size 1.27 1.27)))))))
+		(symbol "Device:C_Polarized"
+		(pin_numbers (hide yes))
+		(pin_names (offset 0.254))
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "C"
+			(at 0.635 2.54 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Value" "C_Polarized"
+			(at 0.635 -2.54 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Footprint" ""
+			(at 0.9652 -3.81 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "~"
+			(at 0 0 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "Polarized capacitor"
+			(at 0 0 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(symbol "C_Polarized_0_1"
+			(polyline
+				(pts (xy -1.27 1.778) (xy -0.508 1.778))
+				(stroke (width 0.3048) (type default))
+				(fill (type none)))
+			(polyline
+				(pts (xy -0.889 2.159) (xy -0.889 1.397))
+				(stroke (width 0.3048) (type default))
+				(fill (type none))))
+		(symbol "C_Polarized_1_1"
+			(pin passive line
+				(at 0 3.81 270)
+				(length 2.794)
+				(name "~" (effects (font (size 1.27 1.27))))
+				(number "1" (effects (font (size 1.27 1.27)))))
+			(pin passive line
+				(at 0 -3.81 90)
+				(length 2.794)
+				(name "~" (effects (font (size 1.27 1.27))))
+				(number "2" (effects (font (size 1.27 1.27)))))))
+		(symbol "Device:C"
+		(pin_numbers (hide yes))
+		(pin_names (offset 0.254))
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "C"
+			(at 0.635 2.54 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Value" "C"
+			(at 0.635 -2.54 0)
+			(effects (font (size 1.27 1.27)) (justify left)))
+		(property "Footprint" ""
+			(at 0.9652 -3.81 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "~"
+			(at 0 0 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "Unpolarized capacitor"
+			(at 0 0 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(symbol "C_0_1"
+			(polyline
+				(pts (xy -2.032 -0.762) (xy 2.032 -0.762))
+				(stroke (width 0.508) (type default))
+				(fill (type none)))
+			(polyline
+				(pts (xy -2.032 0.762) (xy 2.032 0.762))
+				(stroke (width 0.508) (type default))
+				(fill (type none))))
+		(symbol "C_1_1"
+			(pin passive line
+				(at 0 3.81 270)
+				(length 2.794)
+				(name "~" (effects (font (size 1.27 1.27))))
+				(number "1" (effects (font (size 1.27 1.27)))))
+			(pin passive line
+				(at 0 -3.81 90)
+				(length 2.794)
+				(name "~" (effects (font (size 1.27 1.27))))
+				(number "2" (effects (font (size 1.27 1.27)))))))
+		(symbol "Device:R"
+		(pin_numbers (hide yes))
+		(pin_names (offset 0))
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(property "Reference" "R"
+			(at 2.032 0 90)
+			(effects (font (size 1.27 1.27))))
+		(property "Value" "R"
+			(at 0 0 90)
+			(effects (font (size 1.27 1.27))))
+		(property "Footprint" ""
+			(at -1.778 0 90)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Datasheet" "~"
+			(at 0 0 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(property "Description" "Resistor"
+			(at 0 0 0)
+			(effects (font (size 1.27 1.27)) (hide yes)))
+		(symbol "R_0_1"
+			(rectangle
+				(start -1.016 -2.54)
+				(end 1.016 2.54)
+				(stroke (width 0.254) (type default))
+				(fill (type none))))
+		(symbol "R_1_1"
+			(pin passive line
+				(at 0 3.81 270)
+				(length 1.27)
+				(name "~" (effects (font (size 1.27 1.27))))
+				(number "1" (effects (font (size 1.27 1.27)))))
+			(pin passive line
+				(at 0 -3.81 90)
+				(length 1.27)
+				(name "~" (effects (font (size 1.27 1.27))))
+				(number "2" (effects (font (size 1.27 1.27))))))))
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(symbol (lib_id "Device:Fuse") (at 30.48 20.32 90) (unit 1) (uuid "eea0cc01-96a7-57b6-a921-e06766163030") (pin "1" (uuid "e5271b97-4b0e-5c99-af98-e6327236c88f")) (pin "2" (uuid "41487077-1640-5b88-9749-07094b5755b9")) (property "Reference" "F1" (at 30.48 18.288 90) (effects (font (size 1.27 1.27)))) (instances (project "noname" (path "/bc713222-9c23-4e6b-998c-7ec65025e263" (reference "F1") (unit 1))))
+	(property "Value" "500mA" (at 30.48 22.352 90) (effects (font (size 1.27 1.27)))))
+	(symbol (lib_id "Device:D") (at 48.26 20.32 180) (unit 1) (uuid "06aef208-a71c-5257-a6db-9374611dd362") (pin "1" (uuid "f78c95fa-c709-520b-85e4-85da36ff4176")) (pin "2" (uuid "1b7cda45-9eb0-5f71-81fe-cbd2980f9607")) (property "Reference" "D1" (at 48.26 17.78 0) (effects (font (size 1.27 1.27)))) (instances (project "noname" (path "/bc713222-9c23-4e6b-998c-7ec65025e263" (reference "D1") (unit 1))))
+	(property "Value" "SS34" (at 48.26 22.86 0) (effects (font (size 1.27 1.27)))))
+	(symbol (lib_id "Device:C_Polarized") (at 66.04 24.13 0) (unit 1) (uuid "011f5bc1-8157-5034-8e49-9f395359837f") (pin "1" (uuid "dfc4ccbe-6672-5ff2-a60a-520a9e34b1d7")) (pin "2" (uuid "e91dd47d-7bbc-5e6c-930d-564d134c242f")) (property "Reference" "C1" (at 67.31 22.86 0) (effects (font (size 1.27 1.27)) (justify left))) (instances (project "noname" (path "/bc713222-9c23-4e6b-998c-7ec65025e263" (reference "C1") (unit 1))))
+	(property "Value" "22u" (at 67.31 25.4 0) (effects (font (size 1.27 1.27)) (justify left))))
+	(label "VBAT" (at 26.67 20.32 180) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "d2c2c949-0196-5fe1-86fd-675a9b6be7f1"))
+	(wire (pts (xy 34.29 20.32) (xy 44.45 20.32)) (stroke (width 0) (type default)) (uuid "4851e1b5-5445-5034-8ac6-165f7baa319b"))
+	(label "VBAT_F" (at 39.37 20.32 0) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "0d3983cc-d7d6-55c0-90e8-731d63eeca63"))
+	(wire (pts (xy 52.07 20.32) (xy 66.04 20.32)) (stroke (width 0) (type default)) (uuid "fe97e3e3-e24a-598b-b2e2-feaef57e06fa"))
+	(label "VSYS" (at 58.42 20.32 0) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "7bdf6a1a-4a4c-5b18-bd8b-da1dc176ef8c"))
+	(label "GND" (at 66.04 27.94 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "4612519c-54fe-548a-817d-298a9e00a5f2"))
+	(symbol (lib_id "Device:C") (at 81.28 24.13 0) (unit 1) (uuid "24cad2a4-1146-5bb6-b2df-2bed7fcb8e0b") (pin "1" (uuid "b4be4467-fa71-5ac8-a78b-9ea49f209a71")) (pin "2" (uuid "5f4c934c-d91a-54f2-8a6c-a6097169615b")) (property "Reference" "C2" (at 84.582 22.86 0) (effects (font (size 1.27 1.27)) (justify left))) (instances (project "noname" (path "/bc713222-9c23-4e6b-998c-7ec65025e263" (reference "C2") (unit 1))))
+	(property "Value" "100n" (at 84.582 25.4 0) (effects (font (size 1.27 1.27)) (justify left))))
+	(label "VSYS" (at 81.28 20.32 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "4db984f9-8b3d-502d-a4e6-45a076e96c73"))
+	(label "GND" (at 81.28 27.94 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "673dd748-b4e4-5f15-ac3e-37a5c50d6864"))
+	(symbol (lib_id "Device:C") (at 30.48 53.34 0) (unit 1) (uuid "425c46e7-6622-582a-99a6-ff5fdccbe97f") (pin "1" (uuid "6c9bff5e-aeff-5d72-998c-0701491be8fd")) (pin "2" (uuid "2c7e537d-9d22-5248-95ec-3f1aadb82065")) (property "Reference" "C3" (at 33.782 52.07 0) (effects (font (size 1.27 1.27)) (justify left))) (instances (project "noname" (path "/bc713222-9c23-4e6b-998c-7ec65025e263" (reference "C3") (unit 1))))
+	(property "Value" "100n" (at 33.782 54.61 0) (effects (font (size 1.27 1.27)) (justify left))))
+	(label "VBUS" (at 30.48 49.53 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "fef6da82-c01f-5945-833d-c94d1b775f72"))
+	(label "GND" (at 30.48 57.15 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "0f6c1f1f-490c-591e-941a-86cb68a145d3"))
+	(symbol (lib_id "Device:R") (at 50.8 50.8 0) (unit 1) (uuid "8f1eb035-85a9-5bfd-afa9-b3c4afc4684a") (pin "1" (uuid "6354742a-d1e8-5d8e-8623-980c7833c425")) (pin "2" (uuid "5e61d388-548b-5d16-a030-10bdccac6419")) (property "Reference" "R1" (at 53.086 49.53 0) (effects (font (size 1.27 1.27)) (justify left))) (instances (project "noname" (path "/bc713222-9c23-4e6b-998c-7ec65025e263" (reference "R1") (unit 1))))
+	(property "Value" "100k" (at 53.086 52.07 0) (effects (font (size 1.27 1.27)) (justify left))))
+	(symbol (lib_id "Device:R") (at 50.8 60.96 0) (unit 1) (uuid "bc2cce82-1349-5b4a-ab6f-53bd7d186743") (pin "1" (uuid "5ca8e78a-99c2-5802-baf5-326c890d89f6")) (pin "2" (uuid "84074423-2211-536b-9000-407494deca29")) (property "Reference" "R2" (at 53.086 59.69 0) (effects (font (size 1.27 1.27)) (justify left))) (instances (project "noname" (path "/bc713222-9c23-4e6b-998c-7ec65025e263" (reference "R2") (unit 1))))
+	(property "Value" "27k" (at 53.086 62.23 0) (effects (font (size 1.27 1.27)) (justify left))))
+	(label "VBUS" (at 50.8 46.99 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "7bfdd9f2-bc5e-57eb-979d-c444771d4abc"))
+	(label "VBUS_SENSE" (at 50.8 54.61 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "57f87334-a2df-5c6f-a38a-3829968a147e"))
+	(label "VBUS_SENSE" (at 50.8 57.15 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "056a2bec-6382-55a1-a829-44b368ba519e"))
+	(label "GND" (at 50.8 64.77 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "4c2b4640-9424-500d-93b6-e474bd270001"))
+	(symbol (lib_id "Device:R") (at 81.28 50.8 0) (unit 1) (uuid "fdd2b8a6-e356-5e41-9988-f2d65b202f90") (pin "1" (uuid "9f163d72-288a-571d-beda-9b83d8536e4f")) (pin "2" (uuid "a8ab273b-141e-5f56-adf3-f83feb52f625")) (property "Reference" "R3" (at 83.566 49.53 0) (effects (font (size 1.27 1.27)) (justify left))) (instances (project "noname" (path "/bc713222-9c23-4e6b-998c-7ec65025e263" (reference "R3") (unit 1))))
+	(property "Value" "10k" (at 83.566 52.07 0) (effects (font (size 1.27 1.27)) (justify left))))
+	(symbol (lib_id "Device:C") (at 81.28 60.96 0) (unit 1) (uuid "88807a75-fdc7-5c12-8d19-4957a7e61062") (pin "1" (uuid "ec0e9d6e-ce0b-501a-8a75-b40fa9ea508b")) (pin "2" (uuid "1f512902-3ad8-597d-983b-8fe514c508b5")) (property "Reference" "C4" (at 84.582 59.69 0) (effects (font (size 1.27 1.27)) (justify left))) (instances (project "noname" (path "/bc713222-9c23-4e6b-998c-7ec65025e263" (reference "C4") (unit 1))))
+	(property "Value" "10n" (at 84.582 62.23 0) (effects (font (size 1.27 1.27)) (justify left))))
+	(label "VBUS_SENSE" (at 81.28 46.99 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "c1ac84c1-511e-5388-b33c-f00faa476999"))
+	(label "VBUS_ADC" (at 81.28 54.61 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "819ff654-1d30-5523-9430-0ed436a4e86a"))
+	(label "VBUS_ADC" (at 81.28 57.15 90) (effects (font (size 1.27 1.27)) (justify left bottom)) (uuid "ac6105be-0dc4-581c-9db1-997808b8cec2"))
+	(label "GND" (at 81.28 64.77 270) (effects (font (size 1.27 1.27)) (justify right bottom)) (uuid "04a8d302-2d43-52fa-9286-6becacc8f725"))
+)

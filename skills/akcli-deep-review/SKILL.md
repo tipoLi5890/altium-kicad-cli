@@ -14,7 +14,7 @@ description: >-
 
 # akcli-deep-review — you propose, akcli verifies
 
-The deterministic detectors have breadth (39 rules); you have depth — you
+The deterministic detectors have breadth (44 rules); you have depth — you
 can read datasheets, understand design intent, and spot problems no topology
 pattern expresses. The contract that keeps that power honest: **every claim
 you make goes through `akcli review validate` before anyone calls it a

@@ -1,0 +1,30 @@
+{
+  "protocol_version": 1,
+  "target_format": "kicad",
+  "target_file": "power_entry.kicad_sch",
+  "ops": [
+    {"op": "place_component", "lib_id": "Device:Fuse", "designator": "F1",
+     "x_mil": 1200, "y_mil": 800, "rotation": 90, "value": "500mA"},
+    {"op": "place_component", "lib_id": "Device:D", "designator": "D1",
+     "x_mil": 1900, "y_mil": 800, "rotation": 180, "value": "SS34"},
+    {"op": "place_component", "lib_id": "Device:C_Polarized", "designator": "C1",
+     "x_mil": 2600, "y_mil": 950, "value": "22u"},
+    {"op": "add_net_label", "at": "F1.1", "name": "VBAT"},
+    {"op": "connect_and_label", "from": "F1.2", "to": "D1.2", "net": "VBAT_F"},
+    {"op": "connect_and_label", "from": "D1.1", "to": "C1.1", "net": "VSYS"},
+    {"op": "add_net_label", "at": "C1.2", "name": "GND"},
+    {"op": "place_decoupling", "x_mil": 3200, "y_mil": 950,
+     "power_net": "VSYS", "designator": "C2", "value": "100n"},
+
+    {"op": "place_component", "lib_id": "Device:C", "designator": "C3",
+     "x_mil": 1200, "y_mil": 2100, "value": "100n"},
+    {"op": "add_net_label", "at": "C3.1", "name": "VBUS"},
+    {"op": "add_net_label", "at": "C3.2", "name": "GND"},
+    {"op": "place_divider", "x_mil": 2000, "y_mil": 2000,
+     "top_net": "VBUS", "mid_net": "VBUS_SENSE", "bottom_net": "GND",
+     "designators": ["R1", "R2"], "values": ["100k", "27k"]},
+    {"op": "place_rc_filter", "x_mil": 3200, "y_mil": 2000,
+     "in_net": "VBUS_SENSE", "out_net": "VBUS_ADC",
+     "designators": ["R3", "C4"], "r_value": "10k", "c_value": "10n"}
+  ]
+}

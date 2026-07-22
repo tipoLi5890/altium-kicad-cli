@@ -9,8 +9,8 @@
     "review_profile": "standard",
     "facts_mpns": [],
     "source_format": "kicad",
-    "components": 13,
-    "nets": 8,
+    "components": 9,
+    "nets": 7,
     "detectors_run": [
       "signal.crystal",
       "signal.divider",
@@ -44,46 +44,46 @@
     {
       "code": "REVIEW_FUSE_MISSING",
       "severity": "warning",
-      "message": "power-entry net 'VIN': no series fuse/PTC in its path",
+      "message": "power-entry net 'VBUS': no series fuse/PTC in its path",
       "refs": [
-        "VIN"
+        "VBUS"
       ],
       "anchors": [
         {
           "kind": "net",
-          "id": "VIN"
+          "id": "VBUS"
         }
       ],
       "detector": "signal.power_protect",
       "confidence": "heuristic",
       "rule_version": "1",
-      "fingerprint": "c323f36360cc3edc7095615009cf221f",
+      "fingerprint": "1a71d9b769e7b5f3416b011330d786b1",
       "remediation": "fuse the entry rail (fuse or resettable PTC), or waive if this rail is a board OUTPUT or is protected upstream",
       "evidence": {
         "source": "topology"
       },
       "fix_params": {
         "kind": "add_fuse",
-        "net": "VIN"
+        "net": "VBUS"
       }
     },
     {
       "code": "REVIEW_REVPOL_UNPROTECTED",
       "severity": "warning",
-      "message": "power-entry net 'VIN': no reverse-polarity protection found (no series diode, no fuse+shunt crowbar)",
+      "message": "power-entry net 'VBUS': no reverse-polarity protection found (no series diode, no fuse+shunt crowbar)",
       "refs": [
-        "VIN"
+        "VBUS"
       ],
       "anchors": [
         {
           "kind": "net",
-          "id": "VIN"
+          "id": "VBUS"
         }
       ],
       "detector": "signal.power_protect",
       "confidence": "heuristic",
       "rule_version": "1",
-      "fingerprint": "bf42b27c982b551121fae1d038bcf52e",
+      "fingerprint": "1b620aa1369f0e97b5e3000d7dea8f95",
       "remediation": "add a series (Schottky) diode or a P-FET reverse-protection stage, or waive for a polarised connector",
       "evidence": {
         "source": "topology",
@@ -94,35 +94,35 @@
       },
       "fix_params": {
         "kind": "add_reverse_protection",
-        "net": "VIN"
+        "net": "VBUS"
       }
     },
     {
       "code": "REVIEW_RC_CUTOFF",
       "severity": "info",
-      "message": "RC low-pass R5/C5 on net 'ADC_IN': fc = 1.592e+04 Hz",
+      "message": "RC low-pass R3/C4 on net 'VBUS_ADC': fc = 1,592 Hz",
       "refs": [
-        "R5",
-        "C5"
+        "R3",
+        "C4"
       ],
       "anchors": [
         {
           "kind": "component",
-          "id": "R5"
+          "id": "R3"
         },
         {
           "kind": "component",
-          "id": "C5"
+          "id": "C4"
         },
         {
           "kind": "net",
-          "id": "ADC_IN"
+          "id": "VBUS_ADC"
         }
       ],
       "detector": "signal.rc_filter",
       "confidence": "deterministic",
       "rule_version": "1",
-      "fingerprint": "18301eb502997a56f9deeb7d70e4abb6",
+      "fingerprint": "4f6b24e81ce404e68275be36dde3fc4d",
       "remediation": "confirm the corner suits this net's bandwidth; retune R or C if not",
       "evidence": {
         "source": "calc",
@@ -130,25 +130,25 @@
           "calc": "rc",
           "title": "RC time constant / cutoff frequency",
           "inputs": {
-            "r": 1000.0,
+            "r": 10000.0,
             "c": 1e-08
           },
           "results": {
             "tau": {
-              "value": 1e-05,
+              "value": 0.0001,
               "unit": "s"
             },
             "fc": {
-              "value": 15915.494309189533,
+              "value": 1591.5494309189535,
               "unit": "Hz",
               "note": "−3 dB corner"
             },
             "t_63pct": {
-              "value": 1e-05,
+              "value": 0.0001,
               "unit": "s"
             },
             "t_99pct": {
-              "value": 4.6e-05,
+              "value": 0.00045999999999999996,
               "unit": "s",
               "note": "≈ ln(100)·τ"
             }

@@ -1,7 +1,8 @@
 # Installing akcli
 
 `akcli` is a **zero-runtime-dependency** Python package. It needs only **Python ≥ 3.11**
-(for the stdlib `tomllib` module). There is nothing to compile and no EDA software to install.
+(for the stdlib `tomllib` module). There is nothing to compile; KiCad itself is only needed for
+the optional integrations (`akcli doctor` lists them).
 
 - import package: `akcli`
 - CLI command: `akcli`

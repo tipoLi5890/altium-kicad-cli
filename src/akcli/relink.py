@@ -230,8 +230,7 @@ def apply(sch_path: os.PathLike | str, actions: list[dict],
                  f"{len(gained)} gained [{_fmt_nets(gained)}] — refusing to write")
         if backup:
             from . import journal
-            bdir = journal.backups_dir(p)
-            bdir.mkdir(parents=True, exist_ok=True)
+            bdir = journal.ensure_backups_dir(p)
             bak = bdir / (p.name + ".bak")
             shutil.copy2(p, bak)
             result["backup"] = str(bak)

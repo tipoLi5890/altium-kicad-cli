@@ -588,6 +588,7 @@ schematic = "hardware/main.SchDoc"   # resolved relative to THIS file's dir
 dts       = "firmware/board.dts"
 pinout_md = "docs/pinout.md"
 intent    = "intent.json"            # default for `check --intent` (flag overrides)
+parts_dir = "hardware/libs"          # default library out-dir for `jlc add` / `library import-altium`
 
 [[erc_waiver]]                       # legacy ERC-only waiver (back-compat alias)
 net    = "LED1_GPIO_RD"
@@ -690,7 +691,7 @@ After F is frozen, these groups proceed **in parallel** (each owns disjoint file
 {
   "name": "akcli",
   "displayName": "akcli — AI-native KiCad design agent (+ Altium import)",
-  "description": "AI-native KiCad design agent (zero-dependency Python CLI + Claude Code plugin): author and edit .kicad_sch from JSON op-lists, run ERC/design/intent/BOM checks, simulate on KiCad's bundled ngspice, source parts, and import Altium .SchDoc/.SchLib/.PcbDoc — no Altium or KiCad install required.",
+  "description": "AI-native schematic design agent, purpose-built for KiCad (zero-dependency pure-stdlib Python CLI): author and edit .kicad_sch from JSON op-lists with net-diff safety rails, run ERC/design/intent/BOM checks, simulate on KiCad's bundled ngspice, source real parts and fetch datasheets, and import Altium .SchDoc/.SchLib/.PcbDoc read-only into the KiCad flow.",
   "keywords": ["altium","kicad","schdoc","kicad-sch","eda","schematic","pcb","netlist","erc","claude-code","ai-agents"],
   "repository": "https://github.com/tipoLi5890/akcli",
   "homepage": "https://github.com/tipoLi5890/akcli",
@@ -710,7 +711,7 @@ After F is frozen, these groups proceed **in parallel** (each owns disjoint file
     {
       "name": "akcli",
       "source": "./",
-      "description": "AI-native KiCad design agent (zero-dependency Python CLI + Claude Code plugin): author and edit .kicad_sch from JSON op-lists, run ERC/design/intent/BOM checks, simulate on KiCad's bundled ngspice, source parts, and import Altium .SchDoc/.SchLib/.PcbDoc — no Altium or KiCad install required.",
+      "description": "AI-native schematic design agent, purpose-built for KiCad (zero-dependency pure-stdlib Python CLI): author and edit .kicad_sch from JSON op-lists with net-diff safety rails, run ERC/design/intent/BOM checks, simulate on KiCad's bundled ngspice, source real parts and fetch datasheets, and import Altium .SchDoc/.SchLib/.PcbDoc read-only into the KiCad flow.",
       "keywords": ["altium","kicad","schdoc","kicad-sch","eda","schematic","pcb","netlist","erc","claude-code","ai-agents"]
     }
   ]
@@ -827,7 +828,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "akcli"
-description = "AI-native KiCad design agent: draw and edit .kicad_sch from JSON op-lists with net-diff safety rails, run ERC/design/intent checks, simulate on bundled ngspice, source parts, and import Altium .SchDoc/.PcbDoc — no EDA install required."
+description = "AI-native schematic design agent, purpose-built for KiCad: draw and edit .kicad_sch from JSON op-lists with net-diff safety rails, run ERC/design/intent checks, simulate on bundled ngspice, source parts, and import Altium .SchDoc/.PcbDoc read-only into the KiCad flow."
 requires-python = ">=3.11"
 readme = "README.md"
 license = "MIT"
@@ -903,6 +904,29 @@ units.py, config.py, schemas/*.json, pyproject.toml, .claude-plugin/plugin.json,
 .claude-plugin/marketplace.json, bin/akcli, hooks/hooks.json` + the fixture generators. Everything else codes
 against these signatures and never edits them. After the foundation, the ownership groups in §4 proceed in
 the dependency order of that section's DAG.
+
+---
+
+## 10. Output placement policy (state / cache / deliverable)
+
+Every file akcli writes belongs to exactly ONE class, and the class decides where its
+**default** location may be. Adding a write surface without classifying it fails the
+census gate in `tests/test_output_policy.py`.
+
+| Class | What | Default location | Rules |
+|---|---|---|---|
+| **State** | tool-internal, re-derivable, supports undo: `journal.jsonl`, rotated backups | `.akcli/` next to the edited file (`journal.workspace_dir`) | Created only via `journal.ensure_workspace_dir`/`ensure_backups_dir` (or the `safety` backup hook), which drop a self-ignoring `.akcli/.gitignore` (`*`) so the user's `.gitignore` is never touched. Never committed, never required to rebuild anything. |
+| **Cache** | re-derivable, personal, shareable across projects: jlc search cache, fetched datasheet PDFs | XDG cache (`~/.cache/akcli/...`); env overrides `AKCLI_JLC_CACHE` / `AKCLI_DATASHEET_DIR` | Must never default into the CWD. Never load-bearing: review results must not silently depend on one person's cache. |
+| **Deliverable** | what the user asked for / the team signs off on: the `.kicad_sch` itself, `sym-lib-table`/`fp-lib-table`, converted libraries (`jlc add`, `library import-altium`), the **datasheet facts store** (`./datasheets` — committed, code-reviewed numbers that survive handoff and feed CI), rendered SVG | in-repo; libraries under `[paths].parts_dir` (default `./akcli-parts`), facts under `./datasheets`, SVG next to the schematic | Every deliverable command MUST accept `--out`/`--dir`. In-repo defaults must be a single predictable directory (no scattering) and be documented in `docs/cli-reference.md`. |
+
+Rationale: deliverables belong in the repo (they are committed, referenced by
+lib-tables, and — for facts — are the auditable basis of review/release gates, so
+they must travel with the design when someone else takes over); everything else
+defaulting into the user's repo is workspace pollution, and everything
+project-decisive defaulting OUTSIDE the repo is a reproducibility bug. The
+enforcement lives in `tests/test_output_policy.py`: state-root self-ignore,
+cache-defaults-outside-CWD, facts-store resolution, and a source census that
+whitelists the only permitted CWD-relative default-path literals.
 
 ---
 

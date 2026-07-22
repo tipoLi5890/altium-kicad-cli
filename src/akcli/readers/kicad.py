@@ -44,7 +44,7 @@ from ..model import Junction as MJunction
 from . import kicad_lib, sexpr
 from .kicad_lib import _read_text
 
-__all__ = ["read_sch", "read_pcb", "read_primitives"]
+__all__ = ["read_sch", "read_pcb", "read_primitives", "read_embedded_library"]
 
 
 def _mm_to_mil(mm: float) -> float:
@@ -560,6 +560,23 @@ def read_primitives(path: os.PathLike | str) -> NetPrimitives:
     root = _parse_root(path, "kicad_sch")
     _, prims = _build(root)
     return prims
+
+
+def read_embedded_library(path: os.PathLike | str) -> model.Library | None:
+    """The file's ``(lib_symbols ...)`` as a :class:`model.Library`, or None.
+
+    Root-file view (no sheet recursion) — KiCad embeds every symbol a file
+    places into that file's own ``lib_symbols``, so this is exactly the set
+    the root sheet's components resolve against. Faithful rendering
+    (:mod:`akcli.render_art`) falls back per-component when a hierarchical
+    child sheet's symbol is absent here.
+    """
+    root = _parse_root(path, "kicad_sch")
+    libsym = root.find("lib_symbols")
+    if libsym is None:
+        return None
+    return kicad_lib.library_from_lib_symbols(libsym,
+                                              source_path=os.fspath(path))
 
 
 def _rot_ccw(x: float, y: float, deg: float) -> tuple[float, float]:

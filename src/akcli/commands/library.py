@@ -20,6 +20,7 @@ from ._shared import (
     _emit,
     _ExitWith,
     _findings_exit,
+    _load_cfg,
     _stamp,
 )
 
@@ -143,7 +144,13 @@ def _cmd_library_import_altium(args: argparse.Namespace) -> int:
         raise _ExitWith(EXIT["USAGE"], "ERROR: missing input .PcbLib")
     lib = footprint_lib.read_pcblib(src)
 
-    out_dir = Path(getattr(args, "out", None) or (src.stem + ".pretty"))
+    out_arg = getattr(args, "out", None)
+    if out_arg:
+        out_dir = Path(out_arg)
+    else:
+        parts_root = _load_cfg(args, None).paths.get("parts_dir")
+        out_dir = (Path(parts_root) / (src.stem + ".pretty") if parts_root
+                   else Path(src.stem + ".pretty"))
     do_apply = bool(getattr(args, "apply", False))
     courtyard = getattr(args, "courtyard", None)
 
@@ -297,7 +304,8 @@ def register(sub, common) -> None:
              "declared transformations)")
     pi.add_argument("path", nargs="?", help="input .PcbLib")
     pi.add_argument("--out", metavar="DIR",
-                    help="output .pretty directory (default: <name>.pretty)")
+                    help="output .pretty directory (default: <name>.pretty, "
+                         "under [paths].parts_dir when configured)")
     pi.add_argument("--courtyard", type=float, metavar="MM",
                     help="synthesize a pad-bbox courtyard with this clearance "
                          "when the source has none (declared transformation)")

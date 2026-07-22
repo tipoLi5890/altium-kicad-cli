@@ -1,4 +1,4 @@
-"""Real-board corpus regression: the solestack insole pod (88 parts, 10 groups).
+"""Real-board corpus regression: the groups board (88 parts, 10 groups).
 
 This board is the reason two 0.12.x-era safety features exist:
 
@@ -22,7 +22,7 @@ from akcli import netdiff
 from akcli.cli import main
 from akcli.readers import kicad as kreader
 
-BOARD = Path(__file__).parent / "fixtures" / "corpus" / "pod_insole.kicad_sch"
+BOARD = Path(__file__).parent / "fixtures" / "corpus" / "groups_board.kicad_sch"
 
 
 @pytest.fixture()

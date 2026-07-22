@@ -4,13 +4,15 @@
 `.kicad_sch` from a versioned JSON op-list behind net-diff safety rails, verifies the result with
 checks it can gate on, **runs an advisory engineering design review**, simulates it on KiCad's
 bundled ngspice, sources real parts, and imports Altium `.SchDoc`/`.SchLib`/`.PcbDoc` into the same
-normalized model — all with zero dependencies and no EDA install. Every output is typed, versioned,
+normalized model — a zero-dependency (pure-stdlib Python) toolchain, purpose-built for KiCad.
+Every output is typed, versioned,
 and machine-checkable, because the primary user is an agent shelling out from a pipeline.
 
-KiCad is the writable target. Altium is an **import source** (plus an optional, experimental
-Windows live bridge into a running Altium instance) — not a symmetric conversion peer. That
-repositioning (2026-07) reshaped this roadmap: the Altium-interop items that earlier milestones
-treated as release-critical now live in a demand-driven optional track.
+KiCad is the writable target and the sole development line. Altium is an **import source** — a
+read-only on-ramp into the KiCad flow, not a symmetric conversion peer. That repositioning
+(2026-07) reshaped this roadmap: the Altium-interop items that earlier milestones treated as
+release-critical now live in a demand-driven optional track, and the experimental Windows live
+bridge is **shelved indefinitely**.
 
 ## Where we are (v0.13.0)
 
@@ -39,7 +41,7 @@ Shipped and working today (details per release in [CHANGELOG.md](CHANGELOG.md)):
 - **Design review (0.8.0):** `akcli review analyze|report|explain|facts|propose|testbench|diff|tree|validate`
   — an advisory engineering-review engine on the normalized model (so it reviews Altium `.SchDoc`
   as readily as `.kicad_sch`). Six detector families (signal / validation / pcb / emc / domain /
-  gerber; **39 rules**) emit **confidence-graded** findings (deterministic / heuristic /
+  gerber; **44 rules**) emit **confidence-graded** findings (deterministic / heuristic /
   datasheet_backed / llm_reviewed) with an evidence envelope published as `findings.schema.json`.
   A **datasheet facts store** (`review facts`, PDF sha256+page pinned) upgrades findings to
   datasheet_backed; `review propose` recomputes + E-series-snaps fixes into op-list/contract/sim
@@ -77,7 +79,7 @@ Shipped and working today (details per release in [CHANGELOG.md](CHANGELOG.md)):
   message, exit, remediation}}`) on every failing exit path so stdout always parses as JSON even
   on failure. `akcli --version` reports the code actually running (a
   source checkout's `pyproject.toml` wins over stale installed metadata). 0.9.0 additions:
-  `akcli capabilities` (the self-describing surface manifest), `akcli render` (install-free SVG),
+  `akcli capabilities` (the self-describing surface manifest), `akcli render` (pure-stdlib SVG),
   the workspace write journal + `akcli log`, `akcli ops validate` + a PreToolUse draw guard,
   `read --summary`/`nets --match`/`--limit` output throttling, and structured per-op
   `remediation` hints. 0.12.0 additions: `akcli doc` (the pinout book), the `.akcli/` workspace
@@ -99,7 +101,8 @@ Honest limitations:
 - **Binary `.SchLib` symbol records are refused loudly** (exit 5); only text-record libraries read.
 - **`.PcbDoc` `Fills6`/`Regions6`/`Texts6`/`Polygons6` are skipped**, not parsed.
 - **The Altium live bridge is an unvalidated scaffold** (Windows + Altium 22+; no CLI entry point,
-  no CJK text, parameters/footprints not applied). It is now an *optional track*, not a milestone.
+  no CJK text, parameters/footprints not applied). **Shelved indefinitely (2026-07)** — the code
+  and its record stay in the frozen optional track; it is not a milestone and is not promoted.
 - **ERC power checks are net-name + power-port based by design.** The pin-type conflict
   matrix shipped in 0.9.0 (`ERC_PIN_CONFLICT` — the high-signal cells of KiCad's default
   matrix — plus `ERC_POWER_IN_UNDRIVEN`), type-confidence-gated like every type-based rule;
@@ -111,8 +114,9 @@ Honest limitations:
   byte-identically into the wheel and CI-gated.
 - **PDN impedance / anti-resonance is not built** — the EMC review is a pre-compliance risk
   analyzer (never a compliance verdict). Stdlib SVG rendering shipped in 0.9.0 as
-  `akcli render` (connectivity-true, synthesized bodies); `view live`'s pixel-faithful canvas
-  still renders through the optional `kicad-cli`.
+  `akcli render` and draws faithful symbol artwork from the embedded `lib_symbols` on KiCad
+  sources (post-0.13); Altium sources and multi-unit parts fall back to synthesized bodies,
+  and `view live`'s canvas still renders through the optional `kicad-cli`.
 - **Not on PyPI — by decision** (2026-07): distribution is GitHub Releases; the release workflow
   already supports PyPI trusted publishing whenever that decision changes.
 - **MCP server: deferred by decision** — agents drive the plain CLI today.
@@ -120,7 +124,8 @@ Honest limitations:
 ## Guiding principles
 
 1. **KiCad is the writable target; Altium files are never modified.** No code path writes an
-   Altium file on disk. The optional live bridge drives a *running* Altium Designer instead.
+   Altium file on disk. (The only Altium write path ever considered — the live bridge, shelved
+   indefinitely — would drive a *running* Altium Designer, never a file.)
 2. **Verify everything.** Dry-run by default, `--apply` is explicit and atomic, every write is
    re-read, connectivity-gated, and net-diffed; a "0 findings" report always carries its metadata
    caveats. New write capabilities land together with their verification step — and where external
@@ -166,7 +171,8 @@ in 0.8.0. Per-rule specification and provenance: [docs/review-rules.md](docs/rev
 - [x] **M2 — signal detectors:** divider (feedback Vref plausibility, tap-name
       mismatch), RC cutoff (via `calc rc`), crystal load caps, connector ESD/TVS coverage,
       op-amp gain topology (non-inverting/inverting/buffer/open-loop) — five fixture classes each,
-      KiCad+Altium format-agnostic contract (backlog: fuse sizing, reverse-polarity rules)
+      KiCad+Altium format-agnostic contract (the fuse-sizing / reverse-polarity backlog
+      closed post-0.13 as `signal.power_protect`)
 - [x] **M3 — validation detectors + BOM:** I²C pull-up window (missing/strong/weak/
       mismatch via `calc i2c-pullup`), cross-voltage-domain signals (level-shifter aware),
       floating enable pins; MPN-coverage sourcing audit into `check --bom` (backlog: SPI/UART
@@ -254,7 +260,7 @@ a tunable rule engine reaching across artifacts.
       mechanically (AST scan) in CI — **shipped in 0.9.0** (S)
 - [x] Review-rule calibration baseline replayed in CI (`tools/corpus_replay.py` +
       `tests/golden/corpus_replay_baseline.json`) — **shipped in 0.9.0** (S)
-- [x] Agent-loop eval harness (`tools/agent_eval/` — seven ground-truthed design tasks, scored
+- [x] Agent-loop eval harness (`tools/agent_eval/` — eight ground-truthed design tasks, scored
       through the real safety rails; references CI-pinned at 100%) — **shipped in 0.9.0** (M)
 
 **Exit criterion:** a schematic PR can be gated end-to-end (check + review + diff + intent + sim
@@ -265,9 +271,11 @@ assertions), and a false finding is tuned or waived in config rather than ignore
 Goal: humans reviewing agent work get visuals and documents, not just JSON.
 
 - [x] Pure-stdlib SVG schematic rendering from the normalized model (components, pin tips, wires,
-      junctions, labels) for install-free before/after review — **shipped in 0.9.0 as
-      `akcli render`** (connectivity-true, synthesized bodies, per-sheet blocks, deterministic);
-      pixel-faithful symbol artwork and a `view live` integration stay open (L)
+      junctions, labels) for stdlib-only before/after review — **shipped in 0.9.0 as
+      `akcli render`** (connectivity-true, per-sheet blocks, deterministic); **faithful symbol
+      artwork shipped post-0.13** (`render_art` walks the embedded `lib_symbols` graphics through
+      the net engine's own transform chain; synthesized-body fallback for Altium/multi-unit); a
+      `view live` integration stays open (L)
 - [x] `akcli doc <file> -o book.md`: pinout book composing per-IC/connector pin tables, rail
       summary (from `review tree`), and BOM — **shipped in 0.12.0** (deterministic Markdown +
       `--json`; `--refs` widens the pin-table set) (M)
@@ -295,8 +303,10 @@ Extensions to the shipped review engine, pulled in when real boards need them:
 - [ ] More domain families: RF, Ethernet, HDMI, memory, BMS, motor (each its own detector module).
 - [ ] PDN impedance / anti-resonance and plane-void EMC rules (need zone polygons / SPICE).
 - [ ] Lifecycle/obsolescence audit via optional DigiKey/Mouser drivers (`jlc bom` covers LCSC today).
-- [ ] Additional signal/validation rules: fuse sizing, reverse-polarity protection, SPI CS counts,
-      UART voltage-domain pairing, full power-sequencing analysis.
+- [ ] Additional signal/validation rules: SPI CS counts, UART voltage-domain pairing, full
+      power-sequencing analysis. (Fuse sizing + reverse-polarity shipped post-0.13 as
+      `signal.power_protect` — `calc fuse-derating`-backed sizing, entry-chain walk,
+      calibrated on the `power_entry` corpus board.)
 
 ### Optional track — Altium interop (demand-driven, currently frozen)
 
@@ -307,12 +317,16 @@ repositioning they proceed only if real usage pulls them:
       exiting 5 (L) — prerequisite for offline `.SchLib → .kicad_sym` conversion with a fidelity gate (L)
 - [ ] `.PcbDoc` remaining binary sections: fills/regions/texts/polygons (L)
 - [ ] Altium `Bus`/`BusEntry` records into `netbuild` (M)
-- [ ] Live bridge graduation: `draw --live` CLI wiring, DelphiScript validation on Windows +
-      Altium 22+, automatic post-apply netlist re-export + diff (L)
+- [ ] Live bridge graduation — **shelved indefinitely (2026-07)**, kept only as a record:
+      `draw --live` CLI wiring, DelphiScript validation on Windows + Altium 22+, automatic
+      post-apply netlist re-export + diff (L)
 - [ ] Real-AD-scale validation of sheet-entry positions in multi-sheet `.PrjPcb` reads (M)
 
 ### Deferred by decision
 
+- **Altium live bridge** (2026-07) — **shelved indefinitely**. The Windows scaffold and its tests
+  stay in the tree as a record, but graduation work is not planned and the feature is not
+  promoted; KiCad is the sole development line.
 - **MCP server** (`akcli mcp`) — the plain CLI + plugin skills serve agents today; revisit on demand.
 - **PyPI publishing** — see v1.0; the mechanism is built, the decision is deliberate.
 - **GitHub Action** (2026-07) — check/review/diff + SARIF on schematic PRs. The CLI side (SARIF
@@ -331,19 +345,21 @@ repositioning they proceed only if real usage pulls them:
 | **Simulation** | — | behavioral models, review testbenches | waveform panel (deferred) |
 | **Review UX** | `review tree`, markdown/SARIF reports | stdlib SVG render, pinout book | — |
 | **Parts & manufacturing** | facts store from `jlc datasheet` | `/circuit-parts` command | — |
-| **Altium import** | `.PcbLib` reading | — | optional track (SchLib decoder, PcbDoc sections, live bridge) |
+| **Altium import** | `.PcbLib` reading | — | frozen optional track (SchLib decoder, PcbDoc sections; live bridge shelved) |
 
 ## Non-goals
 
 - **Offline Altium writing.** akcli never modifies a `.SchDoc`/`.SchLib`/`.PcbDoc` on disk. Altium
-  writes, if ever, go exclusively through the live bridge into a running Altium Designer.
+  writes, if ever, go exclusively through the (indefinitely shelved) live bridge into a running
+  Altium Designer.
 - **Symmetric Altium↔KiCad conversion.** Altium is an import source. Library-level conversion with
   a fidelity gate stays in the optional track; "convert my whole board pixel-perfect" is out.
 - **Replacing full EDA tools.** No interactive editor, no autorouter, no autolayout — akcli reads,
   checks, reviews, simulates, and makes surgical, verifiable edits; KiCad remains the design environment.
 - **A compliance predictor.** The EMC review is a pre-compliance *risk* analyzer that states its
   assumptions; only a calibrated measurement in an accredited lab establishes regulatory compliance.
-- **Pixel-perfect visual fidelity.** The SVG renderer (v0.10) targets *reviewable*,
-  connectivity-true drawings, not a reproduction of either tool's canvas.
+- **Pixel-perfect visual fidelity.** The SVG renderer targets *reviewable*, connectivity-true
+  drawings: it draws the real symbol artwork where the source carries it (KiCad `lib_symbols`),
+  but does not reproduce either tool's canvas (fonts, exact text metrics, sheet decorations).
 - **Becoming a dependency-heavy platform.** No third-party runtime packages, no always-on network
   features. `akcli jlc` stays the only networked surface.

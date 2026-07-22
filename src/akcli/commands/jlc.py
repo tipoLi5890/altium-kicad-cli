@@ -613,7 +613,12 @@ def _cmd_jlc_add(args: argparse.Namespace) -> int:
         if not getattr(args, "at", None):
             raise _ExitWith(EXIT["USAGE"], "ERROR: --place requires --at X Y")
 
-    out_dir = getattr(args, "out", None) or str(Path("akcli-parts") / lcsc)
+    out_dir = getattr(args, "out", None)
+    if not out_dir:
+        # deliverable-class output: default stays in-repo (the library is a
+        # committed asset sym-lib-table points at), [paths].parts_dir relocates
+        parts_root = _load_cfg(args, None).paths.get("parts_dir") or "akcli-parts"
+        out_dir = str(Path(parts_root) / lcsc)
     with_3d = bool(getattr(args, "with_3d", False))
 
     # Advisory EasyEDA lookup: what is being fetched + whether 3D exists.
@@ -804,7 +809,8 @@ def register(sub, common) -> None:
     pa.add_argument("--3d", dest="with_3d", action="store_true",
                     help="also download the 3D STEP model")
     pa.add_argument("--out", metavar="DIR",
-                    help="output directory (default: ./akcli-parts/<C-number>/)")
+                    help="output directory (default: <[paths].parts_dir or "
+                         "./akcli-parts>/<C-number>/)")
     pa.add_argument("--lib-name", metavar="NAME", default="akcli",
                     help="KiCad symbol library name (default: akcli)")
     pa.add_argument("--footprint-lib", dest="footprint_lib", metavar="NICKNAME",

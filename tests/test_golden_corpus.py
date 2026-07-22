@@ -40,6 +40,7 @@ _ALT = "tests/fixtures/shared_name_label.SchDoc"
 _ALT2 = "tests/fixtures/two_gnd_ports.SchDoc"
 _TJ = "tests/fixtures/t_junction.SchDoc"
 _AFE = "tests/fixtures/corpus/analog_frontend.kicad_sch"
+_PWE = "tests/fixtures/corpus/power_entry.kicad_sch"
 
 CASES: list[Case] = [
     Case("nets-board_v8", ("nets", _KI, "--json")),
@@ -62,17 +63,23 @@ CASES: list[Case] = [
     Case("review-analog_frontend",
          ("review", "analyze", _AFE, "--json", "--profile", "standard")),
     Case("render-analog_frontend", ("render", _AFE, "-o", "-")),
+    Case("nets-power_entry", ("nets", _PWE, "--json")),
+    Case("check-power_entry", ("check", _PWE, "--json", "--fail-on", "never")),
+    Case("review-power_entry",
+         ("review", "analyze", _PWE, "--json", "--profile", "standard")),
+    Case("render-power_entry", ("render", _PWE, "-o", "-")),
 ]
 
 
-def test_corpus_board_reproducible(tmp_path):
-    """The corpus board re-derives from its committed op-list (provenance)."""
+@pytest.mark.parametrize("board", ["analog_frontend", "power_entry"])
+def test_corpus_board_reproducible(tmp_path, board):
+    """A corpus board re-derives from its committed op-list (provenance)."""
     import shutil
 
-    target = tmp_path / "analog_frontend.kicad_sch"
+    target = tmp_path / f"{board}.kicad_sch"
     rc = main(["new", str(target)])
     assert rc == 0
-    shutil.copy2(ROOT / "tests/fixtures/corpus/analog_frontend.ops.json",
+    shutil.copy2(ROOT / f"tests/fixtures/corpus/{board}.ops.json",
                  tmp_path / "ops.json")
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
@@ -88,7 +95,7 @@ def test_corpus_board_reproducible(tmp_path):
              for n in kreader.read_sch(str(target)).nets}
     committed = {(n.name, tuple(n.members))
                  for n in kreader.read_sch(
-                     str(ROOT / "tests/fixtures/corpus/analog_frontend.kicad_sch")).nets}
+                     str(ROOT / f"tests/fixtures/corpus/{board}.kicad_sch")).nets}
     assert fresh == committed
 
 

@@ -11,7 +11,9 @@ from __future__ import annotations
 from akcli.model import Component, Net, Pin, Schematic
 from akcli.review import topo
 from akcli.review.detectors.signal import (crystal, divider, opamp,
-                                           protection, rc_filter)
+                                           power_protect, protection,
+                                           rc_filter)
+from akcli.review.facts import FactValue
 from akcli.review.detectors.validation import (enable_pin, i2c_pullup,
                                                vdomain)
 
@@ -424,3 +426,121 @@ def test_detectors_are_source_format_agnostic():
     assert [(f.code, f.fingerprint) for f in fk] == \
            [(f.code, f.fingerprint) for f in fa]
     assert (mk["source_format"], ma["source_format"]) == ("kicad", "altium")
+
+
+# --------------------------------------------------------------------------- #
+# power-entry protection (fuse + reverse polarity)
+# --------------------------------------------------------------------------- #
+def _entry_sch(*, fuse=True, series_diode=True, shunt_diode=False,
+               fuse_value="1A", entry="VBAT"):
+    """J1 battery entry -> [F1] -> [D1 series] -> load; optional crowbar."""
+    comps = [_comp("J1", "Conn:1x02", "BATT", pins=(("1", "P1"), ("2", "P2"))),
+             _comp("U1", "MCU:M0", "MCU",
+                   pins=(("1", "VDD"), ("2", "GND"), ("3", "IO")))]
+    nets = {entry: [("J1", "1")], "GND": [("J1", "2"), ("U1", "2")],
+            "IO_NET": [("U1", "3")]}
+    up = entry
+    if fuse:
+        comps.append(_comp("F1", "Device:Fuse", fuse_value))
+        nets[up].append(("F1", "1"))
+        up = entry + "_F"                # token-matches too: chain dedupe
+        nets[up] = [("F1", "2")]
+    if series_diode:
+        comps.append(_comp("D1", "Device:D", "SS34"))
+        nets[up].append(("D1", "2"))
+        up = "VSYS"
+        nets[up] = [("D1", "1")]
+    nets[up].append(("U1", "1"))
+    if shunt_diode:
+        clamp = entry + "_F" if fuse else entry
+        comps.append(_comp("D9", "Device:D", "SS34"))
+        nets[clamp].append(("D9", "1"))
+        nets["GND"].append(("D9", "2"))
+    return _sch(comps, list(nets.items()))
+
+
+def test_power_entry_unprotected_positive():
+    fs = _run(power_protect,
+              _entry_sch(fuse=False, series_diode=False))
+    assert {f.code for f in fs} == {"REVIEW_FUSE_MISSING",
+                                    "REVIEW_REVPOL_UNPROTECTED"}
+    assert all(f.confidence == "heuristic" for f in fs)
+
+
+def test_power_entry_fully_protected_negative():
+    # VBAT -> F1 -> VBAT_F (also token-matches: chain dedupe) -> D1 -> VSYS
+    assert _run(power_protect, _entry_sch()) == []
+
+
+def test_power_entry_crowbar_needs_fuse():
+    fs = _run(power_protect,
+              _entry_sch(fuse=False, series_diode=False, shunt_diode=True))
+    assert {f.code for f in fs} == {"REVIEW_FUSE_MISSING",
+                                    "REVIEW_REVPOL_SHUNT_NO_FUSE"}
+    # with the fuse the crowbar scheme is accepted
+    ok = _run(power_protect,
+              _entry_sch(fuse=True, series_diode=False, shunt_diode=True))
+    assert ok == []
+
+
+def test_power_entry_odd_naming_ptc_and_plus_vin():
+    sch = _sch(
+        [_comp("RT1", "Device:Polyfuse", "PTC 750mA"),
+         _comp("D1", "Device:D_Schottky", "B340A"),
+         _comp("U1", "MCU:M0", "MCU",
+               pins=(("1", "VDD"), ("2", "GND"), ("3", "IO")))],
+        [("+VIN", [("RT1", "1")]),
+         ("VIN_F", [("RT1", "2"), ("D1", "2")]),
+         ("VSYS", [("D1", "1"), ("U1", "1")]),
+         ("GND", [("U1", "2")]), ("IO_NET", [("U1", "3")])])
+    assert _run(power_protect, sch) == []
+
+
+def test_power_entry_single_member_net_is_skipped():
+    sch = _sch([_comp("J1", "Conn:1x02", "BATT",
+                      pins=(("1", "P1"), ("2", "P2")))],
+               [("VBAT", [("J1", "1")])])
+    assert _run(power_protect, sch) == []
+
+
+def test_fuse_unrated_is_insufficient_evidence():
+    fs = _run(power_protect, _entry_sch(fuse_value="Fuse"))
+    assert [f.code for f in fs] == ["REVIEW_FUSE_UNRATED"]
+    assert fs[0].status == "insufficient_evidence"
+    assert fs[0].confidence == "deterministic"
+
+
+class _Facts:
+    def __init__(self, mapping):
+        self._m = mapping
+
+    def lookup_component(self, comp):
+        return self._m.get(comp.designator)
+
+
+def _run_with_facts(sch, mapping):
+    return power_protect.run(topo.build_ctx(sch, facts=_Facts(mapping)))
+
+
+def test_fuse_undersized_datasheet_backed():
+    fact = FactValue(key="i_load", unit="A", page=7, value=2.0,
+                     sha256="00" * 32, pdf="board.pdf")
+    fs = _run_with_facts(_entry_sch(fuse_value="1A"),
+                         {"F1": {"i_load": fact}})
+    assert [f.code for f in fs] == ["REVIEW_FUSE_UNDERSIZED"]
+    f = fs[0]
+    assert f.confidence == "datasheet_backed"
+    assert f.evidence["datasheet"]["page"] == 7
+    assert f.fix_params["suggested"] == 3.15   # 2/0.75 = 2.67 -> R10 3.15
+
+
+def test_fuse_sizing_boundary_exact_floor_is_silent():
+    fact = FactValue(key="i_load", unit="A", page=7, value=0.75,
+                     sha256="00" * 32, pdf="board.pdf")
+    # 0.75/0.75 = 1.0 A floor; a 1A fuse sits exactly on it: not undersized
+    assert _run_with_facts(_entry_sch(fuse_value="1A"),
+                           {"F1": {"i_load": fact}}) == []
+
+
+def test_fuse_no_load_fact_stays_silent():
+    assert _run(power_protect, _entry_sch(fuse_value="1A")) == []

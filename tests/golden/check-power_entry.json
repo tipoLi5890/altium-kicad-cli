@@ -1,0 +1,774 @@
+{
+  "schema_version": "1.3",
+  "metadata": {
+    "passive_pin_ratio": 1.0,
+    "no_erc_suppressed": 0,
+    "unnamed_net_count": 0,
+    "frac_present": false,
+    "config_waived": "0 (0 demoted)",
+    "component_count": 9,
+    "pin_count": 18,
+    "undesignated_count": 0
+  },
+  "findings": [
+    {
+      "code": "ERC_DANGLING_NET",
+      "severity": "warning",
+      "message": "single-pin net VBAT: F1.1 is the only connection (likely dangling / unrouted)",
+      "refs": [
+        "F1.1"
+      ],
+      "pos": [
+        1050.0,
+        800.0
+      ],
+      "anchors": [
+        {
+          "kind": "pin",
+          "id": "F1.1",
+          "pos": [
+            1050.0,
+            800.0
+          ]
+        },
+        {
+          "kind": "net",
+          "id": "VBAT"
+        }
+      ]
+    },
+    {
+      "code": "POWER_GROUND",
+      "severity": "info",
+      "message": "1 ground net(s): GND",
+      "refs": [
+        "GND"
+      ]
+    },
+    {
+      "code": "POWER_RAIL",
+      "severity": "info",
+      "message": "rail 'VBAT': 1 consumer(s): F1",
+      "refs": [
+        "VBAT"
+      ]
+    },
+    {
+      "code": "POWER_RAIL",
+      "severity": "info",
+      "message": "rail 'VBUS': 2 consumer(s): C3, R1",
+      "refs": [
+        "VBUS"
+      ]
+    },
+    {
+      "code": "POWER_RAIL",
+      "severity": "info",
+      "message": "rail 'VSYS': 3 consumer(s): C1, C2, D1",
+      "refs": [
+        "VSYS"
+      ]
+    },
+    {
+      "code": "BOM_MISSING_FOOTPRINT",
+      "severity": "warning",
+      "message": "component F1 has no footprint",
+      "refs": [
+        "F1"
+      ],
+      "pos": [
+        1200.0,
+        800.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "F1",
+          "pos": [
+            1200.0,
+            800.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_FOOTPRINT",
+      "severity": "warning",
+      "message": "component D1 has no footprint",
+      "refs": [
+        "D1"
+      ],
+      "pos": [
+        1900.0,
+        800.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "D1",
+          "pos": [
+            1900.0,
+            800.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_FOOTPRINT",
+      "severity": "warning",
+      "message": "component C1 has no footprint",
+      "refs": [
+        "C1"
+      ],
+      "pos": [
+        2600.0,
+        950.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "C1",
+          "pos": [
+            2600.0,
+            950.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_FOOTPRINT",
+      "severity": "warning",
+      "message": "component C2 has no footprint",
+      "refs": [
+        "C2"
+      ],
+      "pos": [
+        3200.0,
+        950.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "C2",
+          "pos": [
+            3200.0,
+            950.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_FOOTPRINT",
+      "severity": "warning",
+      "message": "component C3 has no footprint",
+      "refs": [
+        "C3"
+      ],
+      "pos": [
+        1200.0,
+        2100.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "C3",
+          "pos": [
+            1200.0,
+            2100.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_FOOTPRINT",
+      "severity": "warning",
+      "message": "component R1 has no footprint",
+      "refs": [
+        "R1"
+      ],
+      "pos": [
+        2000.0,
+        2000.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "R1",
+          "pos": [
+            2000.0,
+            2000.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_FOOTPRINT",
+      "severity": "warning",
+      "message": "component R2 has no footprint",
+      "refs": [
+        "R2"
+      ],
+      "pos": [
+        2000.0,
+        2400.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "R2",
+          "pos": [
+            2000.0,
+            2400.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_FOOTPRINT",
+      "severity": "warning",
+      "message": "component R3 has no footprint",
+      "refs": [
+        "R3"
+      ],
+      "pos": [
+        3200.0,
+        2000.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "R3",
+          "pos": [
+            3200.0,
+            2000.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_FOOTPRINT",
+      "severity": "warning",
+      "message": "component C4 has no footprint",
+      "refs": [
+        "C4"
+      ],
+      "pos": [
+        3200.0,
+        2400.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "C4",
+          "pos": [
+            3200.0,
+            2400.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "F1 (500mA) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": [
+        "F1"
+      ],
+      "pos": [
+        1200.0,
+        800.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "F1",
+          "pos": [
+            1200.0,
+            800.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "D1 (SS34) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": [
+        "D1"
+      ],
+      "pos": [
+        1900.0,
+        800.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "D1",
+          "pos": [
+            1900.0,
+            800.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "C1 (22u) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": [
+        "C1"
+      ],
+      "pos": [
+        2600.0,
+        950.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "C1",
+          "pos": [
+            2600.0,
+            950.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "C2 (100n) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": [
+        "C2"
+      ],
+      "pos": [
+        3200.0,
+        950.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "C2",
+          "pos": [
+            3200.0,
+            950.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "C3 (100n) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": [
+        "C3"
+      ],
+      "pos": [
+        1200.0,
+        2100.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "C3",
+          "pos": [
+            1200.0,
+            2100.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "R1 (100k) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": [
+        "R1"
+      ],
+      "pos": [
+        2000.0,
+        2000.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "R1",
+          "pos": [
+            2000.0,
+            2000.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "R2 (27k) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": [
+        "R2"
+      ],
+      "pos": [
+        2000.0,
+        2400.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "R2",
+          "pos": [
+            2000.0,
+            2400.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "R3 (10k) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": [
+        "R3"
+      ],
+      "pos": [
+        3200.0,
+        2000.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "R3",
+          "pos": [
+            3200.0,
+            2000.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "BOM_MISSING_PART_ID",
+      "severity": "note",
+      "message": "C4 (10n) has no LCSC/MPN parameter — not orderable as-is",
+      "refs": [
+        "C4"
+      ],
+      "pos": [
+        3200.0,
+        2400.0
+      ],
+      "anchors": [
+        {
+          "kind": "component",
+          "id": "C4",
+          "pos": [
+            3200.0,
+            2400.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "NET_SINGLE_PIN",
+      "severity": "warning",
+      "message": "net 'VBAT' has a single pin F1.1 — floating or missing connection",
+      "refs": [
+        "F1.1"
+      ],
+      "pos": [
+        1050.0,
+        800.0
+      ],
+      "anchors": [
+        {
+          "kind": "pin",
+          "id": "F1.1",
+          "pos": [
+            1050.0,
+            800.0
+          ]
+        },
+        {
+          "kind": "net",
+          "id": "VBAT"
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_LABEL_OVER_SYMBOL",
+      "severity": "warning",
+      "message": "label 'VBAT_F' at (1550,800) runs over D1 (1900,800) — reorient it away from the symbol (the writer auto-orients labels anchored on pins) or move it to a wire stub",
+      "refs": [
+        "VBAT_F",
+        "D1"
+      ],
+      "pos": [
+        1550.0,
+        800.0
+      ],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "VBAT_F",
+          "pos": [
+            1550.0,
+            800.0
+          ]
+        },
+        {
+          "kind": "component",
+          "id": "D1",
+          "pos": [
+            1900.0,
+            800.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_LABEL_OVER_SYMBOL",
+      "severity": "warning",
+      "message": "label 'VBUS_SENSE' at (2000,2150) runs over R2 (2000,2400) — reorient it away from the symbol (the writer auto-orients labels anchored on pins) or move it to a wire stub",
+      "refs": [
+        "VBUS_SENSE",
+        "R2"
+      ],
+      "pos": [
+        2000.0,
+        2150.0
+      ],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "VBUS_SENSE",
+          "pos": [
+            2000.0,
+            2150.0
+          ]
+        },
+        {
+          "kind": "component",
+          "id": "R2",
+          "pos": [
+            2000.0,
+            2400.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_LABEL_OVER_SYMBOL",
+      "severity": "warning",
+      "message": "label 'VBUS_SENSE' at (2000,2250) runs over R1 (2000,2000) — reorient it away from the symbol (the writer auto-orients labels anchored on pins) or move it to a wire stub",
+      "refs": [
+        "VBUS_SENSE",
+        "R1"
+      ],
+      "pos": [
+        2000.0,
+        2250.0
+      ],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "VBUS_SENSE",
+          "pos": [
+            2000.0,
+            2250.0
+          ]
+        },
+        {
+          "kind": "component",
+          "id": "R1",
+          "pos": [
+            2000.0,
+            2000.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_LABEL_OVER_SYMBOL",
+      "severity": "warning",
+      "message": "label 'VBUS_ADC' at (3200,2150) runs over C4 (3200,2400) — reorient it away from the symbol (the writer auto-orients labels anchored on pins) or move it to a wire stub",
+      "refs": [
+        "VBUS_ADC",
+        "C4"
+      ],
+      "pos": [
+        3200.0,
+        2150.0
+      ],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "VBUS_ADC",
+          "pos": [
+            3200.0,
+            2150.0
+          ]
+        },
+        {
+          "kind": "component",
+          "id": "C4",
+          "pos": [
+            3200.0,
+            2400.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_LABEL_OVER_SYMBOL",
+      "severity": "warning",
+      "message": "label 'VBUS_ADC' at (3200,2250) runs over R3 (3200,2000) — reorient it away from the symbol (the writer auto-orients labels anchored on pins) or move it to a wire stub",
+      "refs": [
+        "VBUS_ADC",
+        "R3"
+      ],
+      "pos": [
+        3200.0,
+        2250.0
+      ],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "VBUS_ADC",
+          "pos": [
+            3200.0,
+            2250.0
+          ]
+        },
+        {
+          "kind": "component",
+          "id": "R3",
+          "pos": [
+            3200.0,
+            2000.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_LABEL_OVERLAP",
+      "severity": "warning",
+      "message": "labels 'VBUS' at (2000,1850) and 'VBUS_SENSE' at (2000,2250) overlap — separate them or shorten the text",
+      "refs": [
+        "VBUS",
+        "VBUS_SENSE"
+      ],
+      "pos": [
+        2000.0,
+        1850.0
+      ],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "VBUS",
+          "pos": [
+            2000.0,
+            1850.0
+          ]
+        },
+        {
+          "kind": "label",
+          "id": "VBUS_SENSE",
+          "pos": [
+            2000.0,
+            2250.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_LABEL_OVERLAP",
+      "severity": "warning",
+      "message": "labels 'VBUS_SENSE' at (2000,2150) and 'VBUS_SENSE' at (2000,2250) overlap — separate them or shorten the text",
+      "refs": [
+        "VBUS_SENSE",
+        "VBUS_SENSE"
+      ],
+      "pos": [
+        2000.0,
+        2150.0
+      ],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "VBUS_SENSE",
+          "pos": [
+            2000.0,
+            2150.0
+          ]
+        },
+        {
+          "kind": "label",
+          "id": "VBUS_SENSE",
+          "pos": [
+            2000.0,
+            2250.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_LABEL_OVERLAP",
+      "severity": "warning",
+      "message": "labels 'VBUS_SENSE' at (2000,2150) and 'GND' at (2000,2550) overlap — separate them or shorten the text",
+      "refs": [
+        "VBUS_SENSE",
+        "GND"
+      ],
+      "pos": [
+        2000.0,
+        2150.0
+      ],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "VBUS_SENSE",
+          "pos": [
+            2000.0,
+            2150.0
+          ]
+        },
+        {
+          "kind": "label",
+          "id": "GND",
+          "pos": [
+            2000.0,
+            2550.0
+          ]
+        }
+      ]
+    },
+    {
+      "code": "LAYOUT_LABEL_OVERLAP",
+      "severity": "warning",
+      "message": "labels 'VBUS_ADC' at (3200,2150) and 'VBUS_ADC' at (3200,2250) overlap — separate them or shorten the text",
+      "refs": [
+        "VBUS_ADC",
+        "VBUS_ADC"
+      ],
+      "pos": [
+        3200.0,
+        2150.0
+      ],
+      "anchors": [
+        {
+          "kind": "label",
+          "id": "VBUS_ADC",
+          "pos": [
+            3200.0,
+            2150.0
+          ]
+        },
+        {
+          "kind": "label",
+          "id": "VBUS_ADC",
+          "pos": [
+            3200.0,
+            2250.0
+          ]
+        }
+      ]
+    }
+  ]
+}

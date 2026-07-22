@@ -30,6 +30,11 @@ akcli review explain REVIEW_XTAL_LOAD
 | `REVIEW_XTAL_ASYMMETRIC` | warning | heuristic | ST AN2867 §3 |
 | `REVIEW_XTAL_LOAD` | info | heuristic | ST AN2867 §3 |
 | `REVIEW_CONN_UNPROTECTED` | warning | heuristic | IEC 61000-4-2 |
+| `REVIEW_FUSE_MISSING` | warning | heuristic | IEC 60127 / Littelfuse Fuseology |
+| `REVIEW_FUSE_UNRATED` | note | deterministic | — (insufficient-evidence discipline) |
+| `REVIEW_FUSE_UNDERSIZED` | warning | datasheet_backed | facts file `i_load` + Littelfuse Fuseology ≤75 % (via `akcli calc fuse-derating`) |
+| `REVIEW_REVPOL_UNPROTECTED` | warning | heuristic | TI SLVA139 |
+| `REVIEW_REVPOL_SHUNT_NO_FUSE` | warning | heuristic | TI SLVA139 |
 | `REVIEW_OPAMP_GAIN` | info | heuristic | ideal op-amp: G = 1 + Rf/Rg; G = −Rf/Rin |
 | `REVIEW_OPAMP_NO_FEEDBACK` | warning | heuristic | — |
 | `REVIEW_DETECTOR_ERROR` | warning | deterministic | — (engine containment; quarantined) |
@@ -165,6 +170,36 @@ part (library/value keyword table in `review/tables.py`). Keyword-based role
 detection is honestly `heuristic` — an exotic part naming scheme evades it;
 waive per net or rename the part. Power-only connectors are out of scope
 for this rule.
+
+### signal.power_protect
+
+**Topology.** Power-entry nets seed a series chain walk. A net seeds when an
+entry token (`VBAT/VIN/VBUS/DCIN/PWR_IN/VSUPPLY/VEXT`) is its WHOLE name
+(optional `+/-` prefix, trailing digits), or when a token-carrying name is
+power-classified by the shared rail heuristics — a token buried in a longer
+signal name (`VBUS_SENSE`) is a derived signal, not an entry, so it never
+seeds a duplicate finding. The walk crosses only fuses, diodes and inductors — never resistors
+or capacitors, so the walk cannot wander into dividers or decoupling — and
+never into ground. Fuses classify by prefix `F` or keyword
+(`fuse/polyfuse/ptc`); diodes by prefix `D/CR` or keyword, with TVS parts
+and LEDs excluded. A chain with no series fuse → `REVIEW_FUSE_MISSING`; no
+series diode and no fuse-plus-shunt crowbar → `REVIEW_REVPOL_UNPROTECTED`;
+a shunt reverse diode without the series fuse → `REVIEW_REVPOL_SHUNT_NO_FUSE`
+(the crowbar cannot open the path on its own).
+
+**Math.** Fuse sizing runs only when a facts file records the fuse's
+continuous `i_load`: `akcli calc fuse-derating` (Littelfuse Fuseology ≤75 %
+continuous, IEC 60127 R10 ladder) sets the floor; a parseable rating below
+it → `REVIEW_FUSE_UNDERSIZED` (`datasheet_backed`). A fuse whose Value
+carries no ampere token → `REVIEW_FUSE_UNRATED`
+(`insufficient_evidence` — sizing unauditable, never guessed).
+
+**Honesty.** Entry nets are recognised by NAME and parts by
+designator/library keywords; P-FET/ideal-diode protection schemes and
+polarised-connector designs are NOT recognised — the finding says so and is
+waived per net. Series-diode orientation is not checked (the schematic does
+not mark which chain end is the source); the assumption is stated on the
+finding.
 
 ### signal.opamp
 
