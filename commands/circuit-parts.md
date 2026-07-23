@@ -28,7 +28,8 @@ Steps (use the Bash tool; `akcli` is on PATH, else `PYTHONPATH=src python3 -m ak
 3. **Convert** — `akcli jlc add <C-number> --footprint-lib <NICKNAME>` where `NICKNAME`
    is a footprint-library nickname the project's `fp-lib-table` actually registers
    (`akcli library audit` verifies; a wrong nickname is KiCad's "footprint not found"
-   trap). This writes the KiCad symbol + footprint (+ STEP with `--3d`). Treat the
+   trap). Output lands under config `[paths] parts_dir` (fallback `./akcli-parts/<C>/`)
+   unless `--out` is given. This writes the KiCad symbol + footprint (+ STEP with `--3d`). Treat the
    conversion as a **claim, not a fact**: read back the symbol with
    `akcli read <out>.kicad_sym` and sanity-check pin count/names against the datasheet.
 4. **Author the placement** — with `--place REF X Y` you may let
@@ -42,8 +43,9 @@ Steps (use the Bash tool; `akcli` is on PATH, else `PYTHONPATH=src python3 -m ak
    user's explicit `--apply`: `akcli draw ... --apply --strict-nets`. Re-read and
    `akcli check <board>` after writing; `akcli render <board>` to show what was placed.
 6. **Close the loop** — `akcli jlc bom <board> --qty N` to confirm the finished BOM is
-   purchasable at quantity, and `akcli library audit` to prove the new library is
-   correctly registered.
+   purchasable at quantity (`--lock bom.lock.json` freezes it; a later
+   `--against-lock bom.lock.json` flags price drift / stock loss / EOL before a re-order),
+   and `akcli library audit` to prove the new library is correctly registered.
 
 Never skip a stage: a part that cannot be bought, a symbol that does not match its
 datasheet, or an op-list that fails `plan` must stop the flow and be reported.

@@ -88,7 +88,8 @@ is a portability trade-off: `relative` (default) only resolves next to the libra
 prefix resolves portably via a KiCad path variable.
 
 Conversion runs **in-process** (vendored MIT JLC2KiCadLib core — no external
-binary). Output layout: `symbol/<lib-name>.kicad_sym`,
+binary). Without `--out`, output lands under config `[paths] parts_dir`
+(fallback `./akcli-parts/<C-number>/`). Output layout: `symbol/<lib-name>.kicad_sym`,
 `footprint/<name>.kicad_mod`, `footprint/packages3d/<name>.step` (with `--3d`).
 Exit codes: `0` success, `2` bad usage, `4` part has no EasyEDA CAD data,
 `6` conversion failed/empty, `7` network error.
@@ -156,7 +157,8 @@ akcli jlc datasheet board.kicad_sch --resolve-mpn --fetch  # MPN-only lines: cat
   simulatable one. See `docs/sim.md` and the akcli-design-calc skill.
 - Batch mode surfaces `no-lcsc` lines — pin C-numbers first with
   `jlc bom --suggest/--fix`, then re-run.
-- **Live dashboard BOM links:** when `akcli view live <sch>` runs its networked
+- **Live dashboard BOM links:** when `akcli view live <sch>` (path optional —
+  it auto-discovers the single `.kicad_sch` in the CWD) runs its networked
   BOM check (`?check=1`), each priced line with an LCSC id gains an inline
   **datasheet link** (resolved via the same EasyEDA path as `jlc datasheet`;
   direct PDFs and page-links get distinct glyphs). It is per-line

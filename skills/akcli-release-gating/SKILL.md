@@ -78,7 +78,8 @@ akcli release preflight --sch board.kicad_sch --pcb board.kicad_pcb --gerbers fa
 
 With `--gerbers` the package is checked for: the minimum fab set (copper ×2,
 masks, outline, plated drill; missing silk is a note), copper-file count vs
-the board's declared stackup, layer registration (bbox), mixed units, and
+the board's declared stackup, layer registration (per-layer extent alignment —
+unrelated to the `akcli bbox` symbol-placement subcommand), mixed units, and
 **staleness** — the outline gerber's size vs the board file's Edge.Cuts
 extent. `REVIEW_GERBER_STALE` means the export predates the last board edit:
 re-export, never ship. This is the "ordered the old rev" failure, caught

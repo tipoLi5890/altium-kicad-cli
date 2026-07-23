@@ -1,11 +1,12 @@
 ---
 name: akcli-altium-interop
 description: >-
-  Work with Altium Designer through the zero-dependency `akcli` CLI: parse Altium
-  .SchDoc/.SchLib/.PcbDoc files without an Altium install, export normalized JSON and
-  Protel/KiCad/CSV netlists, deliver schematic edits back into Altium (offline human
-  draw instructions + importable netlist, or the optional Windows Altium 22+ live
-  bridge), and migrate Altium designs to KiCad with netlist-diff verification. Use this
+  Work with Altium Designer through the `akcli` CLI — Altium is akcli's read-only
+  import surface into the KiCad-first flow: parse Altium .SchDoc/.SchLib/.PcbDoc
+  files, export normalized JSON and Protel/KiCad/CSV netlists, deliver schematic
+  edits back into Altium (offline human draw instructions + importable netlist;
+  the Windows live bridge is shelved), and migrate Altium designs to KiCad with
+  netlist-diff verification. Use this
   skill whenever the task involves: reading, exporting, or converting an Altium file;
   getting a design out of Altium into another tool; getting changes into an Altium
   schematic; an Altium-to-KiCad migration or equivalence check; or
@@ -80,7 +81,9 @@ so re-exports are diffable.
 
 ## Getting changes INTO Altium
 
-`akcli` has **no offline Altium write path** on any OS. Two routes exist.
+`akcli` has **no offline Altium write path** on any OS. Route A is the
+supported path; the live bridge (Route B) is **shelved** and kept only for
+reference.
 
 ### Route A (default, offline): human draw instructions + importable netlist
 
@@ -105,7 +108,11 @@ so re-exports are diffable.
    akcli diff main.SchDoc main_edited.SchDoc --exit-zero
    ```
 
-### Route B (optional, live): the Windows Altium 22+ bridge
+### Route B (SHELVED): the Windows Altium 22+ live bridge
+
+**Status: shelved indefinitely** (0.14 — ROADMAP "Deferred by decision"). Do
+not propose it for new work; use Route A. The notes below are kept only for a
+user who explicitly insists on driving the existing code.
 
 A file-based JSON bridge drives a **running** Altium Designer 22+ on Windows. The
 Python half (`src/akcli/drivers/altium_live/bridge.py`) is tested; the

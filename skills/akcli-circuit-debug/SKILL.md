@@ -1,8 +1,8 @@
 ---
 name: akcli-circuit-debug
 description: >-
-  Systematically diagnose misbehaving schematics and `akcli` tool failures — no
-  Altium or KiCad install required. Use this skill whenever the task involves:
+  Systematically diagnose misbehaving schematics and `akcli` tool failures.
+  Use this skill whenever the task involves:
   debugging net connectivity (a net that is split, merged wrongly, missing, or a
   pin that floats when it should not); triaging `akcli check` findings (real
   fault vs false positive, deciding whether a clean pass is trustworthy);
@@ -65,10 +65,11 @@ akcli component board.kicad_sch U3 --json
 Then compare against the expectation (datasheet, prior revision via `akcli diff`, or an expected
 table via `akcli pinmap --expected`). Interpretation guide:
 
-- **Trap: not-found is NOT an error exit.** `akcli net <file> NAME` and
-  `akcli component <file> REF` exit **0** even when nothing matches — they print
-  `no net named '...'` / `no component '...'` to **stderr**. Always check stderr, never the exit
-  code, when probing for existence.
+- **Not-found is exit 8 (`QUERY_MISS`), not a tool failure.** `akcli net <file> NAME` and
+  `akcli component <file> REF` exit **8** when nothing matches — the notice
+  (`no net named '...'` / `no component '...'`) goes to **stderr**, and with `--json` stdout
+  still carries the structured `error` object. Branch on exit 8 / `error.code == "QUERY_MISS"`
+  when probing for existence: an 8 means "file parsed fine, that name is absent".
 - **Net identity is membership, not name.** Each net's `stable_id` is a hash of its sorted
   `(designator, pin)` members. Two nets with the same display name but different `stable_id`s are
   genuinely disconnected pieces — that is the split.
@@ -182,6 +183,7 @@ Exit-code table (frozen in `errors.py`):
 | 5 | unsupported format (`ALTIUM_UNSUPPORTED`, wrong input kind) | expected refusal — see below |
 | 6 | op-list / verify failure (also `TARGET_LOCKED` — GUI lock, see §3) | fix ops or connectivity (§3); or close the GUI / `--allow-open` |
 | 7 | external tool missing / network | install hint on stderr; `jlc` needs network, `sim` needs libngspice (`NGSPICE_MISSING`/`NGSPICE_FAILED`) |
+| 8 | query miss (`QUERY_MISS`: `net`/`component` asked for a name/ref the parsed file does not contain) | fix the name — or treat as a clean "absent" answer when probing (§1) |
 
 Known deliberate refusals (exit 5 — **unsupported, not corrupt**; do not file these as parse bugs):
 binary `.SchLib` symbol records; binary `.PcbDoc` fills/regions/texts/polygons (pads/vias/

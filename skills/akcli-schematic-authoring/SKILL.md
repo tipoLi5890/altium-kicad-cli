@@ -21,11 +21,13 @@ path, **see the akcli-circuit-design skill** — do not re-derive them here. KiC
 only writable target; the writer is flat (single-sheet) v1.
 
 **The authoring loop (never skip a stage):**
-requirements → block plan → part selection → op-list → `akcli plan` (read the
-**Net changes** block) → `akcli draw` (dry-run) → `akcli draw --apply`
-(`--strict-nets` when editing an existing sheet) → re-read + `akcli check`
-(+ `--intent` when a snapshot exists) → **verify behavior with `akcli sim`
-before ordering** (see below).
+requirements → block plan (groups + intent) → part selection → op-list
+(group-local coordinates) → `akcli ops validate` → `akcli plan --render`
+(read the **Net changes** block, LOOK at the SVG) → `akcli draw` (dry-run) →
+`akcli draw --apply` (`--strict-nets` when editing an existing sheet) →
+re-read + `akcli check` (+ `--intent`/`--contract` when they exist) →
+`akcli groups --frame` + `akcli doc` for hand-off → **verify behavior with
+`akcli sim` before ordering** (see below).
 
 ## (1) Block plan before any op
 
@@ -33,6 +35,20 @@ Decompose the requirements into named blocks (power entry, regulation, MCU,
 connectors), list every rail and named net, and assign designators up front
 (U1, C1..Cn, J1...). Sketch a placement map: one block per region of the sheet,
 signal flow left→right, rails at the top, GND at the bottom. Only then write ops.
+
+Make the plan machine-usable from the start:
+
+- **Blocks become `groups`**: give each block a name + origin and author its
+  ops in group-local coordinates (see the groups envelope in §4) — the block
+  plan then survives into the file as `Group` properties, and framing (`akcli
+  groups --frame`) and re-packing (`arrange --groups`, §10) come for free.
+- **Reserve real estate with `akcli bbox`**: `akcli bbox <lib_id> --at X Y
+  [--rotation R]` prints the symbol's world bounding boxes for a candidate
+  placement (sibling of `pins`) — size each group's region from real body
+  extents instead of guessing, so blocks don't collide when framed.
+- **Write the intent file BEFORE drawing**: turn the block plan's named nets →
+  pins table into a hand-written intent JSON (§7) and use it as the acceptance
+  test for the whole session, not just a post-hoc snapshot.
 
 ## (2) Part selection — `akcli jlc` when sourcing matters
 
@@ -51,10 +67,17 @@ The produced `symbol/akcli.kicad_sym` becomes a `--symbols` source for
 datasheet and `akcli check` after placing. Record the LCSC C-number as an
 `LCSC` parameter on the placed part so the BOM maps designator -> orderable part.
 
+`jlc add` output defaults under config `[paths] parts_dir` (fallback
+`./akcli-parts`); pass `--footprint-lib NICK` so the Footprint field's nickname
+matches the project's fp-lib-table (audit later with `akcli library audit`).
+
 Component **values** come from `akcli calc`, not mental arithmetic: compute the
 network (`vdivider-design`, `regulator-design`, `led`, `i2c-pullup`,
 `crystal-caps`, ...) and place the returned `*_standard` E-series value; quote
 the printed reference in the report (akcli-design-calc skill has the full catalog).
+Design-type calcs also emit a ready op-list draft — `akcli calc vdivider-design
+vin=3.3 vout=1.8 --ops divider.json` writes `place_component` ops carrying the
+snapped values, so the computed network enters the sheet without transcription.
 
 ### Datasheet-driven design — `jlc datasheet` before committing values
 
@@ -66,13 +89,11 @@ akcli jlc datasheet C2984661 --fetch          # one part -> ~/.cache/akcli/datas
 akcli jlc datasheet board.kicad_sch --fetch   # every BOM line with an LCSC id, one run
 ```
 
-- **Where the links come from:** the part's EasyEDA record (szlcsc-hosted
-  PDF). A `no-link` row prints the LCSC product-page URL — fetch that page
-  with a browser-grade fetcher (WebFetch) to locate the PDF, or search the
-  **manufacturer's** site: original-vendor PDFs (vishay.com, ti.com, ...)
-  download fine with plain `curl`, while `lcsc.com` itself bot-gates direct
-  downloads. `--fetch` verifies the `%PDF` magic, so a challenge page can
-  never masquerade as a datasheet on disk.
+- **Link resolution:** links come from the part's EasyEDA record; a `no-link`
+  row prints the LCSC product-page URL — fetch that page with a browser-grade
+  fetcher (WebFetch), or `curl` the **manufacturer's** own PDF (vishay.com,
+  ti.com, ... work; `lcsc.com` bot-gates direct downloads). `--fetch` verifies
+  the `%PDF` magic, so a challenge page never masquerades as a datasheet on disk.
 - **Reading order** (PDF readers cap ~20 pages per request — read in chunks;
   the tables live early): absolute maximum ratings → recommended operating
   conditions → electrical characteristics → typical application circuit.
@@ -85,6 +106,11 @@ akcli jlc datasheet board.kicad_sch --fetch   # every BOM line with an LCSC id, 
   max) in the report so review can retrace it.
 - Record the C-number as an `LCSC` parameter when placing — that is what
   makes the whole-BOM batch mode (and `jlc bom`) work later.
+- Numbers that will gate a design decision belong in the **project-local facts
+  store** (`./datasheets`, a committed team asset — see the
+  akcli-datasheet-facts skill): `review facts add` pins them to the PDF's
+  sha256 + page, and `jlc datasheet --fetch --out datasheets` co-locates the
+  PDFs with the store instead of the personal cache.
 
 ## (3) Seed the target file (new schematics only)
 
@@ -109,8 +135,32 @@ Document shape and the op vocabulary (22 ops + 10 macros) are defined in `schema
 "target_format": "kicad", "ops": [...]}`. The validator is strict: unknown
 fields are errors with a did-you-mean hint (`_`-prefixed keys are safe
 annotations), field types are enforced per op, and a duplicate
-`(designator, unit)` placement in one document is rejected. Rules the
-validator and executor enforce:
+`(designator, unit)` placement in one document is rejected.
+
+### Functional groups — the `groups` envelope (author blocks, not loose parts)
+
+Declare each block once in the envelope; tag its ops with `"group"`. Tagged
+coordinates are **group-local** (absolute = local + origin) — a whole module
+moves by editing one origin, and macros propagate the tag onto their children:
+
+```json
+{ "protocol_version": 1, "target_format": "kicad",
+  "groups": { "POWER": { "origin": [1000, 1000], "title": "Power supply" } },
+  "ops": [
+    { "op": "place_component", "group": "POWER", "lib_id": "Device:C",
+      "designator": "C1", "x_mil": 500, "y_mil": 150, "value": "10u" } ] }
+```
+
+Membership persists as a hidden `Group` property on each symbol, so the sheet
+remembers its blocks across sessions: `akcli groups board.kicad_sch` lists
+them; `akcli groups board.kicad_sch --frame --apply` draws/refreshes a border
+rectangle + title per group (keyed uuids replace stale frames in place;
+`--margin` pads, default 200). `check --layout` lints the result
+(`LAYOUT_GROUP_OVERLAP`, `LAYOUT_FRAME_STALE`), and `arrange --groups` re-packs
+the blocks later (§10). Prefer this over hand-maintained `add_rectangle`
+graphics for anything that is a functional block.
+
+Rules the validator and executor enforce:
 
 - **Coordinates**: mils, origin top-left, +Y down, 50-mil grid. Raw `[x,y]` points
   are grid-snapped; `"REF.PIN"` endpoints snap to the pin's exact world coordinate.
@@ -137,7 +187,10 @@ validator and executor enforce:
   corner on a pin tip is the classic accidental short
   (`NET_WIRE_CORNER_ON_PIN`).
 - **Live dashboard**: `akcli view live <file>` serves a localhost timeline that
-  re-renders the sheet (SVG + ERC badges + part/net counts) on every apply.
+  re-renders the sheet (SVG + ERC badges + part/net counts) on every apply —
+  keep it open for the whole loop. With no path it auto-discovers the single
+  `.kicad_sch` in the CWD; bare `akcli view` serves the hub (calculators +
+  idle /live).
 - **Wire vs label vs power port**: wire (`add_wire`, `"REF.PIN"` endpoints) for
   short in-block connections; `add_net_label` with `"scope": "local"` on a short
   wire stub for readable in-block nets; `"scope": "global"` for nets crossing
@@ -151,6 +204,14 @@ validator and executor enforce:
   scoping truth (matches eeschema): a local label DOES merge with a same-name
   global label or power port on the SAME sheet even when physically
   disconnected — never use a rail name as a "private" local label.
+- **Cross-block runs — `route_net`**: for a pin-to-pin connection that is NOT
+  coaxial, `{"op": "route_net", "from": "U1.7", "to": "J2.3", "style": "auto",
+  "label": "SCL", "scope": "global"}` emits a deterministic orthogonal route —
+  straight when coaxial, else an L whose corner provably avoids every placed
+  pin tip (a coincident corner silently merges nets), falling back to a
+  3-segment z; optional `label` names the net ONCE at the longest segment's
+  midpoint (`style: hv|vh|z` forces a shape). Between groups, though, prefer a
+  label on each pin over a long routed wire — labels survive `arrange` re-packs.
 - **Facing pins — `connect_and_label`**: two pins facing each other on one
   axis (555.OUT→R.1, R.2→C.1 chains) must NOT each get a label-on-pin —
   auto-orient extends both texts toward each other and `check --layout` flags
@@ -177,8 +238,17 @@ validator and executor enforce:
   nodes automatically before verify — do not hand-place `add_junction` unless the
   dry-run connectivity report shows a genuine miss. Pure X crossings are never
   auto-junctioned (by design): dogleg one wire instead.
-- **Annotation**: `add_text` (`text`, `at`, optional free `angle`) for block titles
-  and design notes; it is the only graphic op.
+- **Annotation & sheet furniture**: `add_text` (`text`, `at`, optional free
+  `angle`) for short notes; `add_text_box` (`text`, `at`, `size`) for design
+  rationale paragraphs; `add_rectangle` (`start`, `end`, optional `key` for
+  idempotent replace) for ad-hoc frames — but functional-block borders should
+  come from `groups --frame`, not hand-drawn rectangles; `set_title_block`
+  (`title`/`date`/`rev`/`company`/`comment1..`) stamps the sheet metadata that
+  `akcli new --title` didn't set.
+- **Repetitive placements — `place_array`**: N same-symbol parts in one op
+  (`lib_id`, `designator_prefix`, `count`, `x_mil`/`y_mil`, `pitch_mil`,
+  `direction`, per-part `values`) — pull-up banks, LED bars, connector
+  terminations; cheaper and less error-prone than N `place_component` ops.
 - **Multi-unit parts**: `place_component` takes an optional `"unit": N` — each
   unit is its own instance sharing the designator (`U1` gate A = unit 1, gate B
   = unit 2 ...). `"REF.PIN"` resolves against the instance whose unit owns the
@@ -194,19 +264,13 @@ validator and executor enforce:
   no-op). Deleting an absent target is a replay-safe no-op. CAREFUL: deleting
   a label can silently SPLIT a net whose fragments it held together — watch
   the `! SPLIT` lines in the Net changes block.
-- **Hierarchical sheets — `add_sheet`**: place a child-sheet reference on the
-  parent with `{"op":"add_sheet","name":"power","file":"child.kicad_sch",
-  "at":[2000,1000],"size":[1000,800],"pins":[{"name":"VBUS","type":"input",
-  "side":"left","offset_mil":200}]}` (`at` = TOP-LEFT corner, mils; `type` ∈
-  input|output|bidirectional|tri_state|passive, `side` ∈ left|right|top|bottom).
-  Full flow: `akcli new` both root and child files → `add_sheet` on the root →
-  drop a same-name **hierarchical label** in the child (`add_net_label …
-  "scope":"hierarchical"`) → `akcli nets root.kicad_sch` to confirm the parent
-  sheet-pin and the child label merged into ONE cross-sheet net (parity-verified
-  against eeschema). Wires attach to a sheet pin **by coordinate** (`at` +
-  `offset_mil` along the side, grid-snapped) — there is NO `Sheet.Pin` endpoint.
-  The child `.kicad_sch` must already exist; `add_sheet` never creates it.
-  KiCad only (`altium: false`).
+- **Hierarchical sheets — `add_sheet`**: a parent `(sheet)` pin and a
+  same-name **hierarchical label** in the child merge into ONE cross-sheet net
+  (parity-verified against eeschema; confirm with `akcli nets` on the root).
+  Wires attach to a sheet pin **by coordinate** — there is NO `Sheet.Pin`
+  endpoint — and the child `.kicad_sch` must already exist (`akcli new` it
+  first). KiCad only. Full flow + pin fields: the "Hierarchical sheets"
+  section of `docs/op-list-authoring.md`.
 - **Bus rips — label the WIRE, not the bus**: draw the bus (`add_bus`), name it
   with a vector label (`add_net_label "K[3..0]"` on the bus — inclusive both
   ends, either order), add the diagonal `add_bus_entry`, then label the
@@ -249,21 +313,9 @@ validator and executor enforce:
   ] }
 ```
 
-### Example C — connector fanout with global labels
-
-```json
-{ "protocol_version": 1, "target_format": "kicad", "ops": [
-    { "op": "place_component", "lib_id": "Connector_Generic:Conn_01x04",
-      "designator": "J1", "x_mil": 1000, "y_mil": 2000 },
-    { "op": "add_wire", "vertices": ["J1.1", [1300, 2000]] },
-    { "op": "add_net_label", "name": "UART_TX", "at": [1300, 2000], "scope": "global" },
-    { "op": "add_wire", "vertices": ["J1.2", [1300, 2100]] },
-    { "op": "add_net_label", "name": "UART_RX", "at": [1300, 2100], "scope": "global" },
-    { "op": "add_wire", "vertices": ["J1.3", [1300, 2200]] },
-    { "op": "place_gnd", "at": [1300, 2200] },
-    { "op": "add_no_connect", "pin": "J1.4" }
-  ] }
-```
+(Connector fanout follows the same shapes: a short wire stub + global label
+per signal pin, `place_gnd` on the ground pin, `add_no_connect` on unused pins
+— `{"op": "add_no_connect", "pin": "J1.4"}`.)
 
 ## (5) Validate → dry-run → apply
 
@@ -277,7 +329,8 @@ SYMS=/usr/share/kicad/symbols    # macOS: /Applications/KiCad/KiCad.app/Contents
 akcli ops validate ldo.json      # structural check first — no target needed, exit 6 lists
                                  # EVERY problem at once (the PreToolUse hook runs this too)
 akcli plan board.kicad_sch --ops ldo.json --symbols "$SYMS/Regulator_Linear.kicad_sym" \
-  --symbols "$SYMS/Device.kicad_sym" --symbols "$SYMS/power.kicad_sym"      # never writes
+  --symbols "$SYMS/Device.kicad_sym" --symbols "$SYMS/power.kicad_sym" \
+  --render preview.svg    # never writes; LOOK at the dry-applied SVG before drawing
 akcli draw board.kicad_sch --ops ldo.json --symbols "$SYMS/Regulator_Linear.kicad_sym" \
   --symbols "$SYMS/Device.kicad_sym" --symbols "$SYMS/power.kicad_sym"      # dry-run (the default)
 akcli draw board.kicad_sch --ops ldo.json --symbols "$SYMS/Regulator_Linear.kicad_sym" \
@@ -300,8 +353,11 @@ the Markdown pinout book (pin→net tables + rails + BOM) for human hand-off,
 and `akcli log .` shows the write journal (every plan/draw/undo with its
 op-list hash and net-diff verdict). Pass `--note "why"` on writes so the
 journal carries the design intent, not just the mechanics — resuming a
-session starts from `akcli log .` + `akcli read` + `akcli check --intent`,
-never from memory (see docs/agent-state.md). Do not pass `--dry-run` — it is
+session starts from `akcli log .` + `akcli read` + `akcli check --intent` +
+`akcli undo --list`, never from memory (see docs/agent-state.md). The
+`.akcli/` state root (journal + rotated backups) is self-ignoring — it drops
+its own `.gitignore`; what belongs in git is `akcli.toml`, the intent JSON,
+the contract TOML, and `datasheets/`. Do not pass `--dry-run` — it is
 accepted but inert; omitting `--apply` already is the dry run.
 
 **Read the "Net changes" block on every plan/draw** — the before/after
@@ -344,8 +400,10 @@ refuses the write (exit 6). An intended merge/rename? Re-run without
 akcli read board.kicad_sch --md                        # parts present, values correct?
 akcli nets board.kicad_sch                             # every net -> sorted members, one line each
 akcli component board.kicad_sch U1                     # pin->net map of key parts
-akcli check board.kicad_sch --exit-zero                # ERC-lite + power + BOM + nets + layout
-akcli diff board.kicad_sch.bak board.kicad_sch --exit-zero   # the delta is exactly what you drew
+akcli check board.kicad_sch --fail-on never            # ERC-lite + power + BOM + nets + layout
+                                                       # (+ --pairs for diff-pair/bus continuity)
+akcli diff board.kicad_sch.bak board.kicad_sch --fail-on never  # the delta is exactly what you drew
+                                                                # (--bom adds the BOM-line delta)
 ```
 
 Compare each net's membership against your block plan pin by pin. Read `check`'s
@@ -403,8 +461,15 @@ Components resolve to SPICE devices via the `Sim.*`-fields → `sim.json` `model
 → heuristic ladder; anything the tool cannot honestly model is reported
 `SIM_UNMODELED` (a loud warning, never a silent guess) — give those parts a
 `Sim.*` field, a `models` entry, or a `fit_diode` model card. `--deck-only`
-works with no ngspice installed, so it doubles as a review/CI plan step. Full
-reference: `docs/sim.md`.
+works with no ngspice installed, so it doubles as a review/CI plan step.
+
+Go beyond the single nominal run when the design has margins to defend:
+`--sweep R21=2.2k,3.3k --sweep temp=0,25,60` re-runs every assertion across
+the corner grid (≤64 corners — component overrides and temperature compose),
+and `--wave out.csv` dumps the waveform vectors for plotting. When a review
+finding is quantitative, `akcli review testbench` auto-generates and runs a
+focused subcircuit deck from the finding itself — no hand-written `sim.json`
+needed for that check. Full reference: `docs/sim.md`.
 
 ## (9) Adopt review proposals — the finding→fix loop
 
@@ -416,42 +481,56 @@ akcli review analyze board.kicad_sch --out review.findings.json
 akcli review propose review.findings.json --out proposals.json
 ```
 
-Each proposal carries the source finding's fingerprint (traceability), a
-recomputed + E-series-snapped value, and up to three drafts. Adoption rules:
-
-- **`oplist_draft` present** → it is a complete protocol-1 document: save the
-  `oplist_draft` object to a file and run it through the NORMAL pipeline —
-  `akcli plan board.kicad_sch --ops fix.json` then `draw --apply` on user
-  approval. Never bypass plan; the draft inherits every safety rail that way.
-- **`requires_confirmation` non-empty** → the draft is null BY DESIGN (a fix
-  depending on unobserved conditions cannot be auto-applied). Ask the user
-  the listed questions; often the answer is "add a facts file"
-  (akcli-datasheet-facts) which turns the next `propose` run auto-applicable.
-- **`kind: layout`** → a PCB edit; akcli writes schematics only. Hand the
-  summary to the user as a manual layout action.
-- **`contract_draft`** → paste into the project's contract TOML (it already
-  cites the datasheet sha256+page) so the fix becomes a standing gate; verify
-  with `akcli check board.kicad_sch --contract contract.toml --exit-zero`.
-- After applying, close the loop: re-run analyze and
-  `akcli review diff review.findings.json new.findings.json` — the finding
-  must appear under `resolved`, and nothing new may appear unexplained.
+Each proposal carries the source finding's fingerprint, a recomputed +
+E-series-snapped value, and up to three drafts. Adoption rules (details:
+akcli-schematic-review skill): an **`oplist_draft`** is a complete protocol-1
+document — save it and run it through the NORMAL `plan` → `draw --apply`
+pipeline, never bypassing plan; a non-empty **`requires_confirmation`** means
+the draft is null BY DESIGN — ask the user (often the answer is a facts file,
+akcli-datasheet-facts, which makes the next `propose` run auto-applicable);
+**`kind: layout`** is a manual PCB action (akcli writes schematics only); a
+**`contract_draft`** gets pasted into the project's contract TOML as a
+standing gate. Close the loop: re-run analyze and `akcli review diff
+review.findings.json new.findings.json` — the finding must land under
+`resolved`, with nothing new unexplained.
 
 ## (10) Group re-layout — rigid, net-preserving moves
 
 To tidy a grown sheet into functional blocks, never hand-move parts (labels
-strand). Use the rigid primitives:
+strand). If the sheet was authored with the groups envelope (§4), bare
+`--groups` derives the block map from the persisted `Group` properties;
+otherwise supply a TOML/JSON map of block names → designator lists:
 
 ```bash
-akcli library check-lock .                       # refuse to write under an open KiCad GUI
-akcli arrange board.kicad_sch --groups groups.toml               # dry-run plan
-akcli arrange board.kicad_sch --groups groups.toml --apply       # .bak + undo, net-verified
+akcli library check-lock .                    # refuse to write under an open KiCad GUI
+akcli arrange board.kicad_sch --groups                        # bare: map from Group properties
+akcli arrange board.kicad_sch --groups groups.toml            # explicit map — both dry-run
+akcli arrange board.kicad_sch --groups --page-width 8000 --frames --apply
 ```
 
-`groups.toml` maps `[groups]` block names to designator lists (file order =
-top-to-bottom placement); each part moves as a rigid bundle with the power
-symbols riding on its pins, via `move_component` ops carrying
-`carry_labels`/`carry_wires` — with label-on-pin connectivity the re-layout is
-net-preserving by construction, and the pipeline REFUSES to write on any net
-change. `--group-gap`/`--row-width` tune spacing; `akcli undo` reverts. For a
-single surgical move, `move_component` with `"carry_labels": true,
-"carry_wires": true` is the same rigid semantics as one op.
+Each part moves as a rigid bundle with the power symbols riding on its pins,
+via `move_component` ops carrying `carry_labels`/`carry_wires` — with
+label-on-pin connectivity the re-layout is net-preserving by construction, and
+the pipeline REFUSES to write on any net change. Layout knobs: `--group-gap`
+(channel between blocks, default 1200), `--row-width` (shelf wrap inside a
+block), `--page-width` (2D side-by-side packing of blocks, wrapping past the
+width — default is a single column), `--frames` (redraw each group's border +
+title after packing). `akcli undo` reverts (`--list` shows the backup stack).
+
+**When the net-preservation refusal fires** (named nets still ride on
+cross-group wires), don't hand-fix and don't reach for `--allow-net-changes`:
+
+```bash
+akcli arrange board.kicad_sch --groups --propose-labels fix.json   # repair draft
+akcli plan board.kicad_sch --ops fix.json                          # normal pipeline
+akcli draw board.kicad_sch --ops fix.json --apply --strict-nets
+akcli arrange board.kicad_sch --groups --frames --apply            # now re-pack
+```
+
+`--propose-labels` writes a label-on-pin op-list covering every named net that
+spans groups, so the re-pack stops depending on cross-group wires — the
+propose → apply → re-arrange loop is the supported repair path;
+`--allow-net-changes` is a last resort taken only after reading the exact
+`!` lines it would permit. For a single surgical move, `move_component` with
+`"carry_labels": true, "carry_wires": true` is the same rigid semantics as
+one op.

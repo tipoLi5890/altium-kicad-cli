@@ -75,7 +75,11 @@ CI enforces all of these together; change them in ONE commit:
 4. Docs count gates: every "N ops"/"N macros" claim (English + 中文 regexes) in
    README×3 / ROADMAP / docs/ / skills/ / commands/ must match the registry
    (`tests/test_docs_conformance.py`); `tests/test_ops.py` census; the op-name
-   list in `commands/circuit-draw.md`.
+   list in `commands/circuit-draw.md`. Also update the op-pattern prose in
+   `skills/akcli-schematic-authoring/SKILL.md` (+ the op enumeration in
+   `skills/akcli-circuit-design/SKILL.md`) in the same commit — the count gate
+   can't see a missing pattern writeup, and the skills have drifted behind
+   `commands/circuit-draw.md` before.
 5. New error codes need `errors.py` `ERROR_CODES` + `_CODE_EXIT` +
    `REMEDIATION` (1:1, enforced) + the census in `tests/test_errors.py`.
 

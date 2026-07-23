@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT">
 </p>
 
-<p><strong>English</strong> · <a href=".github/README.zh-Hant.md">繁體中文</a> · <a href=".github/README.zh-Hans.md">简体中文</a></p>
+<p><strong>English</strong> · <a href=".github/README.zh-Hant.md">繁體中文</a> · <a href=".github/README.zh-Hans.md">简体中文</a> · <a href=".github/README.ja.md">日本語</a></p>
 
 </div>
 

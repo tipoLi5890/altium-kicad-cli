@@ -30,6 +30,51 @@ All notable changes to `akcli` are documented here. The format is based on
 
 When in doubt, prefer additive, backwards-compatible changes and leave the version contracts untouched.
 
+## [0.16.0] - 2026-07-23
+
+### Added
+- **Japanese README** (`.github/README.ja.md`) — a full localization on the
+  current KiCad-first positioning; the English and both Chinese READMEs gain
+  the 日本語 language-switcher link.
+- **Groups-envelope authoring is now first-class in the plugin skills.**
+  `akcli-schematic-authoring` teaches the op-list `groups` envelope
+  (group-local coordinates, macro tag propagation, persisted `Group`
+  properties), `akcli groups --frame` module borders, `akcli bbox` spacing
+  planning, the newer ops (`route_net`, `add_rectangle`, `add_text_box`,
+  `set_title_block`, the `place_array` macro), `plan --render` visual
+  previews, the `arrange --groups --page-width/--frames/--propose-labels`
+  repair loop, `calc --ops` op-list drafts, sim corner sweeps
+  (`--sweep`/`--wave`) plus `review testbench`, the project-local datasheet
+  facts store, and the write-the-intent-file-before-drawing discipline.
+
+### Changed
+- **Skills and slash commands caught up to the 0.13–0.15 surface**
+  (audit-driven): `akcli-setup` documents the PyPI install
+  (`pipx install akcli-kicad`) and the doctor workspace probe;
+  `akcli-schematic-review` documents the `signal.power_protect` power-entry
+  rules (`REVIEW_FUSE_*` / `REVIEW_REVPOL_*`); `akcli-altium-interop` marks
+  the Windows live bridge **SHELVED** and frames Altium as the read-only
+  import surface; `akcli-circuit-design` is reframed KiCad-first and gains
+  the newer ops, `groups`/`bbox`/`view live`, and the exit-8 row.
+  Slash commands strengthened: `/circuit-draw` (read the Net-changes block;
+  `--strict-nets` + `--note` on apply), `/circuit-review` (`review
+  testbench`, markdown report, facts-store autodiscovery, `--fail-on never`),
+  `/circuit-diff` (`--bom` line-level delta), `/circuit-parts`
+  (`[paths] parts_dir`, BOM lockfile), `/circuit-pinmap` (uses
+  `akcli expected` instead of in-repo adapter scripts).
+- `akcli-schematic-authoring` trimmed back inside the skill size budget:
+  conditional deep-dives (hierarchical sheets, review-proposal adoption)
+  defer to `docs/op-list-authoring.md` and the review skills.
+- CLAUDE.md's op-vocabulary lockstep list now includes the
+  authoring/circuit-design skill prose, so op changes can't drift ahead of
+  the skills again.
+
+### Fixed
+- `akcli-circuit-debug` wrongly claimed a `net`/`component` miss exits 0 —
+  corrected to exit 8 (`QUERY_MISS`, structured `error` object under
+  `--json`) and the exit-code table gains the missing 7-network note and
+  8 row.
+
 ## [0.15.0] - 2026-07-22
 
 ### Added

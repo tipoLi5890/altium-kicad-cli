@@ -80,8 +80,8 @@ akcli review analyze board.SchDoc --profile standard --out review.findings.json
 akcli review report review.findings.json --format markdown
 ```
 
-The engine runs the detector families (signal: dividers/RC/crystal/ESD/op-amp;
-validation: I²C pull-ups/voltage domains/enables; pcb: routing/decap/thermal/
+The engine runs the detector families (signal: dividers/RC/crystal/ESD/op-amp/
+power-entry protection; validation: I²C pull-ups/voltage domains/enables; pcb: routing/decap/thermal/
 trace ampacity; emc: 8 pre-compliance rules; gerber: fab-package checks;
 domain: USB-C CC) — `--pcb`/`--gerbers` are optional and their families are
 listed in `detectors_skipped` when absent, so the metadata always says what
@@ -104,6 +104,16 @@ was and wasn't reviewed. Interpretation rules:
   cite "simulated: PASS at 15.88 kHz" instead of restating the calc. It is
   read-only (the bench runs on an extracted copy) and safe during a review;
   no engine → `--deck-only` still documents the bench.
+- **Power-entry protection** (`signal.power_protect`): nets named as board
+  inputs (`VBAT`/`VIN`/`VBUS`/`DCIN`… as the whole name, or rail-classified)
+  are chain-walked (crossing only fuses/diodes/inductors) and judged for a
+  series fuse and reverse-polarity protection. Codes: `REVIEW_FUSE_MISSING`,
+  `REVIEW_REVPOL_UNPROTECTED`, `REVIEW_REVPOL_SHUNT_NO_FUSE` (a shunt crowbar
+  without its series fuse); `REVIEW_FUSE_UNDERSIZED` fires only with a
+  facts-store `i_load` (datasheet_backed — sizing goes through
+  `calc fuse-derating`), and an unparseable rating reports
+  `REVIEW_FUSE_UNRATED` as `insufficient_evidence` — an open TODO, never a pass.
+  A deliberately unprotected branch is a waiver-with-reason, not a deletion.
 - Heuristic findings you adjudicate as false positives are waived in config
   with a `reason`, not deleted from the report.
 - Upgrade path: heuristic divider/crystal/domain findings that say "verify

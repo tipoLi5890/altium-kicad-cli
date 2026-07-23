@@ -25,8 +25,14 @@ Steps (use the Bash tool; `akcli` is on PATH when the plugin is installed, other
    `akcli review explain <CODE>` prints any rule's formula + reference for the report.
    Pass `--fail-on <severity>` if the caller wants `review analyze` to exit non-zero at a
    chosen finding severity instead of the default always-exit-0 advisory behavior.
+   Quantitative findings (RC corners, divider ratios) can be simulation-verified with
+   `akcli review testbench <schematic>` (read-only; no ngspice → `--deck-only` still documents
+   the bench). For a shareable artifact, `akcli review report <findings.json> --format markdown`.
+   A `./datasheets` facts store next to the schematic is auto-discovered and upgrades
+   heuristic findings to datasheet_backed.
 3. Run the structural checks in report mode so a finding doesn't abort the flow:
-   `akcli check <schematic> [-C <toml>] --exit-zero`
+   `akcli check <schematic> [-C <toml>] --fail-on never`
+   (`--exit-zero` is the deprecated alias.)
    (use `--json` if you want to parse/group findings precisely). `check` runs ERC-lite + power +
    BOM + net-hygiene (+ layout-overlap for `.kicad_sch`, + differential-pair/bus continuity
    unless `[check].pairs = false`) by default; narrow with `--erc` / `--power` / `--bom` /

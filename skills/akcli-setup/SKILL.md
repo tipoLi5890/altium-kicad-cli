@@ -39,18 +39,22 @@ that specific features need:
 | `network` | the `jlc` family only | all analysis/authoring/sim stays offline |
 | `pdftotext` (poppler) | `review facts verify` quote checks | verify still runs; quoted facts report `FACTS_QUOTE_UNVERIFIED` (NOTE) instead of a real text match — note: unlike the other rows, `akcli doctor` does not currently probe `pdftotext`; check for the binary manually (e.g. `pdftotext -v`) |
 | `config` (akcli.toml) | `pinmap` MCU pin, rails, waivers, custom grid | defaults apply |
+| `workspace` (advisory) | hygiene of the CWD as a schematic workspace | never CI-gating; flags legacy pre-0.12 beside-the-file `*.bak` stacks, leftover `~*.lck` GUI locks (stale ones force `--allow-open`), and a pre-0.14 `.akcli/` no `.gitignore` covers (0.14+ roots self-ignore) |
 
 ## (2) Repair — per capability
 
 **akcli itself missing / wrong version**
 ```bash
-pipx install git+https://github.com/tipoLi5890/akcli   # PATH-managed install
+pipx install akcli-kicad                               # PATH-managed install from PyPI
+pip install akcli-kicad                                # inside a venv
+pipx install git+https://github.com/tipoLi5890/akcli   # development head
 # or run straight from a clone with zero install:
 ./akcli/bin/akcli --version
 ```
-`pip install` into a system Python often fails with *externally-managed-environment*
-(PEP 668) — prefer pipx or a venv; never suggest `--break-system-packages` unless
-the user owns that Python.
+The distribution is `akcli-kicad`; the import package and CLI command stay
+`akcli`. `pip install` into a system Python often fails with
+*externally-managed-environment* (PEP 668) — prefer pipx or a venv; never
+suggest `--break-system-packages` unless the user owns that Python.
 
 **kicad-cli missing** — install KiCad ≥ 8 from kicad.org (macOS: the app bundle
 carries it at `/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli`; Linux:

@@ -1,8 +1,9 @@
 ---
 name: akcli-circuit-design
 description: >-
-  Read, analyze, diff, and draw electronic schematics with the zero-dependency
-  `akcli` CLI (akcli) — no Altium or KiCad install required. Use this
+  Read, analyze, diff, and draw electronic schematics with the `akcli` CLI —
+  AI-native schematic design, purpose-built for KiCad; Altium files are a
+  read-only import surface. Use this
   skill whenever the task involves: reading or parsing an Altium .SchDoc/.SchLib/.PcbDoc
   or a KiCad .kicad_sch/.kicad_sym/.kicad_pcb; extracting a netlist; running ERC,
   power-rail, BOM, or a design review on a schematic; producing a pin map / pinout /
@@ -15,11 +16,11 @@ description: >-
 
 # akcli-circuit-design — driving `akcli` for schematic read / analyze / diff / draw
 
-`akcli` is a zero-dependency Python ≥3.11 CLI that reads
-**Altium binary** `.SchDoc` / `.SchLib` / `.PcbDoc` and **KiCad** `.kicad_sch` / `.kicad_sym` /
-`.kicad_pcb` into one normalized model, runs design checks, diffs revisions, and writes KiCad
-schematics from an op-list — no Altium or KiCad install needed. It is **not** an
-Altium-to-KiCad converter.
+`akcli` is a stdlib-only Python ≥3.11 CLI purpose-built for KiCad: it reads
+**KiCad** `.kicad_sch` / `.kicad_sym` / `.kicad_pcb` and **Altium binary** `.SchDoc` /
+`.SchLib` / `.PcbDoc` into one normalized model, runs design checks, diffs revisions, and
+writes KiCad schematics from an op-list. Altium is a read-only import on-ramp into the
+KiCad flow; `akcli` is **not** an Altium-to-KiCad converter.
 
 When the plugin is installed, `akcli` is on `PATH`. Run it with the `Bash` tool. From a raw
 checkout instead use `PYTHONPATH=src python3 -m akcli ...` or `bin/akcli ...`.
@@ -56,6 +57,10 @@ akcli net  <file> [name] --json   # netlist: nets -> pin members, aliases, sourc
 akcli component <file> <REF>      # one component's pin -> net (e.g. U3); omit REF to list all
 akcli render <file> -o out.svg    # pure-stdlib SVG — LOOK at the sheet (works on .SchDoc too)
 akcli doc <file> -o book.md       # pinout book: pin->net tables + power rails + BOM (human hand-off)
+akcli groups <file>               # functional groups (from hidden Group properties); --frame draws borders
+akcli bbox Device:R --at 1000 800 # symbol world bounding box at a placement (spacing planning; sibling of pins)
+akcli view live                   # localhost dashboard, re-renders on every apply (auto-discovers
+                                  # the single .kicad_sch in CWD; bare `akcli view` serves the hub)
 akcli log <dir-or-file>           # workspace write journal: what plan/draw/undo did here
 ```
 
@@ -94,7 +99,8 @@ engineering calculators — E-series snap, dividers, IPC-2221 track width, I²C 
 
 ### (3) Draw / edit a **KiCad** schematic — op-list, then plan, then draw
 
-KiCad is the only writable target. Build an op-list JSON (document shape and the op vocabulary — 22 ops + 10 macros incl. `delete_component`/`delete_object`/`add_sheet`
+KiCad is the only writable target. Build an op-list JSON (document shape and the op vocabulary — 22 ops + 10 macros incl. `delete_component`/`delete_object`/`add_sheet`/`route_net`/
+`add_rectangle`/`add_text_box`/`set_title_block` and the `place_array` macro —
 are defined in **`schemas/ops.schema.json`**; guide: `docs/op-list-authoring.md`, scaffolder: `akcli ops list` / `akcli ops template <op>`):
 
 ```json
@@ -148,7 +154,8 @@ otherwise the write is rejected and the original file is untouched. **After appl
 `2` usage/arg error · `3` parse error (corrupt OLE2/S-expr) · `4` file not found ·
 `5` unsupported format · `6` op-list / verify failure (also covers `TARGET_LOCKED`, a
 KiCad GUI lock on the target — see `--allow-open` on `draw`/`arrange`/`undo`) ·
-`7` required external tool missing.
+`7` required external tool missing / network unreachable ·
+`8` query miss (`QUERY_MISS` — `net`/`component` asked for a name the file does not contain).
 
 ## Errors
 

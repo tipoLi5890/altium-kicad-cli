@@ -11,7 +11,9 @@ Arguments: `$ARGUMENTS`
 
 Steps (use the Bash tool; `akcli` is on PATH, else `PYTHONPATH=src python3 -m akcli`):
 
-1. Run `akcli diff <schematic_a> <schematic_b> --exit-zero` (add `--json` to parse the report).
+1. Run `akcli diff <schematic_a> <schematic_b> --fail-on never` (add `--json` to parse the
+   report; `--bom` adds the BOM line-level delta — added/removed lines, value/id edits,
+   fitted↔DNP flips — offline).
 2. If you need to explain a specific net or component change, pull detail with
    `akcli net <file> <name> --json` or `akcli component <file> <REF>`.
 

@@ -39,8 +39,11 @@ Steps (use the Bash tool; `akcli` is on PATH, else `PYTHONPATH=src python3 -m ak
 2. **Plan (never writes):** `akcli plan <board.kicad_sch> --ops ops.json [--symbols <path>]
    [--render preview.svg]`.
    Show the user what would change and resolve any `SYMBOL_NOT_FOUND` / off-grid / non-orthogonal
-   errors before proceeding. With `--render`, LOOK at the preview (world-mil grid overlay) before
-   applying — a multimodal agent reads placement quality straight off the image.
+   errors before proceeding. **Read the "Net changes" block**: `! SPLIT` / `! MERGE` lines are the
+   silent killers (name-based connectivity can short or fragment nets without any dangling
+   endpoint); `(none)` proves the edit is connectivity-neutral. With `--render`, LOOK at the
+   preview (world-mil grid overlay) before applying — a multimodal agent reads placement quality
+   straight off the image.
 
 3. **Dry-run draw (verify only, default):**
    `akcli draw <board.kicad_sch> --ops ops.json [--symbols <path>]`.
@@ -48,7 +51,9 @@ Steps (use the Bash tool; `akcli` is on PATH, else `PYTHONPATH=src python3 -m ak
 
 4. **Apply only when the user explicitly asked to write:**
    `akcli draw <board.kicad_sch> --ops ops.json --apply [--symbols <path>]`.
-   The write is atomic (snapshot → temp → verify-on-temp → `os.replace`) and writes a rotated
+   When editing an EXISTING sheet, add `--strict-nets` (any `!` net-change line touching a named
+   net refuses the write) and pass `--note "<why>"` so the workspace journal (`akcli log .`)
+   records the design intent. The write is atomic (snapshot → temp → verify-on-temp → `os.replace`) and writes a rotated
    `<target>.bak` copy under the workspace's `.akcli/backups/` (walked by `akcli undo`), and is
    rejected if connectivity verification fails — so the original is never corrupted.
 
